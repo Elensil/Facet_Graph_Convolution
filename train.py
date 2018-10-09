@@ -30,8 +30,6 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 
 		if not os.path.exists(NETWORK_PATH):
 				os.makedirs(NETWORK_PATH)
-
-
 		"""
 		Load dataset 
 		x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
@@ -47,6 +45,11 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		K_faces = f_adj.shape[2]
 		NUM_IN_CHANNELS = f_normals.shape[2]
 
+                NUM_CAMS = 20
+                IMG_WIDTH = 512
+                IMG_HEIGHT = 512
+                IMG_CHANNELS = 6
+
 		xp_ = tf.placeholder('float32', shape=(BATCH_SIZE, NUM_POINTS,3),name='xp_')
 		faces_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_FACES,3], name='faces_')
 
@@ -55,6 +58,9 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		e_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_EDGES,4], name='e_map_')
 		ve_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_POINTS,MAX_EDGES], name='ve_map_')
 		keep_prob = tf.placeholder(tf.float32)
+
+                #images_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE,NUM_CAMS,IMG_WIDTH,IMG_HEIGHT,IMG_CHANNELS])
+                #calibs_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE,NUM_CAMS,3,4])
 
 		
 		my_feed_dict = {xp_:in_points, faces_:faces, fn_: f_normals, fadj: f_adj,
@@ -99,8 +105,7 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		sess.close()
 	return outPoints, outN
 
-
-def run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
+def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
 	
 	random_seed = 0
 	np.random.seed(random_seed)
@@ -124,6 +129,11 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, va
 	BATCH_SIZE=1
 	K_faces = f_adj_list[0].shape[2]
 	NUM_IN_CHANNELS = f_normals_list[0].shape[2]
+        NUM_CAMS = images_lists.shape[1]
+        IMG_WIDTH = images_lists.shape[2]
+        IMG_HEIGHT = images_lists.shape[3]
+        IMG_CHANNELS = images_lists.shape[4]
+
 	# training data
 	fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
 	fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj')
@@ -138,7 +148,9 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, va
 
 	#faces_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_FACES,3], name='faces_')
 	keep_prob = tf.placeholder(tf.float32)
-	
+
+        images_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE,NUM_CAMS,IMG_WIDTH,IMG_HEIGHT,IMG_CHANNELS])
+        calibs_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE,NUM_CAMS,3,4])
 	
 	batch = tf.Variable(0, trainable=False)
 
@@ -225,7 +237,7 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, va
 				train_samp=0
 
 			# Compute validation loss
-			if (iter%20 ==0):
+                        if (iter%20 == 0):
 				valid_loss = 0
 				valid_samp = len(valid_f_normals_list)
 				valid_random_ind = np.random.randint(num_p,size=10000)
@@ -379,7 +391,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 	# v_edges is a list of edges indices for each vertex
 	# shape = (batch_size, num_points, max_edges (50))
 
-	v_edges=v_edges+1 														# start indexing from 1. Transform unused slots (-1) to 0
+        v_edges=v_edges+1 	# start indexing from 1. Transform unused slots (-1) to 0
 	
 
 	# Offset both 'faces' columns: we switch from 0-indexing to 1-indexing
@@ -599,18 +611,16 @@ def normalizeTensor(x):
 	return newX
 
 
-
-
 def mainFunction():
 
 	
 	
-	pickleLoad = True
+        pickleLoad = False
 	pickleSave = True
 
 	K_faces = 25
 
-	running_mode = 2
+        running_mode = 0
 	###################################################################################################
 	#	0 - Training on all meshes in a given folder
 	#	1 - Run checkpoint on a given mesh as input
@@ -620,7 +630,6 @@ def mainFunction():
 
 	if running_mode == 0:
 
-		gtnameoffset = 7
 		f_normals_list = []
 		f_adj_list = []
 		GTfn_list = []
@@ -628,6 +637,8 @@ def mainFunction():
 		valid_f_normals_list = []
 		valid_f_adj_list = []
 		valid_GTfn_list = []
+                images_lists = []
+                calibs_lists = []
 
 		maxSize = 30000
 		patchSize = 25000
@@ -635,17 +646,10 @@ def mainFunction():
 		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/Generated/"
 		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/ValidationBase/Generated/"
 
-		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/TrainingBase/Generated/"
-		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/TrainingBase/Validation/"
-		gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/TrainingBase/"
-
-		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+                inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/images"
 		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-		gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 
-
-
-		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/"
+                binDumpPath = "/morpheo-nas2/vincent/DeepMeshRefinement/BinaryDump/"
 		training_meshes_num = 0
 		valid_meshes_num = 0
 
@@ -665,6 +669,10 @@ def mainFunction():
 				valid_GTfn_list = pickle.load(fp)
 			with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
 				valid_f_adj_list = pickle.load(fp)
+                        with open(binDumpPath+'images_lists', 'rb') as fp:
+                                images_lists = pickle.load(fp)
+                        with open(binDumpPath+'calibs_lists', 'rb') as fp:
+                                calibs_lists = pickle.load(fp)
 
 
 		else:
@@ -672,129 +680,146 @@ def mainFunction():
 			for filename in os.listdir(inputFilePath):
 				#print("training_meshes_num start_iter " + str(training_meshes_num))
 				if training_meshes_num>300:
-					break
-				#if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
-				#if (filename.endswith(".obj") and not(filename.startswith("buste"))):
-				if (filename.endswith(".obj") and not(filename.startswith("aabust")) and not(filename.startswith("aaJulius")) and not(filename.startswith("aaleg")) \
-					and not(filename.startswith("aavase")) and not(filename.startswith("aadragon"))):
-
-					print("Adding " + filename + " (" + str(training_meshes_num) + ")")
-					# Load mesh
-					V0,_,num_neighbours0, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
-					f_normals0 = computeFacesNormals(V0, faces0)
-					f_adj0 = getFacesLargeAdj(faces0,K_faces)
+                                        break
+                                print("Adding " + filename + " (" + str(training_meshes_num) + ")")
+                                # Load mesh
+                                smoothFileName=filename+"/Smooth/000.obj"
+                                V0,_,num_neighbours0, faces0, _ = load_mesh(inputFilePath, smoothFileName, 0, False)
+                                f_normals0 = computeFacesNormals(V0, faces0)
+                                f_adj0 = getFacesLargeAdj(faces0,K_faces)
 
 
-					f_pos0 = getTrianglesBarycenter(V0, faces0)
-					f_pos0 = np.reshape(f_pos0,(-1,3))
-					f_normals0 = np.concatenate((f_normals0, f_pos0), axis=1)
-					# f_area0 = getTrianglesArea(V0,faces0)
-					# f_area0 = np.reshape(f_area0, (-1,1))
-					# f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
+                                f_pos0 = getTrianglesBarycenter(V0, faces0)
+                                f_pos0 = np.reshape(f_pos0,(-1,3))
+                                f_normals0 = np.concatenate((f_normals0, f_pos0), axis=1)
+                                # f_area0 = getTrianglesArea(V0,faces0)
+                                # f_area0 = np.reshape(f_area0, (-1,1))
+                                # f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
 
-					# Load GT
-					gtfilename = filename[:-gtnameoffset]+".obj"
-					GT0,_,_,GTfaces0,_ = load_mesh(gtFilePath, gtfilename, 0, False)
-					GTf_normals0 = computeFacesNormals(GT0, GTfaces0)
+                                # Load GT
+                                gtfilename = filename+"/Ground_Truth/000.obj"
+                                GT0,_,_,GTfaces0,_ = load_mesh(inputFilePath, gtfilename, 0, False)
+                                GTf_normals0 = computeFacesNormals(GT0, GTfaces0)
+
+                                #Load Projection Matrices
+                                loaded_calibs = []
+                                for cam_calib in os.listdir(inputFilePath+'/'+filename+"/Calib/"):
+                                    cam_calib_file=inputFilePath+'/'+filename+"/Calib/"+cam_calib
+                                    if cam_calib_file.endswith(".txt"):
+                                        #Read txt file
+                                        loaded_calibs.append(read_calib_file(cam_calib_file))
+                                calibs_lists.append(loaded_calibs)
+                                #print("Loaded Matrices shape:",np.shape(loaded_calibs))
+
+                                #Load Corresponding Images
+                                loaded_images = []
+                                for cam_image_folder in os.listdir(inputFilePath+'/'+filename+"/Images/"):
+                                    image_file_name = inputFilePath+'/'+filename+"/Images/"+cam_image_folder+"/0001.png"
+                                    loaded_images.append(load_image(image_file_name))
+                                images_lists.append(loaded_images)
+                                #print("Loaded Images Shape: ",np.shape(loaded_images))
+                                if np.shape(loaded_calibs)[0] != np.shape(loaded_images)[0]:
+                                    print("Data Parsing Error: mismatch between camera numbers for images and calibs")
+                                    exit()
+
+                                images_lists.append(loaded_images)
+                                # Get patches if mesh is too big
+                                facesNum = faces0.shape[0]
+                                if facesNum>maxSize:
+                                        patchNum = int(facesNum/patchSize)+1
+                                        for p in range(patchNum):
+                                                faceSeed = np.random.randint(facesNum)
+                                                testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
+                                                GTPatchV = GT0[vOldInd]
+                                                patchFNormals = f_normals0[fOldInd]
+                                                patchGTFNormals = GTf_normals0[fOldInd]
 
 
-					# Get patches if mesh is too big
-					facesNum = faces0.shape[0]
-					if facesNum>maxSize:
-						patchNum = int(facesNum/patchSize)+1
-						for p in range(patchNum):
-							faceSeed = np.random.randint(facesNum)
-							testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
-							GTPatchV = GT0[vOldInd]
-							patchFNormals = f_normals0[fOldInd]
-							patchGTFNormals = GTf_normals0[fOldInd]
+                                                # Expand dimensions
+                                                f_normals = np.expand_dims(patchFNormals, axis=0)
+                                                f_adj = np.expand_dims(testPatchAdj, axis=0)
+                                                GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
 
+                                                f_normals_list.append(f_normals)
+                                                f_adj_list.append(f_adj)
+                                                GTfn_list.append(GTf_normals)
 
-							# Expand dimensions
-							f_normals = np.expand_dims(patchFNormals, axis=0)
-							f_adj = np.expand_dims(testPatchAdj, axis=0)
-							GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
+                                                print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(training_meshes_num) + ")")
+                                                training_meshes_num+=1
+                                else: 		#Small mesh case
+                                        # Expand dimensions
+                                        f_normals = np.expand_dims(f_normals0, axis=0)
+                                        f_adj = np.expand_dims(f_adj0, axis=0)
+                                        GTf_normals = np.expand_dims(GTf_normals0, axis=0)
 
-							f_normals_list.append(f_normals)
-							f_adj_list.append(f_adj)
-							GTfn_list.append(GTf_normals)
+                                        f_normals_list.append(f_normals)
+                                        f_adj_list.append(f_adj)
+                                        GTfn_list.append(GTf_normals)
 
-							print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(training_meshes_num) + ")")
-							training_meshes_num+=1
-					else: 		#Small mesh case
-						# Expand dimensions
-						f_normals = np.expand_dims(f_normals0, axis=0)
-						f_adj = np.expand_dims(f_adj0, axis=0)
-						GTf_normals = np.expand_dims(GTf_normals0, axis=0)
+                                        print("Added training mesh " + filename + " (" + str(training_meshes_num) + ")")
 
-						f_normals_list.append(f_normals)
-						f_adj_list.append(f_adj)
-						GTfn_list.append(GTf_normals)
-					
-						print("Added training mesh " + filename + " (" + str(training_meshes_num) + ")")
-
-						training_meshes_num+=1
+                                        training_meshes_num+=1
 
 			# Validation set
-			for filename in os.listdir(validFilePath):
-				if (filename.endswith(".obj")):
-					# Load mesh
-					V0,_,num_neighbours0, faces0, _ = load_mesh(validFilePath, filename, 0, False)
+                        #for filename in os.listdir(validFilePath):
+                        #	if (filename.endswith(".obj")):
+                        #		# Load mesh
+                        #		V0,_,num_neighbours0, faces0, _ = load_mesh(validFilePath, filename, 0, False)
 
-					f_normals0 = computeFacesNormals(V0, faces0)
-					f_adj0 = getFacesLargeAdj(faces0,K_faces)
+                        #		f_normals0 = computeFacesNormals(V0, faces0)
+                        #		f_adj0 = getFacesLargeAdj(faces0,K_faces)
 
-					f_pos0 = getTrianglesBarycenter(V0, faces0)
-					f_pos0 = np.reshape(f_pos0,(-1,3))
-					f_normals0 = np.concatenate((f_normals0, f_pos0), axis=1)
-					# f_area0 = getTrianglesArea(V0,faces0)
-					# f_area0 = np.reshape(f_area0, (-1,1))
-					# f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
+                        #		f_pos0 = getTrianglesBarycenter(V0, faces0)
+                        #		f_pos0 = np.reshape(f_pos0,(-1,3))
+                        #		f_normals0 = np.concatenate((f_normals0, f_pos0), axis=1)
+                        #		# f_area0 = getTrianglesArea(V0,faces0)
+                        #		# f_area0 = np.reshape(f_area0, (-1,1))
+                        #		# f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
 
-					# Load GT
-					gtfilename = filename[:-gtnameoffset]+".obj"
-					GT0,_,_,GTfaces0,_ = load_mesh(gtFilePath, gtfilename, 0, False)
-					GTf_normals0 = computeFacesNormals(GT0, GTfaces0)
+                        #		# Load GT
+                        #		gtfilename = filename[:-gtnameoffset]+".obj"
+                        #		GT0,_,_,GTfaces0,_ = load_mesh(gtFilePath, gtfilename, 0, False)
+                        #		GTf_normals0 = computeFacesNormals(GT0, GTfaces0)
 
-					# Get patches if mesh is too big
-					facesNum = faces0.shape[0]
-					if facesNum>maxSize:
-						patchNum = int(facesNum/patchSize)
-						for p in range(patchNum):
-							faceSeed = np.random.randint(facesNum)
-							testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
-							GTPatchV = GT0[vOldInd]
-							patchFNormals = f_normals0[fOldInd]
-							patchGTFNormals = GTf_normals0[fOldInd]
+                        #		# Get patches if mesh is too big
+                        #		facesNum = faces0.shape[0]
+                        #		if facesNum>maxSize:
+                        #			patchNum = int(facesNum/patchSize)
+                        #			for p in range(patchNum):
+                        #				faceSeed = np.random.randint(facesNum)
+                        #				testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
+                        #				GTPatchV = GT0[vOldInd]
+                        #				patchFNormals = f_normals0[fOldInd]
+                        #				patchGTFNormals = GTf_normals0[fOldInd]
 
 
-							# Expand dimensions
-							valid_f_normals = np.expand_dims(patchFNormals, axis=0)
-							valid_f_adj = np.expand_dims(testPatchAdj, axis=0)
-							valid_GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
+                        #				# Expand dimensions
+                        #				valid_f_normals = np.expand_dims(patchFNormals, axis=0)
+                        #				valid_f_adj = np.expand_dims(testPatchAdj, axis=0)
+                        #				valid_GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
 
-							valid_f_normals_list.append(valid_f_normals)
-							valid_f_adj_list.append(valid_f_adj)
-							valid_GTfn_list.append(valid_GTf_normals)
+                        #				valid_f_normals_list.append(valid_f_normals)
+                        #				valid_f_adj_list.append(valid_f_adj)
+                        #				valid_GTfn_list.append(valid_GTf_normals)
 
-							print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(valid_meshes_num) + ")")
-							valid_meshes_num+=1
-					else: 		#Small mesh case
+                        #				print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(valid_meshes_num) + ")")
+                        #				valid_meshes_num+=1
+                        #		else: 		#Small mesh case
 
-						# Expand dimensions
-						valid_f_normals = np.expand_dims(f_normals0, axis=0)
-						valid_f_adj = np.expand_dims(f_adj0, axis=0)
-						valid_GTf_normals = np.expand_dims(GTf_normals0, axis=0)
+                        #			# Expand dimensions
+                        #			valid_f_normals = np.expand_dims(f_normals0, axis=0)
+                        #			valid_f_adj = np.expand_dims(f_adj0, axis=0)
+                        #			valid_GTf_normals = np.expand_dims(GTf_normals0, axis=0)
 
-						valid_f_normals_list.append(valid_f_normals)
-						valid_f_adj_list.append(valid_f_adj)
-						valid_GTfn_list.append(valid_GTf_normals)
+                        #			valid_f_normals_list.append(valid_f_normals)
+                        #			valid_f_adj_list.append(valid_f_adj)
+                        #			valid_GTfn_list.append(valid_GTf_normals)
 						
-						print("Added validation mesh " + filename + " (" + str(valid_meshes_num) + ")")
+                        #			print("Added validation mesh " + filename + " (" + str(valid_meshes_num) + ")")
 
-						valid_meshes_num+=1
+                        #			valid_meshes_num+=1
 
-				#print("training_meshes_num end_iter " + str(training_meshes_num))
+                        #	#print("training_meshes_num end_iter " + str(training_meshes_num))
 			if pickleSave:
 				# Training
 				with open(binDumpPath+'f_normals_list', 'wb') as fp:
@@ -813,7 +838,7 @@ def mainFunction():
 
 
 
-		run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+                run_thingies(f_normals_list, GTfn_list, f_adj_list,images_lists,calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
 	elif running_mode == 1:
 		# # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/MeshesDB/"
