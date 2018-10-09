@@ -3,6 +3,8 @@ import numpy as np
 import math
 import tensorflow as tf
 import os
+from PIL import Image
+
 try:
     import queue
 except ImportError:
@@ -301,9 +303,32 @@ def writeStringArray(myArr,strFileName, faces):
 
 
 
-def load_image(path,filename):
-    f = os.path.join(path,filename)
-    return skimage.data.imread(f)
+#def load_image(path,filename=""):
+#    if filename == "":
+#        f=path
+#    else :
+#        f = os.path.join(path,filename)
+#    return skimage.data.imread(f)
+
+def load_image(strFileName):
+    pic = Image.open(strFileName) #load image
+    pic = np.array(pic)             #convert image to numpy array
+    RGBpic = pic[:,:,0:3] #recover only RGB values
+    ALPHApic = pic[:,:,3] #alpha channel in another array
+    return RGBpic #,ALPHApic #return both if needed
+
+def read_calib_file(strFileName):
+    calib = []
+    for line in open(strFileName, "r"):
+        values = []
+        for value in line.split('\n')[0].split(' '):
+            values.append(float(value))
+        calib.append(values)
+    if np.shape(calib)[0] != 3 and np.shape(calib)[0] != 4:
+        print("ReadCalibFile Error: Wrong Dimensions")
+        exit()
+    return calib
+
 
 def load_mesh(path,filename,K,bGetAdj):
     strFileName = os.path.join(path,filename)
