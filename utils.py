@@ -678,6 +678,7 @@ def getTrianglesBarycenter(vl,fl):
         #     print("v1 = ("+str(v1)+")")
         #     print("v2 = ("+str(v2)+")")
         #     print("barycenter = ("+str(triCenter[f,:])+")")
+        #triCenter[f,3] = 1.0 #append last 1.0 coordinate for projection matrix multiplication
     return triCenter
 
 

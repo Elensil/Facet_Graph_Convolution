@@ -105,7 +105,7 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		sess.close()
 	return outPoints, outN
 
-def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
+def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list,valid_images_lists,valid_calibs_lists):
 	
 	random_seed = 0
 	np.random.seed(random_seed)
@@ -114,10 +114,8 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 	if(FLAGS.debug):	#launches debugger at every sess.run() call
 		sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
-
 	if not os.path.exists(RESULTS_PATH):
 			os.makedirs(RESULTS_PATH)
-
 
 	"""
 	Load dataset 
@@ -160,8 +158,8 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 	rotTens = getRotationToAxis(fn_)
 
 	with tf.variable_scope("model"):
-		n_conv = get_model_reg(fn_, fadj, ARCHITECTURE, keep_prob)
-
+                #n_conv = get_model_reg(fn_, fadj, ARCHITECTURE, keep_prob)
+                n_conv = get_appearance_model_reg(fn_, fadj, ARCHITECTURE, keep_prob,images_,calibs_)
 	# n_conv = normalizeTensor(n_conv)
 	# n_conv = tf.expand_dims(n_conv,axis=-1)
 	# n_conv = tf.matmul(tf.transpose(rotTens,[0,1,3,2]),n_conv)
@@ -185,9 +183,9 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 	sess.run(tf.global_variables_initializer())
 
 
-	# ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
-	# if ckpt and ckpt.model_checkpoint_path:
-	# 	saver.restore(sess, ckpt.model_checkpoint_path)
+         ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
+         if ckpt and ckpt.model_checkpoint_path:
+                saver.restore(sess, ckpt.model_checkpoint_path)
 
 		#write_logs("Checkpoint restored\n")
 
@@ -210,9 +208,10 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 			batch_num = random.randint(0,len(f_normals_list)-1)
 			num_p = f_normals_list[batch_num].shape[1]
 			random_ind = np.random.randint(num_p,size=10000)
-
+                        input_images = [images_lists[batch_num]]
+                        input_calibs = [calibs_lists[batch_num]]
 			train_fd = {fn_: f_normals_list[batch_num], fadj: f_adj_list[batch_num], tfn_: GTfn_list[batch_num],
-							sample_ind: random_ind, keep_prob:1}
+                                                        sample_ind: random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
 
 			#i = train_shuffle[iter%(len(train_data))]
 			#in_points = train_data[i]
@@ -242,10 +241,12 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 				valid_samp = len(valid_f_normals_list)
 				valid_random_ind = np.random.randint(num_p,size=10000)
 				for vbm in range(valid_samp):
-					valid_fd = {fn_: valid_f_normals_list[vbm], fadj: valid_f_adj_list[vbm], tfn_: valid_GTfn_list[vbm],
-							sample_ind: valid_random_ind, keep_prob:1}
-					#valid_loss += validLoss.eval(feed_dict=valid_fd)
-					valid_loss += customLoss.eval(feed_dict=valid_fd)
+                                    input_images = [valid_images_lists[vbm]]
+                                    input_calibs = [valid_calibs_lists[vbm]]
+                                    valid_fd = {fn_: valid_f_normals_list[vbm], fadj: valid_f_adj_list[vbm], tfn_: valid_GTfn_list[vbm],
+                                                    sample_ind: valid_random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
+                                    #valid_loss += validLoss.eval(feed_dict=valid_fd)
+                                    valid_loss += customLoss.eval(feed_dict=valid_fd)
 				valid_loss/=valid_samp
 				print("Iteration %d, validation loss %g"%(iter, valid_loss))
 				lossArray[int(iter/10),1]=valid_loss
@@ -261,8 +262,8 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 	saver.save(sess, RESULTS_PATH+"archi15_patches",global_step=100000)
 
 	sess.close()
-	#csv_filename = "/morpheo-nas/marmando/DeepMeshRefinement/tests/archi13_rot_inv.csv"
-	csv_filename = "/morpheo-nas/marmando/DeepMeshRefinement/tests/archi15_patches.csv"
+
+        csv_filename = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/archi15_patches.csv"
 	f = open(csv_filename,'ab')
 	np.savetxt(f,lossArray, delimiter=",")
 
@@ -615,7 +616,7 @@ def mainFunction():
 
 	
 	
-        pickleLoad = False
+        pickleLoad = True
 	pickleSave = True
 
 	K_faces = 25
@@ -640,8 +641,11 @@ def mainFunction():
                 images_lists = []
                 calibs_lists = []
 
-		maxSize = 30000
-		patchSize = 25000
+                valid_images_lists = []
+                valid_calibs_lists = []
+
+                maxSize = 800
+                patchSize = 500
 
 		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/Generated/"
 		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/ValidationBase/Generated/"
@@ -662,6 +666,10 @@ def mainFunction():
 				GTfn_list = pickle.load(fp)
 			with open(binDumpPath+'f_adj_list', 'rb') as fp:
 				f_adj_list = pickle.load(fp)
+                        with open(binDumpPath+'images_lists', 'rb') as fp:
+                                images_lists = pickle.load(fp)
+                        with open(binDumpPath+'calibs_lists', 'rb') as fp:
+                                calibs_lists = pickle.load(fp)
 			# Validation
 			with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
 				valid_f_normals_list = pickle.load(fp)
@@ -670,9 +678,9 @@ def mainFunction():
 			with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
 				valid_f_adj_list = pickle.load(fp)
                         with open(binDumpPath+'images_lists', 'rb') as fp:
-                                images_lists = pickle.load(fp)
+                                valid_images_lists = pickle.load(fp)
                         with open(binDumpPath+'calibs_lists', 'rb') as fp:
-                                calibs_lists = pickle.load(fp)
+                                valid_calibs_lists = pickle.load(fp)
 
 
 		else:
@@ -708,7 +716,7 @@ def mainFunction():
                                     if cam_calib_file.endswith(".txt"):
                                         #Read txt file
                                         loaded_calibs.append(read_calib_file(cam_calib_file))
-                                calibs_lists.append(loaded_calibs)
+
                                 #print("Loaded Matrices shape:",np.shape(loaded_calibs))
 
                                 #Load Corresponding Images
@@ -716,13 +724,10 @@ def mainFunction():
                                 for cam_image_folder in os.listdir(inputFilePath+'/'+filename+"/Images/"):
                                     image_file_name = inputFilePath+'/'+filename+"/Images/"+cam_image_folder+"/0001.png"
                                     loaded_images.append(load_image(image_file_name))
-                                images_lists.append(loaded_images)
                                 #print("Loaded Images Shape: ",np.shape(loaded_images))
                                 if np.shape(loaded_calibs)[0] != np.shape(loaded_images)[0]:
                                     print("Data Parsing Error: mismatch between camera numbers for images and calibs")
                                     exit()
-
-                                images_lists.append(loaded_images)
 
                                 # Get patches if mesh is too big
                                 facesNum = faces0.shape[0]
@@ -744,6 +749,10 @@ def mainFunction():
                                                 f_normals_list.append(f_normals)
                                                 f_adj_list.append(f_adj)
                                                 GTfn_list.append(GTf_normals)
+
+                                                #Add calib + images
+                                                images_lists.append(loaded_images)
+                                                calibs_lists.append(loaded_calibs)
 
                                                 print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(training_meshes_num) + ")")
                                                 training_meshes_num+=1
@@ -789,7 +798,7 @@ def mainFunction():
                                 if cam_calib_file.endswith(".txt"):
                                     #Read txt file
                                     loaded_calibs.append(read_calib_file(cam_calib_file))
-                            calibs_lists.append(loaded_calibs)
+
                             #print("Loaded Matrices shape:",np.shape(loaded_calibs))
 
                             #Load Corresponding Images
@@ -797,13 +806,12 @@ def mainFunction():
                             for cam_image_folder in os.listdir(inputFilePath+'/'+filename+"/Images/"):
                                 image_file_name = inputFilePath+'/'+filename+"/Images/"+cam_image_folder+"/0001.png"
                                 loaded_images.append(load_image(image_file_name))
-                            images_lists.append(loaded_images)
                             #print("Loaded Images Shape: ",np.shape(loaded_images))
                             if np.shape(loaded_calibs)[0] != np.shape(loaded_images)[0]:
                                 print("Data Parsing Error: mismatch between camera numbers for images and calibs")
                                 exit()
 
-                            images_lists.append(loaded_images)
+
 
                             # Get patches if mesh is too big
                             facesNum = faces0.shape[0]
@@ -825,6 +833,10 @@ def mainFunction():
                                             valid_f_normals_list.append(valid_f_normals)
                                             valid_f_adj_list.append(valid_f_adj)
                                             valid_GTfn_list.append(valid_GTf_normals)
+
+                                            #Add calib + images
+                                            valid_images_lists.append(loaded_images)
+                                            valid_calibs_lists.append(loaded_calibs)
 
                                             print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(valid_meshes_num) + ")")
                                             valid_meshes_num+=1
@@ -850,6 +862,10 @@ def mainFunction():
 					pickle.dump(GTfn_list, fp)
 				with open(binDumpPath+'f_adj_list', 'wb') as fp:
 					pickle.dump(f_adj_list, fp)
+                                with open(binDumpPath+'images_lists', 'wb') as fp:
+                                        pickle.dump(images_lists, fp)
+                                with open(binDumpPath+'calibs_lists', 'wb') as fp:
+                                        pickle.dump(calibs_lists, fp)
 				# Validation
 				with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
 					pickle.dump(valid_f_normals_list, fp)
@@ -857,10 +873,12 @@ def mainFunction():
 					pickle.dump(valid_GTfn_list, fp)
 				with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
 					pickle.dump(valid_f_adj_list, fp)
+                                with open(binDumpPath+'valid_images_lists', 'wb') as fp:
+                                        pickle.dump(valid_images_lists, fp)
+                                with open(binDumpPath+'valid_calibs_lists', 'wb') as fp:
+                                        pickle.dump(valid_calibs_lists, fp)
 
-
-
-                run_thingies(f_normals_list, GTfn_list, f_adj_list,images_lists,calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+                run_thingies(f_normals_list, GTfn_list, f_adj_list,images_lists,calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list,valid_images_lists,valid_calibs_lists)
 
 	elif running_mode == 1:
 		# # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/MeshesDB/"

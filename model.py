@@ -826,8 +826,8 @@ def custom_conv2d_norm_pos(x, adj, out_channels, M, translation_invariance=False
 def custom_conv2d_pos_for_assignment(x, adj, out_channels, M, translation_invariance=False, rotation_invariance=False):
 		
 		batch_size, input_size, in_channels_ass = x.get_shape().as_list()
-		in_channels_weights = 3
-		in_channels_ass = 6
+                in_channels_weights = x.get_shape().as_list()[2] - 3
+                in_channels_ass = x.get_shape().as_list()[2]
 		xn = tf.slice(x,[0,0,0],[-1,-1,in_channels_weights])	# take normals only
 		W0 = weight_variable([M, out_channels, in_channels_weights])
 		b = bias_variable([out_channels])
@@ -1677,3 +1677,235 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 def custom_pooling(x,pooltype):
 
 	batch_size, input_size,
+
+def encode_images(images):
+    dim1 = images.get_shape().as_list()[1]
+    dim2 = images.get_shape().as_list()[2]
+    dim3 = images.get_shape().as_list()[3]
+    dim4 = images.get_shape().as_list()[4]
+    images = tf.reshape(images,[dim1,dim2,dim3,dim4])
+
+    # Conv 1
+    out_channels1=16
+    wc1_w = 4
+    wc1_h = 4
+    wc1 = weight_variable([wc1_w,wc1_h,dim4,out_channels1])
+    padding='SAME'
+    #stride=[]
+    conv1 = tf.nn.convolution(images,wc1,padding)
+    conv1 = tf.nn.relu(conv1)
+
+    # Conv 2
+    out_channels2=32
+    wc2_w = 4
+    wc2_h = 4
+    wc2 = weight_variable([wc2_w,wc2_h,out_channels1,out_channels2])
+    padding='SAME'
+    #stride=[]
+    conv2 = tf.nn.convolution(conv1,wc2,padding)
+    conv2 = tf.nn.relu(conv2)
+
+    # Conv 3
+    out_channels3=64
+    wc3_w = 4
+    wc3_h = 4
+    wc3 = weight_variable([wc3_w,wc3_h,out_channels2,out_channels3])
+    padding='SAME'
+    #stride=[]
+    conv3 = tf.nn.convolution(conv2,wc3,padding)
+    conv3 = tf.nn.relu(conv3)
+
+    return conv3
+
+def broadcast_matmul(A, B):
+    "Compute A @ B, broadcasting over the first `N-2` ranks"
+    with tf.variable_scope("broadcast_matmul"):
+        return tf.reduce_sum(A[..., tf.newaxis] * B[..., tf.newaxis, :, :],
+                             axis=-2)
+
+def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
+
+    ##Images coords ordering: [width,height] (cols,rows)
+    ## First compute image features
+    print("Images Input shape : ",images_.get_shape().as_list())
+    encoded_images = encode_images(images_)
+    print("Encoded Images shape : ",encoded_images.get_shape().as_list())
+
+    ## Recover Barycenters
+    print("Data shape: ",x.get_shape().as_list())
+    ## X: 3 first coords: normals, 3 lasts: barycenter
+    normals , barycenters = tf.split(x,[3,3],2)
+    print("Normals shape:",normals.get_shape().as_list())
+    print("Barycenters shape:",barycenters.get_shape().as_list())
+    ones_shape = tf.ones_like(barycenters)
+    ones, _ = tf.split(ones_shape,[1,2],2)
+    barycenters = tf.concat([barycenters,ones],axis=2)
+    barycenters = tf.reshape(barycenters,[-1,4])
+    normals = tf.concat([normals,ones],axis=2)
+    normals = tf.reshape(normals,[-1,4])
+    print("Barycenters shape:",barycenters.get_shape().as_list())
+
+    ## Then BackProject Triangles barycenters
+    #Multiply 3D coordinates with projection matrices
+    num_cameras = calibs_.get_shape().as_list()[1]
+    #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])
+    print("Projection matrices shape: ",calibs_.get_shape().as_list())
+
+    # Repeat 3D coordinates for num_cameras
+    stacked_barycenters = tf.stack([barycenters]*num_cameras)
+    stacked_barycenters = tf.transpose(stacked_barycenters, [1,0,2])
+    stacked_barycenters = tf.reshape(stacked_barycenters,[-1,num_cameras,4,1])
+
+    print("Stacked Barycenters shape:",stacked_barycenters.get_shape().as_list())
+
+    #coords = tf.matmul(calibs_,stacked_barycenters)
+    coords = broadcast_matmul(calibs_,stacked_barycenters)
+    coords = tf.reshape(coords,[-1,num_cameras,3])
+    print("Coords shape:",coords.get_shape().as_list())
+    x_coords,y_coords,z_coords = tf.split(coords,[1,1,1],2)
+    print("X shape: ",x_coords.get_shape().as_list()) # cols
+    print("Y shape: ",y_coords.get_shape().as_list()) # rows
+    print("Z shape: ",z_coords.get_shape().as_list())
+
+    # trick for zero z_coords (removed so nans will appear for diagnostics)
+    #non_zeros = tf.not_equal(adj_size, 0)
+    #adj_size = tf.cast(adj_size, tf.float32)
+    #adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
+
+    z_coords = tf.reciprocal(z_coords)
+    x_coords = tf.multiply(x_coords,z_coords)
+    y_coords = tf.multiply(y_coords,z_coords)
+
+    texture_coords = tf.stack([x_coords,y_coords],axis=2)
+    texture_coords = tf.reshape(texture_coords,[-1,num_cameras,2])
+    print("Texture coords shape: ",texture_coords.get_shape().as_list())
+
+    ## Discard invalid tex_coords
+    x_negatives = tf.greater(x_coords,0.0)
+    x_overflow = tf.less(x_coords,images_.get_shape().as_list()[2])
+
+    y_negatives = tf.greater(y_coords,0.0)
+    y_overflow = tf.less(y_coords,images_.get_shape().as_list()[3])
+
+    z_negatives = tf.greater(z_coords,0.0)
+
+    mask = tf.logical_and(x_negatives,x_overflow) # X is inside image
+    mask = tf.logical_and(mask,y_negatives) # Y is inside image
+    mask = tf.logical_and(mask,y_overflow) # Y is inside image
+    mask = tf.logical_and(mask,z_negatives) #triangle is in front of camera
+
+    print("Mask Shape: ",mask.get_shape().as_list())
+    tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
+    tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
+    tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]])
+    print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
+
+    ## Discard cameras behind triangle:
+    #recover z coordinate of (barycenter + normal).
+    #if z(barycenter +normal) - z(barycenter) > 0 discard (camera behind) else, accept
+
+    #Multiply 3D coordinates with projection matrices
+    num_cameras = calibs_.get_shape().as_list()[1]
+    #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])
+    print("Projection matrices shape: ",calibs_.get_shape().as_list())
+
+    # Repeat 3D coordinates for num_cameras
+    stacked_normals = tf.stack([normals]*num_cameras)
+    stacked_normals = tf.transpose(stacked_normals, [1,0,2])
+    stacked_normals = tf.reshape(stacked_normals,[-1,num_cameras,4,1])
+
+    print("Stacked Normals shape:",stacked_normals.get_shape().as_list())
+    summed = tf.add(stacked_normals,stacked_barycenters)
+    #coords = tf.matmul(calibs_,stacked_barycenters)
+    coords = broadcast_matmul(calibs_,summed)
+    coords = tf.reshape(coords,[-1,num_cameras,3])
+    print("Normal Coords shape:",coords.get_shape().as_list())
+    normal_x_coords,normal_y_coords,normal_z_coords = tf.split(coords,[1,1,1],2)
+
+    print("Normal Z shape: ",normal_z_coords.get_shape().as_list())
+
+    # Discard invalid normal_z_coords
+    #subtract normal's depths to barycenter's
+    subtraction = tf.subtract(normal_z_coords,z_coords)
+    visibility_mask = tf.less(subtraction,0.0)
+    mask = tf.logical_and(mask,visibility_mask) #
+
+    print("Mask Shape: ",mask.get_shape().as_list())
+    tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
+    tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
+    tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]])
+    print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
+
+    ## Aggregate Features
+    round_x_coords = tf.round(x_coords)
+    round_y_coords = tf.round(y_coords)
+
+    round_x_coords = tf.reshape(round_x_coords,[-1, num_cameras])
+    round_y_coords = tf.reshape(round_y_coords,[-1, num_cameras])
+
+    round_x_coords = tf.cast(round_x_coords,dtype=tf.int32)
+    round_y_coords = tf.cast(round_y_coords,dtype=tf.int32)
+
+    dim = tf.shape(round_x_coords)[0]
+    image_id = tf.constant(range(num_cameras))
+    image_id = tf.expand_dims(image_id, axis=0)
+    image_id = tf.tile(image_id, [dim,1])
+    print("Image id shape: ",image_id.get_shape().as_list())
+    indices = tf.stack([image_id,round_x_coords,round_y_coords],axis=2)
+    print("Coords shape: ",indices.get_shape().as_list())
+    aggregated_features = tf.gather_nd(encoded_images,indices)
+    print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
+    aggregated_features = tf.where(tiled_mask,aggregated_features,tf.zeros_like(aggregated_features)) #mask features with zeros when camera is discarded
+    print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
+
+    ##Average Features
+    summed_features = tf.reduce_sum(aggregated_features,axis=1)
+    print("Summed Features shape:",summed_features.get_shape().as_list())
+    summed_masks = tf.reduce_sum(tf.cast(tiled_mask,dtype=tf.int32),axis=1)
+    print("Summed Masks shape:",summed_masks.get_shape().as_list())
+    non_zeros = tf.not_equal(summed_masks, 0)
+    summed_masks = tf.cast(summed_masks, tf.float32)
+    averaging_weights = tf.where(non_zeros,tf.reciprocal(summed_masks),tf.zeros_like(summed_masks))
+    averaged_features = tf.multiply(summed_features,averaging_weights)
+    averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images.get_shape().as_list()[3]])
+    print("Averaged Features size:",averaged_features.get_shape().as_list())
+
+    x = tf.concat([averaged_features,x],axis=2)
+
+    print("Input Feature:",x.get_shape().as_list())
+
+    """
+    0 - input(3+feature_size) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
+    """
+    bTransInvariant = False
+    bRotInvariant = False
+
+    # 3 conv layers, first one is translation invariant for position only. Position is only used for assignment
+
+    # Conv1
+    M_conv1 = 9
+    out_channels_conv1 = 16
+    h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+    h_conv1_act = tf.nn.relu(h_conv1)
+
+    # Conv2
+    M_conv2 = 9
+    out_channels_conv2 = 32
+    h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+    h_conv2_act = tf.nn.relu(h_conv2)
+
+    # Conv3
+    M_conv3 = 9
+    out_channels_conv3 = 64
+    h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+    h_conv3_act = tf.nn.relu(h_conv3)
+
+    # Lin(1024)
+    out_channels_fc1 = 1024
+    h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+
+    # Lin(num_classes)
+    out_channels_reg = 3
+    y_conv = custom_lin(h_fc1, out_channels_reg)
+    return y_conv
+
