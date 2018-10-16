@@ -664,7 +664,7 @@ def getTrianglesBarycenter(vl,fl):
 
     diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
 
-    vl = vl/diag
+    #vl = vl/diag # Remove normalization
 
     for f in range(fnum):
         v0 = vl[fl[f,0],:]
