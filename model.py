@@ -1679,6 +1679,7 @@ def custom_pooling(x,pooltype):
 	batch_size, input_size,
 
 def encode_images(images):
+
     dim1 = images.get_shape().as_list()[1]
     dim2 = images.get_shape().as_list()[2]
     dim3 = images.get_shape().as_list()[3]
@@ -1694,7 +1695,7 @@ def encode_images(images):
     #stride=[]
     conv1 = tf.nn.convolution(images,wc1,padding)
     conv1 = tf.nn.relu(conv1)
-
+    """
     # Conv 2
     out_channels2=32
     wc2_w = 4
@@ -1715,7 +1716,19 @@ def encode_images(images):
     conv3 = tf.nn.convolution(conv2,wc3,padding)
     conv3 = tf.nn.relu(conv3)
 
-    return conv3
+
+    # Conv 4: conv 1x1 to go to a 3D vector for each pixel
+    out_channels4=3
+    wc4_w = 1
+    wc4_h = 1
+    wc4 = weight_variable([wc4_w,wc4_h,out_channels1,out_channels4])
+    padding='SAME'
+    #stride=[]
+    conv4 = tf.nn.convolution(conv1,wc4,padding)
+    conv4 = tf.nn.relu(conv4)
+    """
+    return conv1
+
 
 def broadcast_matmul(A, B):
     "Compute A @ B, broadcasting over the first `N-2` ranks"
@@ -1724,153 +1737,155 @@ def broadcast_matmul(A, B):
                              axis=-2)
 
 def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
+    with tf.variable_scope("Image_Encoding"):
+        ##Images coords ordering: [width,height] (cols,rows)
+        ## First compute image features
+        print("Images Input shape : ",images_.get_shape().as_list())
+        encoded_images = encode_images(images_)
+        print("Encoded Images shape : ",encoded_images.get_shape().as_list())
 
-    ##Images coords ordering: [width,height] (cols,rows)
-    ## First compute image features
-    print("Images Input shape : ",images_.get_shape().as_list())
-    encoded_images = encode_images(images_)
-    print("Encoded Images shape : ",encoded_images.get_shape().as_list())
+    with tf.variable_scope("Projection_Operation"):
+        ## Recover Barycenters
+        print("Data shape: ",x.get_shape().as_list())
+        ## X: 3 first coords: normals, 3 lasts: barycenter
+        normals , barycenters_originals = tf.split(x,[3,3],2,name='InputSplit_1')
+        print("Normals shape:",normals.get_shape().as_list())
+        print("Original Barycenters shape:",barycenters_originals.get_shape().as_list())
+        ones_shape = tf.ones_like(barycenters_originals)
+        ones, _ = tf.split(ones_shape,[1,2],2)
+        barycenters = tf.concat([barycenters_originals,ones],axis=2)
+        barycenters = tf.reshape(barycenters,[-1,4])
+        normals = tf.concat([normals,ones],axis=2)
+        normals = tf.reshape(normals,[-1,4])
+        print("Barycenters shape:",barycenters.get_shape().as_list())
 
-    ## Recover Barycenters
-    print("Data shape: ",x.get_shape().as_list())
-    ## X: 3 first coords: normals, 3 lasts: barycenter
-    normals , barycenters = tf.split(x,[3,3],2)
-    print("Normals shape:",normals.get_shape().as_list())
-    print("Barycenters shape:",barycenters.get_shape().as_list())
-    ones_shape = tf.ones_like(barycenters)
-    ones, _ = tf.split(ones_shape,[1,2],2)
-    barycenters = tf.concat([barycenters,ones],axis=2)
-    barycenters = tf.reshape(barycenters,[-1,4])
-    normals = tf.concat([normals,ones],axis=2)
-    normals = tf.reshape(normals,[-1,4])
-    print("Barycenters shape:",barycenters.get_shape().as_list())
+        ## Then BackProject Triangles barycenters
+        #Multiply 3D coordinates with projection matrices
+        num_cameras = calibs_.get_shape().as_list()[1]
+        print("Projection matrices shape: ",calibs_.get_shape().as_list())
 
-    ## Then BackProject Triangles barycenters
-    #Multiply 3D coordinates with projection matrices
-    num_cameras = calibs_.get_shape().as_list()[1]
-    #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])
-    print("Projection matrices shape: ",calibs_.get_shape().as_list())
+        # Repeat 3D coordinates for num_cameras
+        stacked_barycenters = tf.stack([barycenters]*num_cameras,name='barycenter_stack')
+        stacked_barycenters = tf.transpose(stacked_barycenters, [1,0,2],name='barycenters_transpose')
+        stacked_barycenters = tf.reshape(stacked_barycenters,[-1,num_cameras,4,1])
 
-    # Repeat 3D coordinates for num_cameras
-    stacked_barycenters = tf.stack([barycenters]*num_cameras)
-    stacked_barycenters = tf.transpose(stacked_barycenters, [1,0,2])
-    stacked_barycenters = tf.reshape(stacked_barycenters,[-1,num_cameras,4,1])
+        print("Stacked Barycenters shape:",stacked_barycenters.get_shape().as_list())
 
-    print("Stacked Barycenters shape:",stacked_barycenters.get_shape().as_list())
+        #coords = tf.matmul(calibs_,stacked_barycenters)
+        coords = broadcast_matmul(calibs_,stacked_barycenters)
+        coords = tf.reshape(coords,[-1,num_cameras,3])
+        print("Coords shape:",coords.get_shape().as_list())
+        x_coords,y_coords,z_coords = tf.split(coords,[1,1,1],2)
+        print("X shape: ",x_coords.get_shape().as_list()) # cols
+        print("Y shape: ",y_coords.get_shape().as_list()) # rows
+        print("Z shape: ",z_coords.get_shape().as_list())
 
-    #coords = tf.matmul(calibs_,stacked_barycenters)
-    coords = broadcast_matmul(calibs_,stacked_barycenters)
-    coords = tf.reshape(coords,[-1,num_cameras,3])
-    print("Coords shape:",coords.get_shape().as_list())
-    x_coords,y_coords,z_coords = tf.split(coords,[1,1,1],2)
-    print("X shape: ",x_coords.get_shape().as_list()) # cols
-    print("Y shape: ",y_coords.get_shape().as_list()) # rows
-    print("Z shape: ",z_coords.get_shape().as_list())
+        # trick for zero z_coords (removed so nans will appear for diagnostics)
+        #non_zeros = tf.not_equal(adj_size, 0)
+        #adj_size = tf.cast(adj_size, tf.float32)
+        #adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
 
-    # trick for zero z_coords (removed so nans will appear for diagnostics)
-    #non_zeros = tf.not_equal(adj_size, 0)
-    #adj_size = tf.cast(adj_size, tf.float32)
-    #adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
+        z_coords = tf.reciprocal(z_coords)
+        x_coords = tf.multiply(x_coords,z_coords)
+        y_coords = tf.multiply(y_coords,z_coords)
 
-    z_coords = tf.reciprocal(z_coords)
-    x_coords = tf.multiply(x_coords,z_coords)
-    y_coords = tf.multiply(y_coords,z_coords)
+        #texture_coords = tf.stack([x_coords,y_coords],axis=2)
+        #texture_coords = tf.reshape(texture_coords,[-1,num_cameras,2])
+        #print("Texture coords shape: ",texture_coords.get_shape().as_list())
 
-    texture_coords = tf.stack([x_coords,y_coords],axis=2)
-    texture_coords = tf.reshape(texture_coords,[-1,num_cameras,2])
-    print("Texture coords shape: ",texture_coords.get_shape().as_list())
+        ## Discard invalid tex_coords
+        x_negatives = tf.greater(x_coords,tf.zeros_like(x_coords),name='x_negatives')
+        x_overflow = tf.less(x_coords,tf.multiply(float(images_.get_shape().as_list()[2]),tf.ones_like(x_coords)),name='x_overflow')
 
-    ## Discard invalid tex_coords
-    x_negatives = tf.greater(x_coords,0.0)
-    x_overflow = tf.less(x_coords,images_.get_shape().as_list()[2])
+        y_negatives = tf.greater(y_coords,tf.zeros_like(y_coords),name='y_negatives')
+        y_overflow = tf.less(y_coords,tf.multiply(float(images_.get_shape().as_list()[3]),tf.ones_like(x_coords)),name='y_overflow')
 
-    y_negatives = tf.greater(y_coords,0.0)
-    y_overflow = tf.less(y_coords,images_.get_shape().as_list()[3])
+        z_negatives = tf.greater(z_coords,tf.zeros_like(z_coords),name='z_negatives')
 
-    z_negatives = tf.greater(z_coords,0.0)
+        mask = tf.logical_and(x_negatives,y_negatives) # X is inside image
+        #mask = tf.logical_and(mask,x_overflow) # Y is inside image
+        #mask = tf.logical_and(mask,y_overflow) # Y is inside image
+        mask = tf.logical_and(mask,z_negatives) #triangle is in front of camera
 
-    mask = tf.logical_and(x_negatives,x_overflow) # X is inside image
-    mask = tf.logical_and(mask,y_negatives) # Y is inside image
-    mask = tf.logical_and(mask,y_overflow) # Y is inside image
-    mask = tf.logical_and(mask,z_negatives) #triangle is in front of camera
+        print("Mask Shape: ",mask.get_shape().as_list())
+        tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
+        tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
+        tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]])
+        print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
 
-    print("Mask Shape: ",mask.get_shape().as_list())
-    tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
-    tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
-    tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]])
-    print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
+        ## Discard cameras behind triangle:
+        #recover z coordinate of (barycenter + normal).
+        #if z(barycenter +normal) - z(barycenter) > 0 discard (camera behind) else, accept
 
-    ## Discard cameras behind triangle:
-    #recover z coordinate of (barycenter + normal).
-    #if z(barycenter +normal) - z(barycenter) > 0 discard (camera behind) else, accept
+        #Multiply 3D coordinates with projection matrices
+        num_cameras = calibs_.get_shape().as_list()[1]
+        #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])
+        print("Projection matrices shape: ",calibs_.get_shape().as_list())
 
-    #Multiply 3D coordinates with projection matrices
-    num_cameras = calibs_.get_shape().as_list()[1]
-    #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])
-    print("Projection matrices shape: ",calibs_.get_shape().as_list())
+        # Repeat 3D coordinates for num_cameras
+        stacked_normals = tf.stack([normals]*num_cameras)
+        stacked_normals = tf.transpose(stacked_normals, [1,0,2])
+        stacked_normals = tf.reshape(stacked_normals,[-1,num_cameras,4,1])
 
-    # Repeat 3D coordinates for num_cameras
-    stacked_normals = tf.stack([normals]*num_cameras)
-    stacked_normals = tf.transpose(stacked_normals, [1,0,2])
-    stacked_normals = tf.reshape(stacked_normals,[-1,num_cameras,4,1])
+        print("Stacked Normals shape:",stacked_normals.get_shape().as_list())
+        summed = tf.add(stacked_normals,stacked_barycenters)
+        #coords = tf.matmul(calibs_,stacked_barycenters)
+        coords = broadcast_matmul(calibs_,summed)
+        coords = tf.reshape(coords,[-1,num_cameras,3])
+        print("Normal Coords shape:",coords.get_shape().as_list())
+        normal_x_coords,normal_y_coords,normal_z_coords = tf.split(coords,[1,1,1],2)
 
-    print("Stacked Normals shape:",stacked_normals.get_shape().as_list())
-    summed = tf.add(stacked_normals,stacked_barycenters)
-    #coords = tf.matmul(calibs_,stacked_barycenters)
-    coords = broadcast_matmul(calibs_,summed)
-    coords = tf.reshape(coords,[-1,num_cameras,3])
-    print("Normal Coords shape:",coords.get_shape().as_list())
-    normal_x_coords,normal_y_coords,normal_z_coords = tf.split(coords,[1,1,1],2)
+        print("Normal Z shape: ",normal_z_coords.get_shape().as_list())
 
-    print("Normal Z shape: ",normal_z_coords.get_shape().as_list())
+        # Discard invalid normal_z_coords
+        #subtract normal's depths to barycenter's
+        subtraction = tf.subtract(normal_z_coords,z_coords)
+        visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask')
+        #mask = tf.logical_and(mask,visibility_mask) #
 
-    # Discard invalid normal_z_coords
-    #subtract normal's depths to barycenter's
-    subtraction = tf.subtract(normal_z_coords,z_coords)
-    visibility_mask = tf.less(subtraction,0.0)
-    mask = tf.logical_and(mask,visibility_mask) #
+        print("Mask Shape: ",mask.get_shape().as_list())
+        tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
+        tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
+        tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]],name='tiled_mask')
+        print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
 
-    print("Mask Shape: ",mask.get_shape().as_list())
-    tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
-    tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
-    tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]])
-    print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
+        ## Aggregate Features
+        round_x_coords = tf.round(x_coords)
+        round_y_coords = tf.round(y_coords)
 
-    ## Aggregate Features
-    round_x_coords = tf.round(x_coords)
-    round_y_coords = tf.round(y_coords)
+        round_x_coords = tf.reshape(round_x_coords,[-1, num_cameras])
+        round_y_coords = tf.reshape(round_y_coords,[-1, num_cameras])
 
-    round_x_coords = tf.reshape(round_x_coords,[-1, num_cameras])
-    round_y_coords = tf.reshape(round_y_coords,[-1, num_cameras])
+        round_x_coords = tf.cast(round_x_coords,dtype=tf.int32)
+        round_y_coords = tf.cast(round_y_coords,dtype=tf.int32)
 
-    round_x_coords = tf.cast(round_x_coords,dtype=tf.int32)
-    round_y_coords = tf.cast(round_y_coords,dtype=tf.int32)
+        dim = tf.shape(round_x_coords)[0]
+        image_id = tf.constant(range(num_cameras))
+        image_id = tf.expand_dims(image_id, axis=0)
+        image_id = tf.tile(image_id, [dim,1])
+        print("Image id shape: ",image_id.get_shape().as_list())
+        indices = tf.stack([image_id,round_x_coords,round_y_coords],axis=2,name='Texture_Coords')
+        print("Coords shape: ",indices.get_shape().as_list())
+        aggregated_features = tf.gather_nd(encoded_images,indices,name='Aggregated_Features')
+        print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
+        aggregated_features = tf.where(tiled_mask,aggregated_features,tf.zeros_like(aggregated_features),name='Projection_Features') #mask features with zeros when camera is discarded
+        print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
 
-    dim = tf.shape(round_x_coords)[0]
-    image_id = tf.constant(range(num_cameras))
-    image_id = tf.expand_dims(image_id, axis=0)
-    image_id = tf.tile(image_id, [dim,1])
-    print("Image id shape: ",image_id.get_shape().as_list())
-    indices = tf.stack([image_id,round_x_coords,round_y_coords],axis=2)
-    print("Coords shape: ",indices.get_shape().as_list())
-    aggregated_features = tf.gather_nd(encoded_images,indices)
-    print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
-    aggregated_features = tf.where(tiled_mask,aggregated_features,tf.zeros_like(aggregated_features)) #mask features with zeros when camera is discarded
-    print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
+        ##Average Features
+        summed_features = tf.reduce_sum(aggregated_features,axis=1)
+        print("Summed Features shape:",summed_features.get_shape().as_list())
+        summed_masks = tf.reduce_sum(tf.cast(tiled_mask,dtype=tf.int32),axis=1)
+        print("Summed Masks shape:",summed_masks.get_shape().as_list())
+        non_zeros = tf.not_equal(summed_masks, 0)
+        summed_masks = tf.cast(summed_masks, tf.float32)
+        averaging_weights = tf.where(non_zeros,tf.reciprocal(summed_masks),tf.zeros_like(summed_masks))
+        averaged_features = tf.multiply(summed_features,averaging_weights)
+        averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images.get_shape().as_list()[3]])
+        print("Averaged Features size:",averaged_features.get_shape().as_list())
 
-    ##Average Features
-    summed_features = tf.reduce_sum(aggregated_features,axis=1)
-    print("Summed Features shape:",summed_features.get_shape().as_list())
-    summed_masks = tf.reduce_sum(tf.cast(tiled_mask,dtype=tf.int32),axis=1)
-    print("Summed Masks shape:",summed_masks.get_shape().as_list())
-    non_zeros = tf.not_equal(summed_masks, 0)
-    summed_masks = tf.cast(summed_masks, tf.float32)
-    averaging_weights = tf.where(non_zeros,tf.reciprocal(summed_masks),tf.zeros_like(summed_masks))
-    averaged_features = tf.multiply(summed_features,averaging_weights)
-    averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images.get_shape().as_list()[3]])
-    print("Averaged Features size:",averaged_features.get_shape().as_list())
-
-    x = tf.concat([averaged_features,x],axis=2)
+        ## Concatenate resulting Features to normal+pos input
+        #x = tf.concat([averaged_features,x],axis=2)
+        x = tf.concat([averaged_features,barycenters_originals],axis=2,name='final_concat')
 
     print("Input Feature:",x.get_shape().as_list())
 

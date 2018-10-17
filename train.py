@@ -90,7 +90,8 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map, images_lis
 			saver.restore(sess, ckpt.model_checkpoint_path)
 
 		
-		refined_x = update_position2(xp_, n_conv, e_map_, ve_map_)
+                #refined_x = update_position(xp_,fadj, n_conv)
+                refined_x = update_position2(xp_, n_conv, e_map_, ve_map_)
 
 		points = tf.squeeze(refined_x)
 		# points shape should now be [NUM_POINTS, 3]
@@ -259,7 +260,7 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lis
 
 	sess.close()
 
-        csv_filename = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/archi15_patches.csv"
+        csv_filename = RESULTS_PATH+"/archi15_patches.csv"
 	f = open(csv_filename,'ab')
 	np.savetxt(f,lossArray, delimiter=",")
 
@@ -378,7 +379,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 	lmbd = 1/18
 
 	batch_size, num_points, space_dims = x.get_shape().as_list()
-	max_edges = 50
+        max_edges = 50
 	_, num_edges, _ = edge_map.get_shape().as_list()
 
 	testPoint = 3145
@@ -397,13 +398,13 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 
 	# Then, add zero-line (order is important, so that faces in first line stay 0), since we offset v_edges
 	pad_line = tf.zeros([batch_size,1,4],dtype=tf.int32)
-	edge_map = tf.concat([pad_line,edge_map], axis=1) 	# Add zero-line accordingly
+        edge_map = tf.concat([pad_line,edge_map], axis=1) 	# Add zero-line accordingly
 
 	# Add zero-line to face normals as well, since we offset last columns of edge_map
 	face_normals = tf.concat([tf.zeros([batch_size,1,3]),face_normals],axis=1)
 
 	v_edges = tf.squeeze(v_edges)
-        n_edges = tf.gather(edge_map,v_edges)
+        n_edges = tf.gather(edge_map,v_edges,axis=1)
 	# shape = (batch_size, num_points, max_edges, 4)
 
 	n_edges = tf.squeeze(n_edges)
@@ -617,7 +618,7 @@ def mainFunction():
 
 	K_faces = 25
 
-        running_mode = 2 #0
+        running_mode =  0 #2 #0
 	###################################################################################################
 	#	0 - Training on all meshes in a given folder
 	#	1 - Run checkpoint on a given mesh as input
@@ -940,45 +941,55 @@ def mainFunction():
                             print("Data Parsing Error: mismatch between camera numbers for images and calibs")
                             exit()
 
-                        V0,_,_, _, _ = load_mesh(noisyFolder, noisyFile0, 0, False)
-                        f_normals0 = computeFacesNormals(V0, faces_gt)
+                        V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile0, 0, False)
+                        f_normals0 = computeFacesNormals(V0, faces_noisy)
 
-                        f_pos0 = getTrianglesBarycenter(V0, faces_gt)
+                        f_pos0 = getTrianglesBarycenter(V0, faces_noisy)
                         f_pos0 = np.reshape(f_pos0,(-1,3))
                         f_normals0 = np.concatenate((f_normals0, f_pos0), axis=1)
 
                         V0 = np.expand_dims(V0, axis=0)
                         f_normals0 = np.expand_dims(f_normals0, axis=0)
 
-                        print("running n1...")
-                        upV0, upN0 = run_thingy(V0, faces, f_normals0, f_adj, edge_map, v_e_map,[loaded_images],[loaded_calibs])
-                        print("computing Hausdorff 1...")
-                        haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
-                        angDist0, angStd0 = angularDiff(upN0, GTf_normals)
-                        write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
+                        faces_noisy_modif = np.expand_dims(faces_noisy,axis=0)
+                        faces_noisy_modif = np.array(faces_noisy_modif).astype(np.int32)
+
+
+                        _, edge_map_noisy , v_e_map_noisy  = getFacesAdj2(faces_noisy)
+                        f_adj_noisy = getFacesLargeAdj(faces_noisy,K_faces)
+                        f_adj_noisy = np.expand_dims(f_adj_noisy, axis=0)
+                        edge_map_noisy = np.expand_dims(edge_map_noisy, axis=0)
+                        v_e_map_noisy = np.expand_dims(v_e_map_noisy, axis=0)
+                        print("running ...")
+                        upV, upN0 = run_thingy(V0, faces_noisy_modif, f_normals0, f_adj_noisy, edge_map_noisy, v_e_map_noisy,[loaded_images],[loaded_calibs])
+                        write_mesh(upV, faces_noisy, RESULTS_PATH+"testOut.obj")
+                        #print("computing Hausdorff 1...")
+                        #haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
+                        #angDist0, angStd0 = angularDiff(upN0, GTf_normals)
+                        #write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
 
                         # Fill arrays
-                        nameArray.append(denoizedFile0)
-                        resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
+                        #nameArray.append(denoizedFile0)
+                        #resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
 
-                        outputFile = open(csv_filename,'a')
-                        nameArray = np.array(nameArray)
-                        resultsArray = np.array(resultsArray,dtype=np.float32)
+                        #outputFile = open(csv_filename,'a')
+                        #nameArray = np.array(nameArray)
+                        #resultsArray = np.array(resultsArray,dtype=np.float32)
 
-                        tempArray = resultsArray.flatten()
-                        resStr = ["%.7f" % number for number in tempArray]
-                        resStr = np.reshape(resStr,resultsArray.shape)
+                        #tempArray = resultsArray.flatten()
+                        #resStr = ["%.7f" % number for number in tempArray]
+                        #resStr = np.reshape(resStr,resultsArray.shape)
 
-                        nameArray = np.expand_dims(nameArray, axis=-1)
+                        #nameArray = np.expand_dims(nameArray, axis=-1)
 
-                        finalArray = np.concatenate((nameArray,resStr),axis=1)
-                        for row in range(finalArray.shape[0]):
-                                for col in range(finalArray.shape[1]):
-                                        outputFile.write(finalArray[row,col])
-                                        outputFile.write(' ')
-                                outputFile.write('\n')
+                        #finalArray = np.concatenate((nameArray,resStr),axis=1)
+                        #for row in range(finalArray.shape[0]):
+                        #        for col in range(finalArray.shape[1]):
+                        #                outputFile.write(finalArray[row,col])
+                        #                outputFile.write(' ')
+                        #        outputFile.write('\n')
 
-                        outputFile.close()
+                        #outputFile.close()
 
 	elif running_mode == 3:
 		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/"
