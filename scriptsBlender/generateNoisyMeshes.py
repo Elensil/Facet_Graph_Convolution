@@ -33,7 +33,7 @@ def getAverageEdgeLength(myMesh):
 
 # Run like this:
 
-# blender --background --python generateCylinders.py -- inputfolder destfolder num_meshes std_dev
+# blender --background --python generateCylinders.py -- inputfolder destfolder num_meshed std_dev
 
 argv = sys.argv
 argv = argv[argv.index("--") + 1:]  # get all args after "--"
@@ -44,7 +44,7 @@ destfolder = argv[1]
 num_meshes = int(argv[2])
 std_dev = float(argv[3])
 
-prim_num = 0    # Number of blender primitive added to existing meshes in the input folder
+prim_num = 1    # Number of blender primitive added to existing meshes in the input folder
 
 #num_meshes = 1
 #std_dev = 0.02
@@ -68,9 +68,12 @@ for m in range(num_meshes):
 
 
     # generate random parameters
-    #primitive type
+
+    # Primitive type (for blender primitive) or mesh index (for meshes in input folder)
     mode = random.randint(0,prim_num+len(obj_list)-1)
-    #primitive parameters (radius, height)
+    # Noise type (normal, uniform, gamma)
+    noise_type = random.randint(0, 2)
+    #primitive parameters (radius, height) for blender primitives (not super usefull now)
     rad = random.random()
     rad2 = random.random()*rad        
     length= random.random()
@@ -90,23 +93,23 @@ for m in range(num_meshes):
     #     bpy.ops.mesh.primitive_monkey_add(radius = rad)
     #     gt_name = 'monkey_'+str(m)+'_gt'
     #     noisy_name = 'monkey_'+str(m)+'_noisy'
-    # if mode==0:
-    #     # Create torus
-    #     bpy.ops.mesh.primitive_torus_add(major_radius = rad, minor_radius= rad2)
-    #     gt_name = 'torus_'+str(m)+'_gt'
-    #     noisy_name = 'torus_'+str(m)+'_noisy'
+    if mode==0:
+        # Create torus
+        bpy.ops.mesh.primitive_torus_add(major_radius = rad, minor_radius= rad2)
+        gt_name = 'torus_'+str(m)+'_gt'
+        noisy_name = 'torus_'+str(m)+'_noisy'
     # elif mode==2:
     #     # Create sphere
     #     bpy.ops.mesh.primitive_uv_sphere_add(size = rad)
     #     gt_name = 'sphere_'+str(m)+'_gt'
     #     noisy_name = 'sphere_'+str(m)+'_noisy'
-    # else:
-    # Import obj from input dir
-    item = obj_list[mode-prim_num]
-    path_to_file = os.path.join(inputfolder, item)
-    bpy.ops.import_scene.obj(filepath = path_to_file)
-    gt_name = item[:-4]+'_'+str(m)+'_gt'
-    noisy_name = item[:-4]+'_'+str(m)+'_noisy'
+    else:
+        # Import obj from input dir
+        item = obj_list[mode-prim_num]
+        path_to_file = os.path.join(inputfolder, item)
+        bpy.ops.import_scene.obj(filepath = path_to_file)
+        gt_name = item[:-4]+'_'+str(m)+'_gt'
+        noisy_name = item[:-4]+'_'+str(m)+'_noisy'
     
     # if mode==0:
     #     # Create cylinder
@@ -139,7 +142,7 @@ for m in range(num_meshes):
     me = ob.data
     ob.name = gt_name
     
-    print("m = "+str(m)+", mode = "+str(mode))
+    #print("m = "+str(m)+", mode = "+str(mode))
     print("ob name = "+str(ob.name))
 
     # These two lines are unnecessary and will generate another copy of your cylinder
@@ -168,29 +171,29 @@ for m in range(num_meshes):
     ob_noise.rotation_euler = (alpha,beta,gamma)
     ob_noise.location = ob.location
 
-    
-    #Add noise
     mesh = ob_noise.data
-
-    #el = getAverageEdgeLength(mesh)
-
-    scene.objects.active = ob_noise
-
-    ob_noise.modifiers.new("smooth", type='SMOOTH')
-    ob_noise.modifiers["smooth"].iterations=4
-    ob_noise.modifiers["smooth"].factor=1
-    ob_noise.modifiers["smooth"].use_x=True
-    ob_noise.modifiers["smooth"].use_y=True
-    ob_noise.modifiers["smooth"].use_z=True
-    bpy.ops.object.modifier_apply (modifier='smooth')
-
-    # disp = np.random.normal(0,rand_std_dev*el,(len(mesh.vertices),3))
-    # for vert in range(len(mesh.vertices)):
-    #     for coord in range(3):
-    #         #this_disp = disp[vert,coord]
-    #         mesh.vertices[vert].co[coord]+=disp[vert,coord]
     
-    # print(bpy.data)
+    # --- Add noise ---
+    
+    el = getAverageEdgeLength(mesh)
+    # Select noise type randomly
+    if noise_type==0:   # Normal
+        disp = rand_std_dev*el * np.random.normal(0,1,(len(mesh.vertices),3))
+    elif noise_type==1: # Uniform
+        disp = rand_std_dev*el * np.random.uniform(-1,1,(len(mesh.vertices),3))
+    elif noise_type==2: # Gamma
+        disp = rand_std_dev*el * np.random.gamma(2.0,2.0,(len(mesh.vertices),3))
+
+
+
+    for vert in range(len(mesh.vertices)):
+        for coord in range(3):
+            #this_disp = disp[vert,coord]
+            mesh.vertices[vert].co[coord]+=disp[vert,coord]
+    
+    #print(bpy.data)
+
+    print("Noise type: "+str(noise_type))
 
     # deselect all objects
     bpy.ops.object.select_all(action='DESELECT')
