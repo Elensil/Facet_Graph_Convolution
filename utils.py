@@ -593,7 +593,15 @@ def oneSidedHausdorff(V0,V1):
 
 # Takes two sets of face normals with one-one correspondance
 # Returns a pair of floats: the average angular difference (in degrees) between pairs of normals, and the std
+
+# Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
 def angularDiff(n0,n1):
+
+    faceNum = n0.shape[0]
+
+    fakenodes = np.less_equal(n1,10e-4)
+    fakenodes = np.all(fakenodes,axis=-1)
+    
     n0 = normalize(n0)
     n1 = normalize(n1)
 
@@ -607,8 +615,28 @@ def angularDiff(n0,n1):
     # print("max dotP = "+str(np.amax(dotP)))
 
     angDiff = np.arccos(0.999999*dotP)
-    
     angDiff = angDiff*180/math.pi
+
+    zeroVec = np.zeros_like(angDiff, dtype=np.int32)
+    oneVec = np.ones_like(angDiff, dtype=np.int32)
+    realnodes = np.where(fakenodes,zeroVec,oneVec)
+
+    realIndices = np.where(fakenodes,zeroVec,np.arange(faceNum, dtype=np.int32))
+
+    # print("angDiff shape: "+str(angDiff.shape))
+    # print("sum realnodes: "+str(np.sum(realnodes)))
+    # angDiffTest = np.where(fakenodes,zeroVec,angDiff)
+    # angDiffTest = np.sum(angDiffTest)/np.sum(realnodes)
+
+    angDiff = np.extract(fakenodes==False, angDiff)
+    #angDiff = angDiff[realIndices]
+
+    print("angDiff shape: "+str(angDiff.shape))
+    
+    # #Set loss to zero for fake nodes
+    
+    # print("angDiffTest = "+str(angDiffTest))
+    # print("mean angDiff = "+str(np.mean(angDiff)))
     # print("angDiff example: "+str(angDiff[0]))
     return np.mean(angDiff), np.std(angDiff)
 
