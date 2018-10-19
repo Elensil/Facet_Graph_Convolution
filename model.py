@@ -1049,18 +1049,20 @@ def custom_max_pool(input, kernel_size, stride=[2, 2], padding='VALID'):
 		outputs = tf.nn.max_pool(input, ksize=[1, kernel_h, kernel_w, 1], strides=[1, stride_h, stride_w, 1], padding=padding)
 		return outputs
 
-def custom_binary_tree_pooling(x,pooltype='max'):
+def custom_binary_tree_pooling(x, steps=1, pooltype='max'):
 
 	batch_size, input_size, channels = x.get_shape().as_list()
 	# print("x shape: "+str(x.shape))
 	# print("batch_size = "+str(batch_size))
 	# print("channels = "+str(channels))
 	# Pairs of nodes should already be grouped together
-	x = tf.reshape(x,[batch_size,-1,2,channels])
+	x = tf.reshape(x,[batch_size,-1,int(math.pow(2,steps)),channels])
 	if pooltype=='max':
 		outputs = tf.reduce_max(x,axis=2)
 	elif pooltype=='avg':
 		outputs = tf.reduce_mean(x,axis=2)
+
+	# WARNING: only works if steps=1
 	elif pooltype=='avg_ignore_zeros':
 		line0 = tf.slice(x,[0,0,0,0],[-1,-1,1,-1])
 		line1 = tf.slice(x,[0,0,1,0],[-1,-1,-1,-1])
@@ -1083,11 +1085,11 @@ def custom_binary_tree_pooling(x,pooltype='max'):
 
 	return outputs
 
-def custom_upsampling(x):
+def custom_upsampling(x, steps=1):
 	batch_size, input_size, channels = x.get_shape().as_list()
 
 	x = tf.expand_dims(x,axis=2)
-	outputs = tf.tile(x,[1,1,2,1])
+	outputs = tf.tile(x,[1,1,int(math.pow(2,steps)),1])
 	outputs = tf.reshape(outputs,[batch_size,-1,channels])
 
 	return outputs
@@ -1678,6 +1680,8 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 		bRotInvariant = False
 		alpha = 0.2
 		
+		coarsening_steps=2
+
 		if architecture == 0:		# Multi-scale, like in FeaStNet paper (figure 3)
 
 			# Conv1
@@ -1689,7 +1693,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -1700,7 +1704,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -1718,7 +1722,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			#DeConv2
@@ -1729,7 +1733,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			concat1 = tf.concat([upsamp1, h_conv1_act], axis=-1)
 
 			# Lin(1024)
@@ -1760,7 +1764,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_2_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_2_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -1778,7 +1782,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -1796,7 +1800,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			#DeConv2
@@ -1807,7 +1811,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			concat1 = tf.concat([upsamp1, h_conv1_2_act], axis=-1)
 
 			# Lin(1024)
@@ -1830,7 +1834,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -1841,7 +1845,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -1859,7 +1863,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			conv2_Wp = tf.transpose(conv2_W,[0,2,1])
@@ -1868,7 +1872,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			
 			conv1_Wp = tf.transpose(conv1_W,[0,2,1])
 			dconv1 = decoding_layer(upsamp1, adjs[0], conv1_Wp, translation_invariance=bTransInvariant)
@@ -1899,7 +1903,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -1912,7 +1916,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -1934,7 +1938,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			#DeConv2
@@ -1947,7 +1951,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			concat1 = tf.concat([upsamp1, h_conv1_act], axis=-1)
 
 			# Lin(1024)
@@ -1975,7 +1979,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -1986,7 +1990,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -2004,7 +2008,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			#DeConv2
@@ -2015,7 +2019,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			concat1 = tf.concat([upsamp1, h_conv1_act], axis=-1)
 
 			# Lin(1024)
@@ -2048,7 +2052,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			h_conv3_act = tf.nn.relu(h_conv3)
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv3_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv3_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 64]
 
 			# Conv4
@@ -2066,7 +2070,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 64]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(h_conv5_act)
+			upsamp2 = custom_upsampling(h_conv5_act, steps=coarsening_steps)
 			# [batch, N, 64]
 
 			# Lin(1024)
@@ -2090,7 +2094,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -2101,7 +2105,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -2119,7 +2123,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			#DeConv2
@@ -2130,7 +2134,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			concat1 = tf.concat([upsamp1, h_conv1_act], axis=-1)
 
 			# Lin(1024)
@@ -2158,7 +2162,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N, 16]
 
 			# Pooling 1
-			pool1 = custom_binary_tree_pooling(h_conv1_act)	# TODO: deal with fake nodes??
+			pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
 			# [batch, N/2, 16]
 
 			# Conv2
@@ -2171,7 +2175,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 32]
 
 			# Pooling 2
-			pool2 = custom_binary_tree_pooling(h_conv2_act)
+			pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
 			# [batch, N/4, 32]
 
 			# Conv3
@@ -2193,7 +2197,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/4, 32]
 
 			#Upsampling2
-			upsamp2 = custom_upsampling(dconv3_act)
+			upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
 			# [batch, N/2, 32]
 
 			#DeConv2
@@ -2206,7 +2210,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# [batch, N/2, 16]
 
 			#Upsampling1
-			upsamp1 = custom_upsampling(dconv2_act)
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
 			concat1 = tf.concat([upsamp1, h_conv1_act], axis=-1)
 
 			# Lin(1024)

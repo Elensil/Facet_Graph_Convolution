@@ -15,7 +15,7 @@ from lib.coarsening import *
 
 
 
-def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
+def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 
 	with tf.Graph().as_default():
 		random_seed = 0
@@ -107,7 +107,7 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 	return outPoints, outN
 
 
-def run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
+def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
 	
 	random_seed = 0
 	np.random.seed(random_seed)
@@ -299,7 +299,7 @@ def run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, va
 			# sess.run(train_step2,feed_dict=my_feed_dict)
 			# sess.run(train_step3,feed_dict=my_feed_dict)
 
-	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=50000)
+	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=1000)
 
 	sess.close()
 	csv_filename = "/morpheo-nas/marmando/DeepMeshRefinement/tests/"+NET_NAME+".csv"
@@ -660,7 +660,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = True
+	pickleLoad = False
 	pickleSave = True
 
 	K_faces = 25
@@ -673,6 +673,8 @@ def mainFunction():
 
 	#binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/smallAdj/"
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
+	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+
 
 	running_mode = RUNNING_MODE
 	###################################################################################################
@@ -690,9 +692,9 @@ def mainFunction():
 		# Compute normals
 		f_normals0 = computeFacesNormals(V0, faces0)
 		# Get adjacency
-		print("WARNING!!!!! Hardcoded a change in faces adjacency")
-		f_adj0, _, _ = getFacesAdj2(faces0)
-		#f_adj0 = getFacesLargeAdj(faces0,K_faces)
+		# print("WARNING!!!!! Hardcoded a change in faces adjacency")
+		# f_adj0, _, _ = getFacesAdj2(faces0)
+		f_adj0 = getFacesLargeAdj(faces0,K_faces)
 		# Get faces position
 		f_pos0 = getTrianglesBarycenter(V0, faces0)
 
@@ -722,7 +724,7 @@ def mainFunction():
 
 				# Convert to sparse matrix and coarsen graph
 				coo_adj = listToSparse(testPatchAdj, patchFNormals[:,3:])
-				adjs, newToOld = coarsen(coo_adj,3)
+				adjs, newToOld = coarsen(coo_adj,4)
 
 				# There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
 				new_N = len(newToOld)
@@ -739,8 +741,8 @@ def mainFunction():
 
 				# Change adj format
 				fAdjs = []
-				for lvl in range(3):
-					fadj = sparseToList(adjs[lvl],K_faces)
+				for lvl in range(2):
+					fadj = sparseToList(adjs[2*lvl],K_faces)
 					fadj = np.expand_dims(fadj, axis=0)
 					fAdjs.append(fadj)
 						# fAdjs = []
@@ -772,7 +774,7 @@ def mainFunction():
 
 			# Convert to sparse matrix and coarsen graph
 			coo_adj = listToSparse(f_adj0, f_pos0)
-			adjs, newToOld = coarsen(coo_adj,3)
+			adjs, newToOld = coarsen(coo_adj,4)
 
 			# There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
 			new_N = len(newToOld)
@@ -787,8 +789,8 @@ def mainFunction():
 
 			# Change adj format
 			fAdjs = []
-			for lvl in range(3):
-				fadj = sparseToList(adjs[lvl],K_faces)
+			for lvl in range(2):
+				fadj = sparseToList(adjs[2*lvl],K_faces)
 				fadj = np.expand_dims(fadj, axis=0)
 				fAdjs.append(fadj)
 
@@ -896,7 +898,7 @@ def mainFunction():
 
 
 
-		run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+		trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
 	elif running_mode == 2:
 		
@@ -1013,7 +1015,7 @@ def mainFunction():
 				f_normals_pos0 = np.expand_dims(f_normals_pos0, axis=0)
 
 				print("running n1...")
-				upV0, upN0 = run_thingy(V0, faces0, f_normals_pos0, fAdjs, edge_map0, v_e_map)
+				upV0, upN0 = inferNet(V0, faces0, f_normals_pos0, fAdjs, edge_map0, v_e_map)
 				print("computing Hausdorff 1...")
 				haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
 				angDist0, angStd0 = angularDiff(upN0, GTf_normals0)
@@ -1070,7 +1072,7 @@ def mainFunction():
 				faces1 = np.expand_dims(faces1,axis=0)
 				f_normals_pos1 = np.expand_dims(f_normals_pos1, axis=0)
 				print("running n2...")
-				upV1, upN1 = run_thingy(V1, faces1, f_normals_pos1, fAdjs, edge_map1, v_e_map)
+				upV1, upN1 = inferNet(V1, faces1, f_normals_pos1, fAdjs, edge_map1, v_e_map)
 				print("computing Hausdorff 2...")
 				haus_dist1, avg_dist1 = oneSidedHausdorff(upV1, GT)
 				angDist1, angStd1 = angularDiff(upN1, GTf_normals1)
@@ -1128,7 +1130,7 @@ def mainFunction():
 				faces2 = np.expand_dims(faces2,axis=0)
 				f_normals_pos2 = np.expand_dims(f_normals_pos2, axis=0)
 				print("running n3...")
-				upV2, upN2 = run_thingy(V2, faces2, f_normals_pos2, fAdjs, edge_map2, v_e_map)
+				upV2, upN2 = inferNet(V2, faces2, f_normals_pos2, fAdjs, edge_map2, v_e_map)
 				print("computing Hausdorff 3...")
 				haus_dist2, avg_dist2 = oneSidedHausdorff(upV2, GT)
 				angDist2, angStd2 = angularDiff(upN2, GTf_normals2)
@@ -1296,7 +1298,7 @@ def mainFunction():
 
 
 
-		# run_thingies(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+		# trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
 			# write_mesh(testPatchV, testPatchF, "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/testPatch"+str(i)+".obj")
 
