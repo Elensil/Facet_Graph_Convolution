@@ -618,7 +618,7 @@ def mainFunction():
 
 	K_faces = 25
 
-        running_mode =  0 #2 #0
+
 	###################################################################################################
 	#	0 - Training on all meshes in a given folder
 	#	1 - Run checkpoint on a given mesh as input
@@ -1139,6 +1139,7 @@ if __name__ == "__main__":
 	parser.add_argument('--debug', type=bool, default=False)
         parser.add_argument('--device', type=str, default='/gpu:0')
 	#parser.add_argument('--num_classes', type=int)
+        parser.add_argument('--mode',type=int,default=0)
 
 	FLAGS = parser.parse_args()
 
@@ -1150,6 +1151,7 @@ if __name__ == "__main__":
 	NUM_INPUT_CHANNELS = FLAGS.num_input_channels
 	LEARNING_RATE = FLAGS.learning_rate
 	DEVICE = FLAGS.device
+        running_mode = FLAGS.mode
 	#NUM_CLASSES = FLAGS.num_classes
 
 	mainFunction()

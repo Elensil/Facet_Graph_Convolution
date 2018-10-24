@@ -7,7 +7,7 @@ from utils import *
 #import h5py
 
 random_seed=0
-std_dev=0.05
+std_dev=0.5
 
 # Levi-Civita tensor of dimension 3
 LC_tensor = tf.constant([[[0,0,0],[0,0,1],[0,-1,0]],[[0,0,-1],[0,0,0],[1,0,0]],[[0,1,0],[-1,0,0],[0,0,0]]],dtype=tf.float32)
@@ -1679,7 +1679,6 @@ def custom_pooling(x,pooltype):
 	batch_size, input_size,
 
 def encode_images(images):
-
     dim1 = images.get_shape().as_list()[1]
     dim2 = images.get_shape().as_list()[2]
     dim3 = images.get_shape().as_list()[3]
@@ -1691,71 +1690,93 @@ def encode_images(images):
     wc1_w = 4
     wc1_h = 4
     wc1 = weight_variable([wc1_w,wc1_h,dim4,out_channels1])
+    bc1 = weight_variable([out_channels1])
     padding='SAME'
-    #stride=[]
     conv1 = tf.nn.convolution(images,wc1,padding)
+    conv1 = tf.nn.bias_add(conv1, bc1)
     conv1 = tf.nn.relu(conv1)
-    """
+
+
     # Conv 2
     out_channels2=32
     wc2_w = 4
     wc2_h = 4
+    bc2 = weight_variable([out_channels2])
     wc2 = weight_variable([wc2_w,wc2_h,out_channels1,out_channels2])
     padding='SAME'
-    #stride=[]
     conv2 = tf.nn.convolution(conv1,wc2,padding)
+    conv2 = tf.nn.bias_add(conv2, bc2)
     conv2 = tf.nn.relu(conv2)
 
     # Conv 3
     out_channels3=64
     wc3_w = 4
     wc3_h = 4
+    bc3 = weight_variable([out_channels])
     wc3 = weight_variable([wc3_w,wc3_h,out_channels2,out_channels3])
     padding='SAME'
-    #stride=[]
     conv3 = tf.nn.convolution(conv2,wc3,padding)
+    conv3 = tf.nn.bias_add(conv3, bc3)
     conv3 = tf.nn.relu(conv3)
 
 
-    # Conv 4: conv 1x1 to go to a 3D vector for each pixel
-    out_channels4=3
+    # Conv 4: conv 1x1 to go to a 2D vector for each pixel
+    out_channels4=2
     wc4_w = 1
     wc4_h = 1
+    bc4 = weight_variable([out_channels4])
     wc4 = weight_variable([wc4_w,wc4_h,out_channels1,out_channels4])
     padding='SAME'
-    #stride=[]
-    conv4 = tf.nn.convolution(conv1,wc4,padding)
-    conv4 = tf.nn.relu(conv4)
-    """
-    return conv1
+    conv4 = tf.nn.convolution(conv3,wc4,padding)
+    conv4 = tf.nn.bias_add(conv4, bc4)
+    #conv4 = tf.nn.relu(conv4) # No relu at the end: we want to keep negative values
 
+    return conv4
+    #return images
 
 def broadcast_matmul(A, B):
     "Compute A @ B, broadcasting over the first `N-2` ranks"
     with tf.variable_scope("broadcast_matmul"):
         return tf.reduce_sum(A[..., tf.newaxis] * B[..., tf.newaxis, :, :],
                              axis=-2)
+#Input images range [0,255]
+def normalize_images(images):
+    with tf.variable_scope("Image_Normalization"):
+        ones = tf.ones_like(images)
+        divider = tf.multiply(ones,2.0/255.0)
+        subtractor = tf.multiply(ones,1.0)
+        output_images = tf.multiply(images,divider) #images range: [0,2]
+        output_images = tf.subtract(output_images,subtractor) #images range: [-1,1]
+    return output_images
+
 
 def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
+    #First Normalize images
+    normalized_images_ = normalize_images(images_)
     with tf.variable_scope("Image_Encoding"):
         ##Images coords ordering: [width,height] (cols,rows)
         ## First compute image features
-        print("Images Input shape : ",images_.get_shape().as_list())
-        encoded_images = encode_images(images_)
+        print("Images Input shape : ",normalized_images_.get_shape().as_list())
+        encoded_images = encode_images(normalized_images_)
         print("Encoded Images shape : ",encoded_images.get_shape().as_list())
+
+        ## DEBUG: check if non zero in encoded images
+        images_sum = tf.reduce_sum(encoded_images,[1,2,3],name='Images_Sum_Check')
+        print("Summed Images shape : ",normalized_images_.get_shape().as_list())
 
     with tf.variable_scope("Projection_Operation"):
         ## Recover Barycenters
         print("Data shape: ",x.get_shape().as_list())
         ## X: 3 first coords: normals, 3 lasts: barycenter
-        normals , barycenters_originals = tf.split(x,[3,3],2,name='InputSplit_1')
-        print("Normals shape:",normals.get_shape().as_list())
+        normals_original , barycenters_originals = tf.split(x,[3,3],2,name='InputSplit_1')
+        print("Normals shape:",normals_original.get_shape().as_list())
         print("Original Barycenters shape:",barycenters_originals.get_shape().as_list())
         ones_shape = tf.ones_like(barycenters_originals)
         ones, _ = tf.split(ones_shape,[1,2],2)
-        barycenters = tf.concat([barycenters_originals,ones],axis=2)
+        zeros = tf.zeros_like(ones)
+        barycenters = tf.concat([barycenters_originals,ones],axis=2)#[baryx,baryy,baryz,1.0] for point projection
         barycenters = tf.reshape(barycenters,[-1,4])
-        normals = tf.concat([normals,ones],axis=2)
+        normals = tf.concat([normals_original,zeros],axis=2) #[normalx,normaly,normalz,0.0] for point + normal projection
         normals = tf.reshape(normals,[-1,4])
         print("Barycenters shape:",barycenters.get_shape().as_list())
 
@@ -1773,9 +1794,9 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
 
         #coords = tf.matmul(calibs_,stacked_barycenters)
         coords = broadcast_matmul(calibs_,stacked_barycenters)
-        coords = tf.reshape(coords,[-1,num_cameras,3])
+        coords = tf.reshape(coords,[-1,num_cameras,3],name='bary_proj')
         print("Coords shape:",coords.get_shape().as_list())
-        x_coords,y_coords,z_coords = tf.split(coords,[1,1,1],2)
+        y_coords,x_coords,z_coords = tf.split(coords,[1,1,1],2)
         print("X shape: ",x_coords.get_shape().as_list()) # cols
         print("Y shape: ",y_coords.get_shape().as_list()) # rows
         print("Z shape: ",z_coords.get_shape().as_list())
@@ -1785,9 +1806,9 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         #adj_size = tf.cast(adj_size, tf.float32)
         #adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
 
-        z_coords = tf.reciprocal(z_coords)
-        x_coords = tf.multiply(x_coords,z_coords)
-        y_coords = tf.multiply(y_coords,z_coords)
+        z_coords_inv = tf.reciprocal(z_coords)
+        x_coords = tf.multiply(x_coords,z_coords_inv)
+        y_coords = tf.multiply(y_coords,z_coords_inv)
 
         #texture_coords = tf.stack([x_coords,y_coords],axis=2)
         #texture_coords = tf.reshape(texture_coords,[-1,num_cameras,2])
@@ -1802,16 +1823,19 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
 
         z_negatives = tf.greater(z_coords,tf.zeros_like(z_coords),name='z_negatives')
 
-        mask = tf.logical_and(x_negatives,y_negatives) # X is inside image
-        #mask = tf.logical_and(mask,x_overflow) # Y is inside image
-        #mask = tf.logical_and(mask,y_overflow) # Y is inside image
-        mask = tf.logical_and(mask,z_negatives) #triangle is in front of camera
 
-        print("Mask Shape: ",mask.get_shape().as_list())
-        tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
-        tiled_mask = tf.transpose(tiled_mask,[1,2,0,3])
-        tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]])
-        print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
+        ## Sum Check (useless but makes the check tensor useful)
+        #sum_check = tf.stack([images_sum]*x_negatives.get_shape().as_list()[0])
+        sum_check = tf.reshape(images_sum,[-1,1])
+        print("Sum Shape: ",sum_check.get_shape().as_list())
+
+        sum_check = tf.not_equal(sum_check,tf.zeros_like(sum_check),name='sum_check')
+
+        mask = tf.logical_and(x_negatives,y_negatives) # X is inside image
+        mask = tf.logical_and(mask,x_overflow) # Y is inside image
+        mask = tf.logical_and(mask,y_overflow) # Y is inside image
+        mask = tf.logical_and(mask,z_negatives) #triangle is in front of camera
+        mask = tf.logical_and(mask,sum_check) #Image is not full zeros
 
         ## Discard cameras behind triangle:
         #recover z coordinate of (barycenter + normal).
@@ -1831,17 +1855,17 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         summed = tf.add(stacked_normals,stacked_barycenters)
         #coords = tf.matmul(calibs_,stacked_barycenters)
         coords = broadcast_matmul(calibs_,summed)
-        coords = tf.reshape(coords,[-1,num_cameras,3])
+        coords = tf.reshape(coords,[-1,num_cameras,3],name='normal_proj')
         print("Normal Coords shape:",coords.get_shape().as_list())
-        normal_x_coords,normal_y_coords,normal_z_coords = tf.split(coords,[1,1,1],2)
+        normal_y_coords,normal_x_coords,normal_z_coords = tf.split(coords,[1,1,1],2)
 
         print("Normal Z shape: ",normal_z_coords.get_shape().as_list())
 
         # Discard invalid normal_z_coords
         #subtract normal's depths to barycenter's
-        subtraction = tf.subtract(normal_z_coords,z_coords)
+        subtraction = tf.subtract(normal_z_coords,z_coords,name='visibility_subtraction')
         visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask')
-        #mask = tf.logical_and(mask,visibility_mask) #
+        mask = tf.logical_and(mask,visibility_mask) #
 
         print("Mask Shape: ",mask.get_shape().as_list())
         tiled_mask = tf.stack([mask]*encoded_images.get_shape().as_list()[3])
@@ -1872,20 +1896,40 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
 
         ##Average Features
-        summed_features = tf.reduce_sum(aggregated_features,axis=1)
+        summed_features = tf.reduce_sum(aggregated_features,axis=1,name='SumFeatures')
         print("Summed Features shape:",summed_features.get_shape().as_list())
-        summed_masks = tf.reduce_sum(tf.cast(tiled_mask,dtype=tf.int32),axis=1)
+        summed_masks = tf.reduce_sum(tf.cast(tiled_mask,dtype=tf.int32),axis=1,name='SumMasks')
         print("Summed Masks shape:",summed_masks.get_shape().as_list())
-        non_zeros = tf.not_equal(summed_masks, 0)
+        non_zeros = tf.not_equal(summed_masks, 0,name='MaskNonZeros')
         summed_masks = tf.cast(summed_masks, tf.float32)
-        averaging_weights = tf.where(non_zeros,tf.reciprocal(summed_masks),tf.zeros_like(summed_masks))
-        averaged_features = tf.multiply(summed_features,averaging_weights)
-        averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images.get_shape().as_list()[3]])
+        averaging_weights = tf.where(non_zeros,tf.reciprocal(summed_masks),tf.zeros_like(summed_masks),name='AveragingWeights')
+        averaged_features = tf.multiply(summed_features,averaging_weights,name='Weightsdivide')
+        averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images.get_shape().as_list()[3]],name='FinalReshape')
         print("Averaged Features size:",averaged_features.get_shape().as_list())
 
+        ## Find 3D Normal with projection as close as possible to predicted 2D vectors
+        float_mask = tf.cast(tiled_mask,dtype=tf.float32)
+
+        # Normal Space Discretization (sample points on cube, then normalize)
+        discretization_step = 3 # Warning: irregular sampling and some redundancy if value > 3
+        normals = [[range(discretization_step * discretization_step * discretization_step)],[range(discretization_step*discretization_step) for _ in range(discretization_step)],[range(discretization_step) for _ in range(discretization_step * discretization_step)]]
+        col0 = np.reshape(normals[0],[27])
+        col1 = np.reshape(normals[1],[27])
+        col2 = np.reshape(normals[2],[27])
+        col0 = col0 / (discretization_step*discretization_step) #round values
+        col1 = col1 / (discretization_step)
+        normals = np.stack([col0,col1,col2])
+        normals = np.transpose(normals,(1,0)).astype(float) - 1.0 #convert ranges from (int)[0, discretization step] to (float) [-1.0,1.0]
+        #normalize
+        normals = normals / np.transpose(np.stack([np.sum((normals * normals),axis=1)]*3),(1,0))
+        #remove central point (nan)
+        normals = normals[np.logical_not(np.isnan(np.sum(normals,axis=1)))]
+        normals = tf.constant(normals,name='normals_sampling')
         ## Concatenate resulting Features to normal+pos input
-        #x = tf.concat([averaged_features,x],axis=2)
-        x = tf.concat([averaged_features,barycenters_originals],axis=2,name='final_concat')
+        #x = tf.concat([averaged_features,x],axis=2) # All
+        #x = tf.concat([averaged_features,barycenters_originals],axis=2,name='final_concat') # Barycenters only
+        x = tf.concat([averaged_features,normals_original],axis=2,name='final_concat') # Normals only
+        #x = averaged_features
 
     print("Input Feature:",x.get_shape().as_list())
 
@@ -1900,7 +1944,8 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
     # Conv1
     M_conv1 = 9
     out_channels_conv1 = 16
-    h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+    #h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+    h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
     h_conv1_act = tf.nn.relu(h_conv1)
 
     # Conv2
