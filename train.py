@@ -74,8 +74,8 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		fn_normal_only = tf.slice(fn_,[0,0,0],[-1,-1,3])
 		with tf.variable_scope("model"):
 			#n_conv = get_model_reg(fn_, fadj, ARCHITECTURE, keep_prob)
-			#n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
-			n_conv = get_model_reg_multi_scale(fn_normal_only, fadjs, ARCHITECTURE, keep_prob)
+			n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+			#n_conv = get_model_reg_multi_scale(fn_normal_only, fadjs, ARCHITECTURE, keep_prob)
 
 		# n_conv = normalizeTensor(n_conv)
 		# n_conv = tf.expand_dims(n_conv,axis=-1)
@@ -210,11 +210,13 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
 	sess.run(tf.global_variables_initializer())
 
+	globalStep = 0
 	if FLAGS.pretrained:
 		ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
 		if ckpt and ckpt.model_checkpoint_path:
 			saver.restore(sess, ckpt.model_checkpoint_path)
-
+			#Extract from checkpoint filename
+			globalStep = int(os.path.basename(ckpt.model_checkpoint_path).split('-')[1])
 		#write_logs("Checkpoint restored\n")
 
 						# saver = tf.train.import_meta_graph(RESULTS_PATH)+'/test_fc6-400.meta')
@@ -299,7 +301,9 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 			# sess.run(train_step2,feed_dict=my_feed_dict)
 			# sess.run(train_step3,feed_dict=my_feed_dict)
 
-	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=1000)
+	globalStep += NUM_ITERATIONS
+
+	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep)
 
 	sess.close()
 	csv_filename = "/morpheo-nas/marmando/DeepMeshRefinement/tests/"+NET_NAME+".csv"
@@ -455,14 +459,20 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 	face_normals = tf.concat([tf.zeros([batch_size,1,3]),face_normals],axis=1)
 
 	v_edges = tf.squeeze(v_edges)
-	n_edges = tf.gather(edge_map,v_edges,axis=1)
+	edge_map = tf.transpose(edge_map,[1,0,2])
+	n_edges = tf.gather(edge_map,v_edges)
+	edge_map = tf.transpose(edge_map,[1,0,2])
+	n_edges = tf.transpose(n_edges,[2,0,1,3])
 	# shape = (batch_size, num_points, max_edges, 4)
 
 	n_edges = tf.squeeze(n_edges)
 
 	fn_slice = tf.slice(n_edges, [0,0,2],[-1,-1,-1])
 
-	n_f_normals = tf.gather(face_normals,fn_slice,axis=1)
+	face_normals = tf.transpose(face_normals,[1,0,2])
+	n_f_normals = tf.gather(face_normals,fn_slice)
+	face_normals = tf.transpose(face_normals,[1,0,2])
+	n_f_normals = tf.transpose(n_f_normals,[3,0,1,2,4])
 	# shape = (batch_size, num_points, max_edges, 2, 3)
 
 	n_f_normals = tf.tile(n_f_normals,[1,1,1,2,1])
@@ -471,7 +481,10 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 		
 		v_slice = tf.slice(n_edges, [0,0,0],[-1,-1,2])
 
-		n_v_pairs = tf.gather(x,v_slice,axis=1)
+		x = tf.transpose(x,[1,0,2])
+		n_v_pairs = tf.gather(x,v_slice)
+		x = tf.transpose(x,[1,0,2])
+		n_v_pairs = tf.transpose(n_v_pairs,[3,0,1,2,4])
 		# shape = (batch_size, num_points, max_edges, 2, 3)
 
 		# We need all (xj-xi) for each xi, but we do not know the order of vertices for each edge.
@@ -660,7 +673,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = False
+	pickleLoad = True
 	pickleSave = True
 
 	K_faces = 25
@@ -741,7 +754,7 @@ def mainFunction():
 
 				# Change adj format
 				fAdjs = []
-				for lvl in range(2):
+				for lvl in range(3):
 					fadj = sparseToList(adjs[2*lvl],K_faces)
 					fadj = np.expand_dims(fadj, axis=0)
 					fAdjs.append(fadj)
@@ -789,7 +802,7 @@ def mainFunction():
 
 			# Change adj format
 			fAdjs = []
-			for lvl in range(2):
+			for lvl in range(3):
 				fadj = sparseToList(adjs[2*lvl],K_faces)
 				fadj = np.expand_dims(fadj, axis=0)
 				fAdjs.append(fadj)
@@ -978,7 +991,7 @@ def mainFunction():
 
 				# Convert to sparse matrix and coarsen graph
 				coo_adj = listToSparse(f_adj, f_pos0)
-				adjs, newToOld = coarsen(coo_adj,3)
+				adjs, newToOld = coarsen(coo_adj,4)
 
 				oldToNew = np.array(inv_perm(newToOld))
 				# There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
@@ -997,7 +1010,7 @@ def mainFunction():
 				# Change adj format
 				fAdjs = []
 				for lvl in range(3):
-					fadj = sparseToList(adjs[lvl],K_faces)
+					fadj = sparseToList(adjs[2*lvl],K_faces)
 					fadj = np.expand_dims(fadj, axis=0)
 					fAdjs.append(fadj)
 
@@ -1036,7 +1049,7 @@ def mainFunction():
 
 				# Convert to sparse matrix and coarsen graph
 				coo_adj = listToSparse(f_adj, f_pos1)
-				adjs, newToOld = coarsen(coo_adj,3)
+				adjs, newToOld = coarsen(coo_adj,4)
 				oldToNew = np.array(inv_perm(newToOld))
 
 				# There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
@@ -1055,7 +1068,7 @@ def mainFunction():
 				# Change adj format
 				fAdjs = []
 				for lvl in range(3):
-					fadj = sparseToList(adjs[lvl],K_faces)
+					fadj = sparseToList(adjs[2*lvl],K_faces)
 					fadj = np.expand_dims(fadj, axis=0)
 					fAdjs.append(fadj)
 
@@ -1093,7 +1106,7 @@ def mainFunction():
 
 				# Convert to sparse matrix and coarsen graph
 				coo_adj = listToSparse(f_adj, f_pos2)
-				adjs, newToOld = coarsen(coo_adj,3)
+				adjs, newToOld = coarsen(coo_adj,4)
 				oldToNew = np.array(inv_perm(newToOld))
 
 				# There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
@@ -1112,7 +1125,7 @@ def mainFunction():
 				# Change adj format
 				fAdjs = []
 				for lvl in range(3):
-					fadj = sparseToList(adjs[lvl],K_faces)
+					fadj = sparseToList(adjs[2*lvl],K_faces)
 					fadj = np.expand_dims(fadj, axis=0)
 					fAdjs.append(fadj)
 
@@ -1143,24 +1156,24 @@ def mainFunction():
 			# print("Hausdorff distances: ("+str(haus_dist0)+", "+str(haus_dist1)+", "+str(haus_dist2)+")")
 			# print("Average angular differences: ("+str(angDist0)+", "+str(angDist1)+", "+str(angDist2)+")")
 
-				outputFile = open(csv_filename,'a')
-				nameArray = np.array(nameArray)
-				resultsArray = np.array(resultsArray,dtype=np.float32)
+			outputFile = open(csv_filename,'a')
+			nameArray = np.array(nameArray)
+			resultsArray = np.array(resultsArray,dtype=np.float32)
 
-				tempArray = resultsArray.flatten()
-				resStr = ["%.7f" % number for number in tempArray]
-				resStr = np.reshape(resStr,resultsArray.shape)
+			tempArray = resultsArray.flatten()
+			resStr = ["%.7f" % number for number in tempArray]
+			resStr = np.reshape(resStr,resultsArray.shape)
 
-				nameArray = np.expand_dims(nameArray, axis=-1)
+			nameArray = np.expand_dims(nameArray, axis=-1)
 
-				finalArray = np.concatenate((nameArray,resStr),axis=1)
-				for row in range(finalArray.shape[0]):
-					for col in range(finalArray.shape[1]):
-						outputFile.write(finalArray[row,col])
-						outputFile.write(' ')
-					outputFile.write('\n')
+			finalArray = np.concatenate((nameArray,resStr),axis=1)
+			for row in range(finalArray.shape[0]):
+				for col in range(finalArray.shape[1]):
+					outputFile.write(finalArray[row,col])
+					outputFile.write(' ')
+				outputFile.write('\n')
 
-				outputFile.close()
+			outputFile.close()
 
 	elif running_mode == 3:
 
