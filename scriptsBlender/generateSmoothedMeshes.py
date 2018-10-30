@@ -33,7 +33,7 @@ def getAverageEdgeLength(myMesh):
 
 # Run like this:
 
-# blender --background --python generateCylinders.py -- inputfolder destfolder num_meshed std_dev
+# blender --background --python generateCylinders.py -- inputfolder destfolder num_meshes std_dev
 
 argv = sys.argv
 argv = argv[argv.index("--") + 1:]  # get all args after "--"
@@ -90,17 +90,17 @@ for m in range(num_meshes):
     #     bpy.ops.mesh.primitive_monkey_add(radius = rad)
     #     gt_name = 'monkey_'+str(m)+'_gt'
     #     noisy_name = 'monkey_'+str(m)+'_noisy'
-    #elif mode==0:
-    #    # Create torus
-    #    bpy.ops.mesh.primitive_torus_add(major_radius = rad, minor_radius= rad2)
-    #    gt_name = 'torus_'+str(m)+'_gt'
-    #    noisy_name = 'torus_'+str(m)+'_noisy'
+    # if mode==0:
+    #     # Create torus
+    #     bpy.ops.mesh.primitive_torus_add(major_radius = rad, minor_radius= rad2)
+    #     gt_name = 'torus_'+str(m)+'_gt'
+    #     noisy_name = 'torus_'+str(m)+'_noisy'
     # elif mode==2:
     #     # Create sphere
     #     bpy.ops.mesh.primitive_uv_sphere_add(size = rad)
     #     gt_name = 'sphere_'+str(m)+'_gt'
     #     noisy_name = 'sphere_'+str(m)+'_noisy'
-    #else:
+    # else:
     # Import obj from input dir
     item = obj_list[mode-prim_num]
     path_to_file = os.path.join(inputfolder, item)
@@ -129,7 +129,7 @@ for m in range(num_meshes):
     #     gt_name = 'ico_'+str(m)+'_gt'
     #     noisy_name = 'ico_'+str(m)+'_noisy'
     
-    if mode>=(prim_num-1):
+    if mode>(prim_num-1):
         imported_objects = [obj for obj in bpy.data.objects ]#if ((obj.tag is True)and(obj.type=='MESH'))]
         print(bpy.data.objects)
         ob = imported_objects[0]
