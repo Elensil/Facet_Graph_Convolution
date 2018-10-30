@@ -368,18 +368,13 @@ def load_mesh(path,filename,K,bGetAdj):
                     w = v.split('/')
                     faces.append(int(w[0])-1)           #vertex index (additional vertices)
 
-
-    
     vertices = np.array(vertices).astype(np.float32)
-
     nb_vert = vertices.shape[0]
-
     # If 16 bits are not enough to write vertex indices, use 32 bits 
     if nb_vert<65536:
         faces = np.array(faces).reshape(len(faces) // 3, 3).astype(np.uint16)
     else:
         faces = np.array(faces).reshape(len(faces) // 3, 3).astype(np.uint32)
-
 
     #print("Vertices and faces loaded")
 
@@ -744,8 +739,6 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
             vOldInd[vIt[0]] = vind
             vOut[vIt[0],:] = vIn[vind,:]
             vIt[0]+=1
-
-
 
     def addFace(find):
         vl0 = fIn[find,0]
