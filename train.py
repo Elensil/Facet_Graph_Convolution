@@ -23,6 +23,7 @@ def run_thingy(in_points, faces, f_normals, f_adj, edge_map, v_e_map, images_lis
 		sess = tf.InteractiveSession()
 		if(FLAGS.debug):	#launches debugger at every sess.run() call
 			sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+                        sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
 
 
 		if not os.path.exists(RESULTS_PATH):
@@ -374,7 +375,7 @@ def update_position(x, adj, n,iter_num=15):
 
 # Original update algorithm from Taubin (Linear anisotropic mesh filtering)
 # Copied from function above, which was my own adaptation of Taubin's algorithm with vertices normals 
-def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
+def update_position2(x, face_normals, edge_map, v_edges, iter_num=50): #500
 
 	lmbd = 1/18
 
@@ -874,6 +875,49 @@ def mainFunction():
                                         pickle.dump(valid_images_lists, fp)
                                 with open(binDumpPath+'valid_calibs_lists', 'wb') as fp:
                                         pickle.dump(valid_calibs_lists, fp)
+
+                ## DEV: cut only 5 first samples of first entry #############################################################
+                """
+                num_samp = 1
+                f_normals_list = f_normals_list[0:1]
+                f_normals_list = [[f_normals_list[0][0][0:num_samp]]]
+                #print(np.shape(f_normals_list))
+                f_adj_list = f_adj_list[0:1]
+                f_adj_list = [[f_adj_list[0][0][0:num_samp]]]
+                #print(np.shape(f_adj_list))
+                GTfn_list = GTfn_list[0:1]
+                GTfn_list = [[GTfn_list[0][0][0:num_samp]]]
+                #print(np.shape(GTfn_list))
+                images_lists = images_lists[0:1]
+                #print(np.shape(images_lists))
+                calibs_lists = calibs_lists[0:1]
+                #print(np.shape(calibs_lists))
+                valid_f_normals_list = valid_f_normals_list[0:1]
+                valid_f_normals_list = [[valid_f_normals_list[0][0][0:num_samp]]]
+                #print(np.shape(valid_f_normals_list))
+                valid_GTfn_list = valid_GTfn_list[0:1]
+                valid_GTfn_list = [[valid_GTfn_list[0][0][0:num_samp]]]
+                #print(np.shape(valid_GTfn_list))
+                valid_f_adj_list = valid_f_adj_list[0:1]
+                valid_f_adj_list = [[valid_f_adj_list[0][0][0:num_samp]]]
+                #print(np.shape(valid_f_adj_list))
+                valid_images_lists = valid_images_lists[0:1]
+                #print(np.shape(valid_images_lists))
+                valid_calibs_lists = valid_calibs_lists[0:1]
+                #print(np.shape(valid_calibs_lists))
+
+                f_normals_list = np.array(f_normals_list)
+                GTfn_list = np.array(GTfn_list)
+                f_adj_list = np.array(f_adj_list)
+                images_lists = np.array(images_lists)
+                calibs_lists = np.array(calibs_lists)
+                valid_f_normals_list = np.array(valid_f_normals_list)
+                valid_GTfn_list = np.array(valid_GTfn_list)
+                valid_f_adj_list = np.array(valid_f_adj_list)
+                valid_images_lists = np.array(valid_images_lists)
+                valid_calibs_lists = np.array(valid_calibs_lists)
+                """
+                #############################################################
 
                 run_thingies(f_normals_list, GTfn_list, f_adj_list,images_lists,calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list,valid_images_lists,valid_calibs_lists)
 

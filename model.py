@@ -1673,11 +1673,6 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			return y_conv
 
 
-
-def custom_pooling(x,pooltype):
-
-	batch_size, input_size,
-
 def encode_images(images):
     dim1 = images.get_shape().as_list()[1]
     dim2 = images.get_shape().as_list()[2]
@@ -1712,7 +1707,7 @@ def encode_images(images):
     out_channels3=64
     wc3_w = 4
     wc3_h = 4
-    bc3 = weight_variable([out_channels])
+    bc3 = weight_variable([out_channels3])
     wc3 = weight_variable([wc3_w,wc3_h,out_channels2,out_channels3])
     padding='SAME'
     conv3 = tf.nn.convolution(conv2,wc3,padding)
@@ -1725,7 +1720,7 @@ def encode_images(images):
     wc4_w = 1
     wc4_h = 1
     bc4 = weight_variable([out_channels4])
-    wc4 = weight_variable([wc4_w,wc4_h,out_channels1,out_channels4])
+    wc4 = weight_variable([wc4_w,wc4_h,out_channels3,out_channels4])
     padding='SAME'
     conv4 = tf.nn.convolution(conv3,wc4,padding)
     conv4 = tf.nn.bias_add(conv4, bc4)
@@ -1751,23 +1746,32 @@ def normalize_images(images):
 
 
 def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
+
     #First Normalize images
     normalized_images_ = normalize_images(images_)
+    num_cameras = calibs_.get_shape().as_list()[1]
+    width = images_.get_shape().as_list()[2]
+    height = images_.get_shape().as_list()[3]
+    channels = images_.get_shape().as_list()[4]
     with tf.variable_scope("Image_Encoding"):
-        ##Images coords ordering: [width,height] (cols,rows)
-        ## First compute image features
+        ################### Images coords ordering: [width,height] (cols,rows) ###################
+        ################### First compute image features ###################
         print("Images Input shape : ",normalized_images_.get_shape().as_list())
         encoded_images = encode_images(normalized_images_)
         print("Encoded Images shape : ",encoded_images.get_shape().as_list())
+        encoded_images_channels = encoded_images.get_shape().as_list()[3]
 
-        ## DEBUG: check if non zero in encoded images
+        #Concatenate Features and colors
+        encoded_images = tf.concat([encoded_images,tf.reshape(normalized_images_,[num_cameras,width,height,channels])],axis=3)
+        # DEBUG: check if non zero in encoded images
         images_sum = tf.reduce_sum(encoded_images,[1,2,3],name='Images_Sum_Check')
         print("Summed Images shape : ",normalized_images_.get_shape().as_list())
 
     with tf.variable_scope("Projection_Operation"):
-        ## Recover Barycenters
+
+        ################### Recover Barycenters ###################
         print("Data shape: ",x.get_shape().as_list())
-        ## X: 3 first coords: normals, 3 lasts: barycenter
+        ################### X: 3 first coords: normals, 3 lasts: barycenter ###################
         normals_original , barycenters_originals = tf.split(x,[3,3],2,name='InputSplit_1')
         print("Normals shape:",normals_original.get_shape().as_list())
         print("Original Barycenters shape:",barycenters_originals.get_shape().as_list())
@@ -1780,9 +1784,9 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         normals = tf.reshape(normals,[-1,4])
         print("Barycenters shape:",barycenters.get_shape().as_list())
 
-        ## Then BackProject Triangles barycenters
+        ################### Then BackProject Triangles barycenters ###################
         #Multiply 3D coordinates with projection matrices
-        num_cameras = calibs_.get_shape().as_list()[1]
+
         print("Projection matrices shape: ",calibs_.get_shape().as_list())
 
         # Repeat 3D coordinates for num_cameras
@@ -1806,7 +1810,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         #adj_size = tf.cast(adj_size, tf.float32)
         #adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
 
-        z_coords_inv = tf.reciprocal(z_coords)
+        z_coords_inv = tf.where(tf.not_equal(z_coords,0.0),tf.reciprocal(z_coords),tf.zeros_like(z_coords))
         x_coords = tf.multiply(x_coords,z_coords_inv)
         y_coords = tf.multiply(y_coords,z_coords_inv)
 
@@ -1814,7 +1818,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         #texture_coords = tf.reshape(texture_coords,[-1,num_cameras,2])
         #print("Texture coords shape: ",texture_coords.get_shape().as_list())
 
-        ## Discard invalid tex_coords
+        ################### Discard invalid tex_coords ###################
         x_negatives = tf.greater(x_coords,tf.zeros_like(x_coords),name='x_negatives')
         x_overflow = tf.less(x_coords,tf.multiply(float(images_.get_shape().as_list()[2]),tf.ones_like(x_coords)),name='x_overflow')
 
@@ -1823,21 +1827,20 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
 
         z_negatives = tf.greater(z_coords,tf.zeros_like(z_coords),name='z_negatives')
 
-
-        ## Sum Check (useless but makes the check tensor useful)
-        #sum_check = tf.stack([images_sum]*x_negatives.get_shape().as_list()[0])
-        sum_check = tf.reshape(images_sum,[-1,1])
-        print("Sum Shape: ",sum_check.get_shape().as_list())
-
-        sum_check = tf.not_equal(sum_check,tf.zeros_like(sum_check),name='sum_check')
-
         mask = tf.logical_and(x_negatives,y_negatives) # X is inside image
         mask = tf.logical_and(mask,x_overflow) # Y is inside image
         mask = tf.logical_and(mask,y_overflow) # Y is inside image
         mask = tf.logical_and(mask,z_negatives) #triangle is in front of camera
-        mask = tf.logical_and(mask,sum_check) #Image is not full zeros
 
-        ## Discard cameras behind triangle:
+        ################### Sum Check (useless but makes the check tensor useful) ###################
+        #sum_check = tf.stack([images_sum]*x_negatives.get_shape().as_list()[0])
+        #sum_check = tf.reshape(images_sum,[-1,1])
+        #print("Sum Shape: ",sum_check.get_shape().as_list())
+
+        #sum_check = tf.not_equal(sum_check,tf.zeros_like(sum_check),name='sum_check')
+        #mask = tf.logical_and(mask,sum_check) #Image is not full zeros
+
+        ################### Discard cameras behind triangle: ###################
         #recover z coordinate of (barycenter + normal).
         #if z(barycenter +normal) - z(barycenter) > 0 discard (camera behind) else, accept
 
@@ -1855,6 +1858,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         summed = tf.add(stacked_normals,stacked_barycenters)
         #coords = tf.matmul(calibs_,stacked_barycenters)
         coords = broadcast_matmul(calibs_,summed)
+        print("Normal Coords shape:",coords.get_shape().as_list())
         coords = tf.reshape(coords,[-1,num_cameras,3],name='normal_proj')
         print("Normal Coords shape:",coords.get_shape().as_list())
         normal_y_coords,normal_x_coords,normal_z_coords = tf.split(coords,[1,1,1],2)
@@ -1864,7 +1868,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         # Discard invalid normal_z_coords
         #subtract normal's depths to barycenter's
         subtraction = tf.subtract(normal_z_coords,z_coords,name='visibility_subtraction')
-        visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask')
+        visibility_mask = tf.greater(subtraction,tf.zeros_like(subtraction),name='visibility_mask') ## tf.less() or greater?
         mask = tf.logical_and(mask,visibility_mask) #
 
         print("Mask Shape: ",mask.get_shape().as_list())
@@ -1873,7 +1877,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         tiled_mask = tf.reshape(tiled_mask,[-1,num_cameras,encoded_images.get_shape().as_list()[3]],name='tiled_mask')
         print("Tiled Mask Shape: ",tiled_mask.get_shape().as_list())
 
-        ## Aggregate Features
+        ################### Aggregate Features ###################
         round_x_coords = tf.round(x_coords)
         round_y_coords = tf.round(y_coords)
 
@@ -1894,44 +1898,207 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
         aggregated_features = tf.where(tiled_mask,aggregated_features,tf.zeros_like(aggregated_features),name='Projection_Features') #mask features with zeros when camera is discarded
         print("Aggregated Features shape: ",aggregated_features.get_shape().as_list())
+        aggregated_features , aggregated_colors = tf.split(aggregated_features,[encoded_images_channels,channels],axis=2)
+        print("Splitted Aggregated Feat. :",aggregated_features.get_shape().as_list())
+        print("Splitted Aggregated Colors. :",aggregated_colors.get_shape().as_list())
+        tiled_mask,tiled_colors_mask = tf.split(tiled_mask,[encoded_images_channels,channels],2)
 
-        ##Average Features
+        ################### Average Features ###################
         summed_features = tf.reduce_sum(aggregated_features,axis=1,name='SumFeatures')
         print("Summed Features shape:",summed_features.get_shape().as_list())
         summed_masks = tf.reduce_sum(tf.cast(tiled_mask,dtype=tf.int32),axis=1,name='SumMasks')
         print("Summed Masks shape:",summed_masks.get_shape().as_list())
-        non_zeros = tf.not_equal(summed_masks, 0,name='MaskNonZeros')
+        non_zeros = tf.not_equal(summed_masks, 0, name='MaskNonZeros')
         summed_masks = tf.cast(summed_masks, tf.float32)
         averaging_weights = tf.where(non_zeros,tf.reciprocal(summed_masks),tf.zeros_like(summed_masks),name='AveragingWeights')
         averaged_features = tf.multiply(summed_features,averaging_weights,name='Weightsdivide')
-        averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images.get_shape().as_list()[3]],name='FinalReshape')
+        averaged_features = tf.reshape(averaged_features,[1,-1,encoded_images_channels],name='FinalReshape')
         print("Averaged Features size:",averaged_features.get_shape().as_list())
 
-        ## Find 3D Normal with projection as close as possible to predicted 2D vectors
-        float_mask = tf.cast(tiled_mask,dtype=tf.float32)
+        ################### Average Colors ###################
+        summed_colors = tf.reduce_sum(aggregated_colors,axis=1,name='SumColors')
+        print("Summed Colors shape:",summed_colors.get_shape().as_list())
+        summed_colors_masks = tf.reduce_sum(tf.cast(tiled_colors_mask,dtype=tf.int32),axis=1,name='SumColorsMasks')
+        print("Summed Colors Masks shape:",summed_colors_masks.get_shape().as_list())
+        non_zeros = tf.not_equal(summed_colors_masks, 0, name='ColorsMaskNonZeros')
+        summed_colors_masks = tf.cast(summed_colors_masks, tf.float32)
+        averaging_color_weights = tf.where(non_zeros,tf.reciprocal(summed_colors_masks),tf.zeros_like(summed_colors_masks),name='ColorsAveragingWeights')
+        averaged_colors = tf.multiply(summed_colors,averaging_color_weights,name='ColorsWeightsdivide')
+        averaged_colors = tf.reshape(averaged_colors,[1,-1,channels],name='ColorsFinalReshape')
+        print("Averaged Colors size:",averaged_colors.get_shape().as_list())
+
+        ################### Build 3D normals space sampling ###################
 
         # Normal Space Discretization (sample points on cube, then normalize)
         discretization_step = 3 # Warning: irregular sampling and some redundancy if value > 3
-        normals = [[range(discretization_step * discretization_step * discretization_step)],[range(discretization_step*discretization_step) for _ in range(discretization_step)],[range(discretization_step) for _ in range(discretization_step * discretization_step)]]
-        col0 = np.reshape(normals[0],[27])
-        col1 = np.reshape(normals[1],[27])
-        col2 = np.reshape(normals[2],[27])
-        col0 = col0 / (discretization_step*discretization_step) #round values
-        col1 = col1 / (discretization_step)
-        normals = np.stack([col0,col1,col2])
+        normals = [[range(discretization_step * discretization_step * discretization_step)],[range(discretization_step*discretization_step) for _ in range(discretization_step)],[range(discretization_step) for _ in range(discretization_step * discretization_step)],[1 for _ in range(discretization_step * discretization_step * discretization_step)]]
+        col0 = np.reshape(normals[0],[discretization_step*discretization_step*discretization_step])
+        col1 = np.reshape(normals[1],[discretization_step*discretization_step*discretization_step])
+        col2 = np.reshape(normals[2],[discretization_step*discretization_step*discretization_step])
+        col3 = np.reshape(normals[3],[discretization_step*discretization_step*discretization_step])
+        col0 = np.floor(col0 / (discretization_step*discretization_step)) #floor values
+        col1 = np.floor(col1 / (discretization_step)) #floor values
+        normals = np.stack([col0,col1,col2,col3])
         normals = np.transpose(normals,(1,0)).astype(float) - 1.0 #convert ranges from (int)[0, discretization step] to (float) [-1.0,1.0]
-        #normalize
-        normals = normals / np.transpose(np.stack([np.sum((normals * normals),axis=1)]*3),(1,0))
+        #Normalize
+        normals = normals / np.transpose(np.stack([np.sum((normals * normals),axis=1)]*4),(1,0))
         #remove central point (nan)
         normals = normals[np.logical_not(np.isnan(np.sum(normals,axis=1)))]
-        normals = tf.constant(normals,name='normals_sampling')
+        print("Normals shape:",np.shape(normals))
+        normals_sampling = tf.constant(normals,name='normals_sampling')
+        normals_sampling = tf.cast(normals_sampling,tf.float32)
+
+        ################### Find 3D Normal with projection as close as possible to predicted 2D vectors ###################
+        #First stack normals sampling for every camera
+        stacked_normals_sampling = tf.stack([normals_sampling]*num_cameras,name='normals_sampling_stack')
+        stacked_normals_sampling = tf.transpose(stacked_normals_sampling, [1,0,2],name='normals_sampling_transpose')
+        stacked_normals_sampling = tf.reshape(stacked_normals_sampling,[-1,num_cameras,4,1])
+        stacked_stacked_barycenters = tf.stack([stacked_barycenters]*normals_sampling.get_shape().as_list()[0],name='stacked_barycenter_stack')
+        stacked_stacked_barycenters = tf.transpose(stacked_stacked_barycenters,[1,0,2,3,4],name='stacked_stacked_barycenters')
+
+        # Add barycenter value
+        added_normal_samples = tf.add(stacked_stacked_barycenters,stacked_normals_sampling,name='normal_samples')
+
+        # Project Barycenters
+        bary_coords = broadcast_matmul(calibs_,stacked_stacked_barycenters)
+        print("bary coords after mul: ",bary_coords.get_shape().as_list())
+        bary_coords = tf.reshape(bary_coords,[-1,normals_sampling.get_shape().as_list()[0],num_cameras,3],name='bary_proj')
+        print("Bary Coords shape:",bary_coords.get_shape().as_list())
+        bary_y_coords,bary_x_coords,bary_z_coords = tf.split(bary_coords,[1,1,1],3)
+        z_coords_inv = tf.where(tf.not_equal(bary_z_coords,0.0),tf.reciprocal(bary_z_coords),tf.zeros_like(bary_z_coords))
+        x_coords = tf.multiply(bary_x_coords,z_coords_inv)
+        y_coords = tf.multiply(bary_y_coords,z_coords_inv)
+
+        bary_tex_coords = tf.stack([x_coords,y_coords],axis=3,name='bary_coords_stack')
+        bary_tex_coords = tf.reshape(bary_tex_coords,[-1,normals_sampling.get_shape().as_list()[0],num_cameras,2])
+        print("Bary Tex Coords shape:",bary_tex_coords.get_shape().as_list())
+
+        # Project Barycenters + Normals
+        add_coords = broadcast_matmul(calibs_,added_normal_samples)
+        print("Added coords after mul: ",add_coords.get_shape().as_list())
+        add_coords = tf.reshape(add_coords,[-1,normals_sampling.get_shape().as_list()[0],num_cameras,3],name='normal_proj')
+        print("Added Coords shape:",add_coords.get_shape().as_list())
+        added_y_coords,added_x_coords,added_z_coords = tf.split(add_coords,[1,1,1],3)
+        z_coords_inv = tf.where(tf.not_equal(added_z_coords,0.0),tf.reciprocal(added_z_coords),tf.zeros_like(added_z_coords))
+        x_coords = tf.multiply(added_x_coords,z_coords_inv)
+        y_coords = tf.multiply(added_y_coords,z_coords_inv)
+
+        added_tex_coords = tf.stack([x_coords,y_coords],axis=3,name='added_coords_stack')
+        added_tex_coords = tf.reshape(added_tex_coords,[-1,normals_sampling.get_shape().as_list()[0],num_cameras,2])
+        print("Added Tex Coords shape:",added_tex_coords.get_shape().as_list())
+
+        # Get Projected vector: Subtract
+        subtraction = tf.subtract(added_tex_coords,bary_tex_coords,name='Normal_Vector')
+
+        ## Normalize projection (Nans may occur here! WARNING!!)
+        summed_normals_squared = tf.sqrt(tf.maximum(tf.reduce_sum(tf.multiply(subtraction,subtraction),3),0.000001))
+        normals_non_zeros = tf.not_equal(summed_normals_squared,0)
+        summed_normals_squared = tf.where(normals_non_zeros,tf.reciprocal(summed_normals_squared),tf.zeros_like(summed_normals_squared)) # Take care of possible Nans
+        summed_normals_squared = tf.stack([summed_normals_squared]*2,axis=3)
+        #summed_normals_squared = tf.transpose(summed_normals_squared,[1,2,3,0])
+        subtraction = tf.multiply(subtraction,summed_normals_squared)
+        subtraction = tf.where(tf.is_nan(subtraction), tf.zeros_like(subtraction), subtraction) ## Take care of possible Nans, replace them with ones or zeros?
+        print("Normalized normals proj shape : ",summed_normals_squared.get_shape().as_list())
+
+        subtraction = tf.transpose(subtraction,[1,0,2,3],name='Normalized_N_Vector')
+        subtraction = tf.reshape(subtraction,[normals_sampling.get_shape().as_list()[0],-1,num_cameras,2,1])
+        print("Subtraction shape:",subtraction.get_shape().as_list())
+
+        ## Normalize Feature Vectors (Nans may occur here! WARNING!!)
+        summed_features_squared = tf.sqrt(tf.maximum(tf.reduce_sum(tf.multiply(aggregated_features,aggregated_features),2),0.000001))
+        print("Summed Squared features shape:",summed_features_squared.get_shape().as_list())
+        feature_non_zeros = tf.not_equal(summed_features_squared,0)
+        summed_features_squared = tf.where(feature_non_zeros,tf.reciprocal(summed_features_squared),tf.zeros_like(summed_features_squared))
+        summed_features_squared = tf.stack([summed_features_squared]*2,axis=2)
+        #summed_features_squared = tf.transpose(summed_features_squared,[1,2,0])
+        print("1 shape : ",summed_features_squared.get_shape().as_list())
+        print("2 shape : ",aggregated_features.get_shape().as_list())
+        normalized_aggregated_features = tf.multiply(aggregated_features,summed_features_squared,name='Normalized_Features')
+        normalized_aggregated_features = tf.where(tf.is_nan(normalized_aggregated_features), tf.zeros_like(normalized_aggregated_features), normalized_aggregated_features) ## Take care of possible Nans, replace them with ones or zeros?
+        print("Normalized Aggregated Features shape: ",normalized_aggregated_features.get_shape().as_list())
+
+
+        # Dot Product with estimated 2D vector
+        normalized_aggregated_features = tf.reshape(normalized_aggregated_features,[1,-1,num_cameras,1,2],name='Aggregated_Normalized_Features')
+        print("Normalized Aggregated Features shape: ",normalized_aggregated_features.get_shape().as_list())
+        dot_product = broadcast_matmul(normalized_aggregated_features,subtraction)
+        dot_product = tf.reshape(dot_product,[normals_sampling.get_shape().as_list()[0],-1,num_cameras,1])
+        #dot_product = tf.transpose(dot_product,[1,0,2,3,4])
+        print("Dot product shape:",dot_product.get_shape().as_list())
+
+        # Remove discarded values
+        stacked_mask = tf.stack([mask]*normals_sampling.get_shape().as_list()[0])
+        print("Mask shape:",stacked_mask.get_shape().as_list())
+        filtered_dot_product = tf.where(stacked_mask,dot_product,tf.zeros_like(dot_product),name='Filtered_Dot_Product')
+        #Prevent nan from acos by making sure the results lies in [-1,1]
+        filtered_dot_product = tf.maximum(filtered_dot_product,-0.99999)
+        filtered_dot_product = tf.minimum(filtered_dot_product,0.99999)
+
+
+        filtered_dot_product = tf.acos(filtered_dot_product,name='Acos_Filtered_Dot_Product')
+        print("Fitlered Dot Product Shape : ",filtered_dot_product.get_shape().as_list())
+
+        # Compute Average Value with selected cameras
+        average_dot = tf.reduce_sum(filtered_dot_product,2)
+        print("Summed Dot shape:",average_dot.get_shape().as_list())
+        float_mask = tf.cast(stacked_mask,dtype=tf.float32)
+        factor = tf.reduce_sum(float_mask,2)
+        inv_factor = tf.where(tf.not_equal(factor,0),tf.reciprocal(factor),tf.zeros_like(factor))
+        print("Inv Factor Shape: ",inv_factor.get_shape().as_list())
+
+        average_dot = tf.multiply(average_dot,inv_factor,name='Average_Dot') #Zeros when never observed
+        print("Average Dot shape:",average_dot.get_shape().as_list())
+
+        # Compute average value softmin:
+        # let D denote a vector
+        #s = exp(-D/sigma^2) / sum( exp(-D/sigma^2) )
+        sigma = tf.constant(2.0) # 2e-1 # average_dot should lie in [0,2PI]
+        squared_reciprocal_sigma = tf.reciprocal(tf.multiply(sigma,sigma))
+        print("Sigma shape:",squared_reciprocal_sigma.get_shape().as_list())
+        softmin_weights = tf.exp(tf.multiply(tf.negative(average_dot),squared_reciprocal_sigma))
+        softmin_weights = tf.reshape(softmin_weights,[softmin_weights.get_shape().as_list()[0],-1])
+        softmin_weights = tf.transpose(softmin_weights,[1,0],name='Softmin_Weights')
+        print("Softmin shape:",softmin_weights.get_shape().as_list())
+        # Weights add up to 1 :
+        softmin_weights_sum = tf.reduce_sum(softmin_weights,1)
+        reciprocal_softmin_weights_sum = tf.where(tf.not_equal(softmin_weights_sum,0.0),tf.reciprocal(softmin_weights_sum),tf.zeros_like(softmin_weights_sum))
+        reciprocal_softmin_weights_sum = tf.stack([reciprocal_softmin_weights_sum]*normals_sampling.get_shape().as_list()[0],axis=1)
+        softmin_weights = tf.multiply(softmin_weights, reciprocal_softmin_weights_sum,name='Normalized_Softmin')
+        print("Softmin Weights:",softmin_weights.get_shape().as_list())
+
+        # Stack, multiply and sum
+        normals3D,_ = tf.split(normals_sampling,[3,1],1)
+        print("Normals shape",normals3D.get_shape().as_list())
+        softmin_weights = tf.stack([softmin_weights]*normals3D.get_shape().as_list()[1],axis=2) # one per normal entry
+        print("Softmin Weights shape",softmin_weights.get_shape().as_list())
+        multiplied_normals = tf.multiply(softmin_weights,normals3D)
+        print("Multiplied Normals shape",multiplied_normals.get_shape().as_list())
+        averaged_normals = tf.reduce_sum(multiplied_normals,1)
+        averaged_normals = tf.reshape(averaged_normals,[1,-1,averaged_normals.get_shape().as_list()[1]],name='Averaged_Normals')
+
+        # Normalize Result ???
+        normalizer =  tf.sqrt(tf.maximum(tf.reduce_sum(tf.multiply(averaged_normals,averaged_normals),2),0.0))
+        normalizer = tf.where(tf.not_equal(normalizer,0.0),tf.reciprocal(normalizer),tf.ones_like(normalizer))
+        normalizer = tf.stack([normalizer]*averaged_normals.get_shape().as_list()[2],axis=2)
+        averaged_normals = tf.multiply(averaged_normals,normalizer,name='Averaged_Normalized_Normals')
+        print("Averaged Normals shape",averaged_normals.get_shape().as_list())
+        # Recover variance of the dists if needed?
+        # TBD
+
+
+        #########################################################################################
+
         ## Concatenate resulting Features to normal+pos input
-        #x = tf.concat([averaged_features,x],axis=2) # All
-        #x = tf.concat([averaged_features,barycenters_originals],axis=2,name='final_concat') # Barycenters only
-        x = tf.concat([averaged_features,normals_original],axis=2,name='final_concat') # Normals only
-        #x = averaged_features
+        #x = tf.concat([averaged_features,x],axis=2,name='Final_Concat') # All
+        #x = tf.concat([averaged_features,barycenters_originals],axis=2,name='Final_Concat') # Barycenters only
+        #x = tf.concat([averaged_features,normals_original],axis=2,name='Final_Concat') # Normals only
+        #x = averaged_features # Appearance only
+        x = averaged_normals # Normals only
+        #x = tf.concat([averaged_normals,averaged_colors],axis=2,name='Final_Concat') # Normals and average colors
 
     print("Input Feature:",x.get_shape().as_list())
+
+    ##exit()
 
     """
     0 - input(3+feature_size) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
