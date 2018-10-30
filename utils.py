@@ -505,6 +505,12 @@ def load_mesh(path,filename,K,bGetAdj):
     return new_vertices, adj, free_ind, faces, normals
 
 
+def write_xyz(vec, strFileName):
+
+    #outputFile = open(strFileName,"w")
+
+    np.savetxt(strFileName, vec)
+
 def write_mesh(vl,fl,strFileName):
 
     vnum = vl.shape[0]
@@ -612,7 +618,15 @@ def oneSidedHausdorff(V0,V1):
 
 # Takes two sets of face normals with one-one correspondance
 # Returns a pair of floats: the average angular difference (in degrees) between pairs of normals, and the std
+
+# Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
 def angularDiff(n0,n1):
+
+    faceNum = n0.shape[0]
+
+    fakenodes = np.less_equal(n1,10e-4)
+    fakenodes = np.all(fakenodes,axis=-1)
+    
     n0 = normalize(n0)
     n1 = normalize(n1)
 
@@ -626,8 +640,28 @@ def angularDiff(n0,n1):
     # print("max dotP = "+str(np.amax(dotP)))
 
     angDiff = np.arccos(0.999999*dotP)
-    
     angDiff = angDiff*180/math.pi
+
+    zeroVec = np.zeros_like(angDiff, dtype=np.int32)
+    oneVec = np.ones_like(angDiff, dtype=np.int32)
+    realnodes = np.where(fakenodes,zeroVec,oneVec)
+
+    realIndices = np.where(fakenodes,zeroVec,np.arange(faceNum, dtype=np.int32))
+
+    # print("angDiff shape: "+str(angDiff.shape))
+    # print("sum realnodes: "+str(np.sum(realnodes)))
+    # angDiffTest = np.where(fakenodes,zeroVec,angDiff)
+    # angDiffTest = np.sum(angDiffTest)/np.sum(realnodes)
+
+    angDiff = np.extract(fakenodes==False, angDiff)
+    #angDiff = angDiff[realIndices]
+
+    print("angDiff shape: "+str(angDiff.shape))
+    
+    # #Set loss to zero for fake nodes
+    
+    # print("angDiffTest = "+str(angDiffTest))
+    # print("mean angDiff = "+str(np.mean(angDiff)))
     # print("angDiff example: "+str(angDiff[0]))
     return np.mean(angDiff), np.std(angDiff)
 
@@ -808,6 +842,7 @@ def listToSparse(Adj, nodes_pos):
 
     row_ind = np.zeros(N*K,dtype = np.int32)
     col_ind = np.zeros(N*K,dtype = np.int32)
+    values = np.zeros(N*K,dtype = np.float32)
     cur_ind=0
 
     for n in range(N):  # For each node
@@ -818,11 +853,16 @@ def listToSparse(Adj, nodes_pos):
 
             row_ind[cur_ind] = n
             col_ind[cur_ind] = nnode
+            n_pos = nodes_pos[n,:]
+            nnode_pos = nodes_pos[nnode,:]
+            values[cur_ind] = 1/(1000*np.linalg.norm(nnode_pos-n_pos))
+            #values[cur_ind] = np.linalg.norm(nnode_pos-n_pos)
             cur_ind+=1
 
     row_ind = row_ind[:cur_ind]
     col_ind = col_ind[:cur_ind]
-    values = np.ones(cur_ind,dtype = np.int8)
+    values = values[:cur_ind]
+    #values = np.ones(cur_ind,dtype = np.int8)
 
     coo = scipy.sparse.coo_matrix((values,(row_ind,col_ind)),shape=(N,N))
 
@@ -839,8 +879,8 @@ def sparseToList(Adj, K):
     initAdj0 = np.zeros((N,K-1),dtype = np.int32)
     initAdj1 = np.arange(N)+1
     initAdj1 = np.expand_dims(initAdj1, axis=-1)
-    print("0 shape: "+str(initAdj0.shape))
-    print("1 shape: "+str(initAdj1.shape))
+    #print("0 shape: "+str(initAdj0.shape))
+    #print("1 shape: "+str(initAdj1.shape))
     listAdj = np.concatenate((initAdj1,initAdj0),axis = 1)
 
 
@@ -849,8 +889,16 @@ def sparseToList(Adj, K):
     cx = Adj.tocoo()    
     for i,j,_ in zip(cx.row, cx.col, cx.data):
         if(i!=j):
-            listAdj[i,curNeigh[i]] = j+1
-            curNeigh[i]+=1
+            if(curNeigh[i]==K):
+                print("Warning: saturated node! ("+str(i)+","+str(j)+")")
+            else:
+                listAdj[i,curNeigh[i]] = j+1
+                curNeigh[i]+=1
 
     return listAdj
 
+def inv_perm(perm):
+    inverse = [0] * len(perm)
+    for i, p in enumerate(perm):
+        inverse[p] = i
+    return inverse
