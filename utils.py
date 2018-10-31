@@ -489,6 +489,7 @@ def write_xyz(vec, strFileName):
 def write_mesh(vl,fl,strFileName):
 
     vnum = vl.shape[0]
+    v_ch = vl.shape[1]
     vVec = np.full((vnum,1), 'v')
 
     vl = vl.flatten()
@@ -497,7 +498,7 @@ def write_mesh(vl,fl,strFileName):
     #print("vstr shape: "+str(vstr.shape))
     vstr = np.array(vstr)
 
-    vstr = np.reshape(vstr, (vnum,3))
+    vstr = np.reshape(vstr, (vnum,v_ch))
 
     #vstr = vl.astype('|S8')
     vstr = np.concatenate((vVec,vstr),axis=1)
@@ -599,7 +600,7 @@ def angularDiff(n0,n1):
 
     faceNum = n0.shape[0]
 
-    fakenodes = np.less_equal(n1,10e-4)
+    fakenodes = np.less_equal(np.absolute(n1),10e-4)
     fakenodes = np.all(fakenodes,axis=-1)
     
     n0 = normalize(n0)
@@ -876,3 +877,84 @@ def inv_perm(perm):
     for i, p in enumerate(perm):
         inverse[p] = i
     return inverse
+
+
+# return max curvature, min curvature, and average. Used to generate clusters for classification
+def computeCurvature(fpos, fn, adj):
+    
+    #keep neighbours only
+    adj_n = adj[:,1:]
+    adj_n = adj_n-1
+
+    neighbours_normals = fn[adj_n]
+
+    neighbours_pos = fpos[adj_n]
+
+    # print(" fn 0: "+str(fn[0,:]))
+
+    # print(" adj 0: "+str(adj[0,:]))
+
+    # print(" adj_n 0: "+str(adj_n[0,:]))
+
+    K = adj_n.shape[1]
+
+    fn_n = np.tile(np.expand_dims(fn,axis=1), [1,K,1])
+    # [N, K, 3]
+    fpos_n = np.tile(np.expand_dims(fpos,axis=1), [1,K,1])
+
+
+    fvec = np.subtract(neighbours_pos, fpos_n)
+
+
+    # print("fn_n 0: "+str(fn_n[0,:,:]))
+    # print("n_n 0: "+str(neighbours_normals[0,:,:]))
+
+    #dotP = np.sum(np.multiply(fn_n,neighbours_normals),axis=2)
+
+    dotP = np.sum(np.multiply(fn_n,fvec),axis=2)
+
+    # print("dp 0: "+str(dotP[0,:]))
+    non_zeros = np.not_equal(adj_n, np.zeros_like(adj_n)-1)
+
+    dotP = np.where(non_zeros,dotP,np.zeros_like(dotP))
+
+    dotPWeight = np.where(non_zeros,np.ones_like(dotP),np.zeros_like(dotP))
+
+
+
+    # print("dp 0: "+str(dotP[0,:]))
+    # [N, K]
+
+    curv_min = np.amin(dotP,axis=1,keepdims=True)
+    curv_max = np.amax(dotP,axis=1,keepdims=True)
+    curv_mean = np.sum(dotP,axis=1,keepdims=True)/np.sum(dotPWeight,axis=1,keepdims=True)
+
+
+    curv_stat = np.concatenate((curv_min,curv_max,curv_mean),axis=1)
+
+    # print("curv_stat 0: "+str(curv_stat[0,:,]))
+    return curv_stat
+
+
+def customKMeans(points, k, iternum=500):
+
+    # Initialize random centroids
+    centroids = points.copy()
+    np.random.shuffle(centroids)
+    centroids = centroids[:k]
+
+    for i in range(iternum):
+        closest = closest_centroid(points, centroids)
+        move_centroids(points, closest, centroids)
+
+    return centroids, closest
+
+
+def closest_centroid(points, centroids):
+    """returns an array containing the index to the nearest centroid for each point"""
+    distances = np.sqrt(((points - centroids[:, np.newaxis])**2).sum(axis=2))
+    return np.argmin(distances, axis=0)
+
+def move_centroids(points, closest, centroids):
+    """returns the new centroids assigned from the points closest to them"""
+    return np.array([points[closest==k].mean(axis=0) for k in range(centroids.shape[0])])

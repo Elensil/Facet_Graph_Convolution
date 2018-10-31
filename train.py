@@ -177,9 +177,6 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
 	
 	with tf.device(DEVICE):
-		#validLoss = faceNormalsLoss(n_conv, tfn_)
-		#validLoss = faceNormalsSampledLoss(n_conv, tfn_, sample_ind)
-		#customLoss = faceNormalsSampledLoss(n_conv, tfn_, sample_ind)
 		customLoss = faceNormalsLoss(n_conv, tfn_)
 		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
 		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
@@ -211,19 +208,16 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 	sess.run(tf.global_variables_initializer())
 
 	globalStep = 0
-	if FLAGS.pretrained:
-		ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
-		if ckpt and ckpt.model_checkpoint_path:
+
+	ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
+	if ckpt and ckpt.model_checkpoint_path:
+		splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
+		if splitCkpt[0] == NET_NAME:
 			saver.restore(sess, ckpt.model_checkpoint_path)
 			#Extract from checkpoint filename
-			globalStep = int(os.path.basename(ckpt.model_checkpoint_path).split('-')[1])
-		#write_logs("Checkpoint restored\n")
+			globalStep = int(splitCkpt[1])
+	
 
-						# saver = tf.train.import_meta_graph(RESULTS_PATH)+'/test_fc6-400.meta')
-						# saver.restore(sess,tf.train.latest_checkpoint('./'))
-	
-	#saver.restore(sess, os.path.dirname(RESULTS_PATH)+"/test_fc6-400.index")
-	
 	# Training
 
 	train_loss=0
@@ -287,8 +281,6 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 							fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm],
 							sample_ind: valid_random_ind, keep_prob:1}
 
-
-					#valid_loss += validLoss.eval(feed_dict=valid_fd)
 					valid_loss += customLoss.eval(feed_dict=valid_fd)
 				valid_loss/=valid_samp
 				print("Iteration %d, validation loss %g"%(iter, valid_loss))
@@ -301,9 +293,10 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 			# sess.run(train_step2,feed_dict=my_feed_dict)
 			# sess.run(train_step3,feed_dict=my_feed_dict)
 
-	globalStep += NUM_ITERATIONS
-
-	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep)
+			if (iter%2000 == 0):
+				saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+iter)
+	
+	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
 
 	sess.close()
 	csv_filename = "/morpheo-nas/marmando/DeepMeshRefinement/tests/"+NET_NAME+".csv"
@@ -331,13 +324,16 @@ def checkNan(my_feed_dict):
 
 
 def faceNormalsLoss(fn,gt_fn):
+
 	#version 1
 	n_dt = tensorDotProduct(fn,gt_fn)
-	#loss = tf.acos(n_dt-1e-5)	# So that it stays differentiable close to 1
-	loss = tf.acos(0.9999*n_dt)	# So that it stays differentiable close to 1 and -1
+	#loss = tf.acos(n_dt-1e-5)    # So that it stays differentiable close to 1
+	close_to_one = 0.999999999
+	loss = tf.acos(tf.maximum(tf.minimum(n_dt,close_to_one),-close_to_one))    # So that it stays differentiable close to 1 and -1
+	gtfn_abs_sum = tf.reduce_sum(tf.abs(gt_fn),axis=2)
+	fakenodes = tf.less_equal(gtfn_abs_sum,10e-4)
+	#fakenodes = tf.reduce_all(fakenodes,axis=-1)
 
-	fakenodes = tf.less_equal(gt_fn,10e-4)
-	fakenodes = tf.reduce_all(fakenodes,axis=-1)
 	zeroVec = tf.zeros_like(loss)
 	oneVec = tf.ones_like(loss)
 	realnodes = tf.where(fakenodes,zeroVec,oneVec)
@@ -349,24 +345,6 @@ def faceNormalsLoss(fn,gt_fn):
 	loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
 	#loss = tf.reduce_mean(loss)
 	return loss
-
-def faceNormalsSampledLoss(fn,gt_fn,indices):
-	#version 1
-	n_dt = tensorDotProduct(fn,gt_fn)
-	# shape = [batch, N, 3] ?
-	
-	# loss = 1 - n_dt
-	#loss = tf.acos(n_dt-1e-5) 	# So that it stays differentiable close to 1
-	loss = tf.acos(0.9999*n_dt)	# So that it stays differentiable close to 1 and -1
-	loss = 180*loss/math.pi
-	print("loss shape: "+str(loss.shape))
-	#indices = tf.reshape(indices,[1000])
-	loss = tf.squeeze(loss)
-	print("loss shape: "+str(loss.shape))
-	print("indices shape: "+str(indices.shape))
-	sampled_loss = tf.gather(loss, indices)
-	sampled_loss = tf.reduce_mean(sampled_loss)
-	return sampled_loss
 
 
 def is_almost_equal(x,y,threshold):
@@ -383,49 +361,7 @@ def unique_columns2(data):
 	u = u.view(data.dtype).reshape(-1,data.shape[0]).T
 	return (u,uind)
 
-def update_position(x, adj, n,iter_num=15):
-	
-	lmbd = 1/18
-	_,_,K = adj.get_shape().as_list()
-	#K = adj.shape[2]
 
-	for it in range(iter_num):
-		
-		#Building neighbourhood
-		neigh = get_slices(x,adj)
-		#shape = (batch, points, neighbourhood (K), space_dims)
-		# (one col per neighbour + center point (in 1st column))
-
-		#computing vectors
-		edges = tf.subtract(neigh[:,:,1:,:],tf.expand_dims(neigh[:,:,0,:],2))
-		#shape = (batch, points, neighbourhood (K-1), space_dims)
-
-		#WARNING!!! set empty neighbours to zero! (otherwise, vectors pointing to origin)
-		non_zeros = tf.not_equal(adj[:,:,1:], 0)
-		non_zeros = tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,1,3])
-		edges = tf.where(non_zeros, edges,tf.zeros_like(edges))
-
-		#neighbourhood normals
-		neigh_normals = get_slices(n, adj)
-		#Compute edge normal as the average between the two vertices normals
-		#edge_normals = tf.add(neigh_normals[:,:,1:,:],tf.expand_dims(neigh_normals[:,:,0,:],2))
-		
-		edge_normals = tf.tile(tf.expand_dims(neigh_normals[:,:,0,:],2),[1,1,K-1,1])
-
-		edge_normals = normalizeTensor(edge_normals)
-
-		# n . (xj-xi)
-		dot_p = tensorDotProduct(edge_normals,edges)
-
-		# Tile to multiply
-		dot_p = tf.tile(tf.expand_dims(dot_p,axis=-1),[1,1,1,3])
-
-		w_norm = tf.multiply(edge_normals,dot_p)
-
-		x_update = lmbd * tf.reduce_sum(w_norm,axis=2)
-
-		x = tf.add(x,x_update)
-	return x
 
 # Original update algorithm from Taubin (Linear anisotropic mesh filtering)
 # Copied from function above, which was my own adaptation of Taubin's algorithm with vertices normals 
@@ -526,134 +462,6 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 
 
 
-def normalTensor(x,adj,tensName=None):
-
-	# Compute normals from 3D points and adjacency graph
-	# average of adjacent faces' normals.
-	# 2nd version: weighted average of adjacent faces' normals. - Weights given by face angle at vertex
-
-
-	K = adj.shape[2]
-	#x shape = (batch, points, space_dims)
-	#adj shape = (batch, points, K)
-	
-	#Building neighbourhood
-	neigh = get_slices(x,adj)
-	#shape = (batch, points, neighbourhood (K), space_dims)
-	# (one col per neighbour + center point (in 1st column))
-
-	#computing edges vectors
-	edges = tf.subtract(neigh[:,:,1:,:],tf.expand_dims(neigh[:,:,0,:],2))
-	#shape = (batch, points, neighbourhood (K-1), space_dims)
-	# (one col per neighbour)
-
-
-
-	#WARNING!!! set empty neighbours to zero! (otherwise, vectors pointing to origin)
-	non_zeros = tf.not_equal(adj[:,:,1:], 0)
-	non_zeros = tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,1,3])
-	edges = tf.where(non_zeros, edges,tf.zeros_like(edges))
-	
-	#generate pairs of edges. The way vertices are organized, these pairs should correspond to faces
-	edges1 = edges[:,:,:-1,:]
-	edges2 = edges[:,:,1:,:]
-	#shape = 2*(batch, points, (K-2), space_dim)
-
-
-	#compute cross product (face normals)
-	edges_cp = tf.cross(edges1,edges2)
-	#shape = (batch, points, pairs of edges: (K-2)*(K-1)/2, space_dim)
-
-	#normalize
-
-	edges_cp = normalizeTensor(edges_cp)
-	#edges_cp = tf.divide(edges_cp,tf.expand_dims(tf.norm(edges_cp,axis=3),axis=-1))
-
-	#TODO: compute weights (angles)
-	n_edges1 = normalizeTensor(edges1)
-	n_edges2 = normalizeTensor(edges2)
-	angle_cos = tensorDotProduct(n_edges1,n_edges2)
-
-	gtone = tf.greater(angle_cos, tf.ones_like(angle_cos))
-
-	angle = tf.where(gtone, tf.zeros_like(angle_cos),tf.acos(angle_cos))
-
-	weighted_normals = tf.multiply(edges_cp,tf.tile(tf.expand_dims(angle,axis=-1),[1,1,1,3]))
-
-	#averaging on all edges (summing and mormalizing)
-	#normals = tf.reduce_sum(edges_cp,axis=2)
-	normals = tf.reduce_sum(weighted_normals,axis=2)
-	#shape = (batch, points, space_dim)
-
-	#normalize
-	normals = normalizeTensor(normals)
-	#normals = tf.divide(normals,tf.expand_dims(tf.norm(normals,axis=2),axis=-1),name=tensName)
-	normals = tf.identity(normals,name=tensName)
-	return normals
-
-def simpleNormalTensor(x,faces,tensName=None):
-	''' Build mesh normals '''
-
-	batch_size = x.shape[0]
-	num_points = x.shape[1]
-	num_faces = faces.shape[1]
-	#Reshape x and faces
-	faces_bis = tf.reshape(faces,[batch_size*num_faces,3])
-	x_bis = tf.reshape(x, [batch_size*num_points,3])
-	#gather
-	#reshape result
-	T = tf.gather(x_bis,faces_bis)
-	print("T shape: "+str(T.shape))
-	T = tf.reshape(T,[batch_size,num_faces,3,3])
-	print("T shape: "+str(T.shape))
-	# shape = (batch_size,face_num,3 (vertices),3 (coordinates))
-	
-	
-
-	#T = verts[faces]
-	E1 = tf.subtract(T[:,:,1,:],T[:,:,0,:])
-	print("E1 shape: "+str(E1.shape))
-	E2 = tf.subtract(T[:,:,2,:],T[:,:,0,:])
-	print("E2 shape: "+str(E2.shape))
-	N = tf.cross(E1, E2)
-	#shape = (batch_size,face_num, 3 (space coordinates))
-	print("N shape: "+str(N.shape))
-
-	#print("Vertices shape: "+str(verts.shape))
-	#print("Faces shape: "+str(faces.shape))
-	#print("N shape: "+str(N.shape))
-	#print "N: ", N[10]
-	Nn=normalizeTensor(N)
-	#print("Nn shape: "+str(Nn.shape))
-	#normals = np.zeros(verts.shape, dtype=np.float32)
-	
-	#normals = tf.zeros_like(x)
-	normals = tf.Variable(tf.zeros_like(x))
-
-	Nn = tf.tile(Nn,[1,3,1])
-	
-	faces_t = tf.transpose(faces,[0,2,1])
-	faces_col = tf.reshape(faces_t,[batch_size,num_faces*3])
-
-	faces_col = tf.expand_dims(faces_col,axis=-1)
-	#temp solution
-	normals = tf.reshape(normals,[batch_size*num_points,3])
-
-	print("ref shape: "+str(normals.shape))
-	print("indices shape: "+str(faces_col.shape))
-	print("updates shape: "+str(Nn.shape))
-	#normals = tf.scatter_add(normals,faces_col,Nn)
-	normals = tf.scatter_nd_add(normals,faces_col,Nn)
-
-	normals = tf.reshape(normals,[batch_size,num_points,3])
-	#for i in range(3):
-	#	normals[faces[:,i]] += Nn
-
-	#print("Normals shape: "+str(normals.shape))
-	normals = normalizeTensor(normals)
-	normals = tf.identity(normals,name=tensName)
-	return normals
-
 
 def normalizeTensor(x):
 	with tf.variable_scope("normalization"):
@@ -687,6 +495,8 @@ def mainFunction():
 	#binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/smallAdj/"
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+
+	#binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/MS9_res/"
 
 
 	running_mode = RUNNING_MODE
@@ -837,7 +647,7 @@ def mainFunction():
 
 	if running_mode == 0:
 
-		gtnameoffset = 7
+		gtnameoffset = 15
 		f_normals_list = []
 		f_adj_list = []
 		GTfn_list = []
@@ -847,8 +657,12 @@ def mainFunction():
 		valid_GTfn_list = []
 
 
-		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
+		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
+		# gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+
+		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_train/"
+		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_valid/"
 		gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 		
 
@@ -920,13 +734,11 @@ def mainFunction():
 		resultsArray = []	# results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
 							# [Max distance, Mean distance, Mean angle, std angle, face num]
 
-
-
-		# noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/Generated/"
-		# gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/"
-
 		noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/noisy/"
 		gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
+
+		# noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+		# gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 
 		# results file name
 		csv_filename = RESULTS_PATH+"results.csv"
@@ -940,7 +752,8 @@ def mainFunction():
 			# if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("eros")) or (gtFileName.startswith("armad")) or \
 			# 	(gtFileName.startswith("carter")) or (gtFileName.startswith("chinese")) or (gtFileName.startswith("gargoyle")) or \
 			# 	(gtFileName.startswith("Nicolo")) or (gtFileName.startswith("pulley")) or (gtFileName.startswith("fertility")):
-			if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("Merlion")) or (gtFileName.startswith("armadillo")) or (gtFileName.startswith("gargoyle")):
+			if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("Merlion")) or (gtFileName.startswith("armadillo")) or (gtFileName.startswith("gargoyle")) or \
+			(gtFileName.startswith("dragon")):
 				continue
 
 
@@ -1315,6 +1128,104 @@ def mainFunction():
 
 			# write_mesh(testPatchV, testPatchF, "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/testPatch"+str(i)+".obj")
 
+	elif running_mode == 5:
+
+
+		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+		
+		# Training set
+		for filename in os.listdir(inputFilePath):
+			if (filename.endswith(".obj")):
+
+				V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
+				f_normals0 = computeFacesNormals(V0, faces0)
+				f_adj0 = getFacesLargeAdj(faces0,K_faces)
+				fpos0 = getTrianglesBarycenter(V0, faces0)
+				curv_stat0 = computeCurvature(fpos0, f_normals0,f_adj0)
+
+				if not 'curv_stat' in locals():
+					curv_stat = curv_stat0
+				else:
+					curv_stat = np.concatenate((curv_stat,curv_stat0),axis=0)
+		
+		# inputFileName = "bunny_hi.obj"
+		# inputFileName = "sharp_sphere.obj"
+		# #inputFileName = "armadillo.obj"
+		
+		# V0,_,_, faces0, _ = load_mesh(inputFilePath, inputFileName, 0, False)
+
+		# f_normals0 = computeFacesNormals(V0, faces0)
+		# _, edge_map0, v_e_map0 = getFacesAdj2(faces0)
+		# f_adj0 = getFacesLargeAdj(faces0,K_faces)
+		# fpos0 = getTrianglesBarycenter(V0, faces0)
+
+		# curv_stat = computeCurvature(fpos0, f_normals0,f_adj0)
+
+		centroids, closest = customKMeans(curv_stat, 8)
+
+		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
+
+		with open(binDumpPath+'centroids_8', 'wb') as fp:
+			pickle.dump(centroids, fp)
+		
+		cc1 = 0.7
+		cc2 = 0.4
+		colors = np.array([[cc1,1,1],[1,cc1,1],[1,1,cc1],[cc1,cc1,1],[cc1,1,cc1],[1,cc1,cc1],[1,cc1,cc2],[1,cc2,cc1]])
+
+		for clu in range(8):
+			clu_color = colors[clu]
+			v_clu = V0
+			clu_color = np.tile(clu_color,[v_clu.shape[0],1])
+			v_clu = np.concatenate((v_clu,clu_color),axis=1)
+			f_clu = faces0[closest==clu]
+
+			write_mesh(v_clu,f_clu, "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/clustertri" + str(clu) + ".obj")
+
+	elif running_mode == 6:
+
+		cc1 = 0.7
+		cc2 = 0.4
+		colors = np.array([[cc1,1,1],[1,cc1,1],[1,1,cc1],[cc1,cc1,1],[cc1,1,cc1],[1,cc1,cc1],[1,cc1,cc2],[1,cc2,cc1]])
+
+		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+
+		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
+
+		with open(binDumpPath+'centroids_8', 'rb') as fp:
+			centroids = pickle.load(fp)
+		
+		# Training set
+		for filename in os.listdir(inputFilePath):
+			if (filename.endswith(".obj")):
+
+				V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
+				f_normals0 = computeFacesNormals(V0, faces0)
+				f_adj0 = getFacesLargeAdj(faces0,K_faces)
+				fpos0 = getTrianglesBarycenter(V0, faces0)
+				curv_stat0 = computeCurvature(fpos0, f_normals0,f_adj0)
+
+				closest0 = closest_centroid(curv_stat0, centroids)
+
+				for clu in range(8):
+					clu_color = colors[clu]
+					v_clu = V0
+					clu_color = np.tile(clu_color,[v_clu.shape[0],1])
+					v_clu = np.concatenate((v_clu,clu_color),axis=1)
+					f_clu = faces0[closest0==clu]
+
+					write_mesh(v_clu,f_clu, "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/" + filename + str(clu) + ".obj")
+
+		# write_xyz(fpos0[closest==0], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster0.xyz")
+		# write_xyz(fpos0[closest==1], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster1.xyz")
+		# write_xyz(fpos0[closest==2], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster2.xyz")
+		# write_xyz(fpos0[closest==3], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster3.xyz")
+		# write_xyz(fpos0[closest==4], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster4.xyz")
+		# write_xyz(fpos0[closest==5], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster5.xyz")
+		# write_xyz(fpos0[closest==6], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster6.xyz")
+		# write_xyz(fpos0[closest==7], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster7.xyz")
+
+		
+
 def refineMesh(x,displacement,normals,adj):		#params are tensors
 	
 	batch_size, num_points, in_channels = x.get_shape().as_list()
@@ -1369,7 +1280,6 @@ if __name__ == "__main__":
 	parser.add_argument('--debug', type=bool, default=False)
 	parser.add_argument('--device', type=str, default='/cpu:0')
 	parser.add_argument('--net_name', type=str, default='unnamed_net')
-	parser.add_argument('--pretrained', type=bool, default=False)
 	parser.add_argument('--running_mode', type=int, default=0)
 	
 

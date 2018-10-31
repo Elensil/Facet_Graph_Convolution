@@ -206,61 +206,6 @@ def get_weight_assigments_rotation_invariance(x, adj, u, c):
 		batch_size, num_points, K = adj.get_shape().as_list()
 		M, in_channels = u.get_shape().as_list()
 
-					# ref_axis_t = tf.reshape(ref_axis,[1,1,3])
-					# print("ref_axis_t shape: "+str(ref_axis_t.shape))
-					# # [batch, N, 3]
-					# print("batch_size = "+str(batch_size))
-					# print("num_points = "+str(num_points))
-					# #ref_axes = tf.tile(ref_axes,[batch_size,num_points,1])
-					# #ref_axes = broadcast(ref_axes,x.shape)
-
-					# ref_axes = tf.zeros_like(x)
-					# ref_axes = ref_axes + ref_axis_t
-
-					# print("ref_axes shape: "+str(ref_axes.shape))
-					# # [batch, N, 3]
-					# ref_cross = tf.cross(x,ref_axes)
-					# # [batch, N, 1]
-					# ref_sin = tf.norm(ref_cross)
-					# # [batch, N, 1]
-					# ref_cos = tensorDotProduct(ref_axis,x)
-
-					# # [batch, N, 3, 1]
-					# ref_cross = tf.expand_dims(ref_cross,-1)
-					# # [batch, N, 3, 3, 1]
-					# ref_cross = tf.tile(tf.expand_dims(ref_cross,2),[1,1,3,1,1])
-					# # [1, 1, 3, 3, 3]
-					# LC = tf.reshape(LC_tensor, [1,1,3,3,3])
-					# # [batch, N, 3, 3, 1]
-					# temp_zero = tf.zeros_like(ref_cross)
-					# # [batch, N, 3, 3, 3]
-					# temp_zero = tf.tile(temp_zero,[1,1,1,1,3])
-
-
-					# # [batch, N, 3, 3, 3]
-					# LC = LC + temp_zero
-					# #LC = tf.tile(LC,[batch_size,num_points,1,1,1])
-
-					# # [batch, N, 3, 3, 1]
-					# ssm = tf.matmul(LC,ref_cross)
-					# # [batch, N, 3, 3]
-					# ssm = tf.squeeze(ssm)
-
-					# # [batch, N, 1]
-					# rot_coef = tf.divide(tf.subtract(1.0,ref_cos), tf.multiply(ref_sin,ref_sin))
-					# # [batch, N, 3, 3]
-					# rot_coef = tf.tile(tf.reshape(rot_coef,[batch_size,-1,1,1]),[1,1,3,3])
-					# # [1, 1, 3, 3]
-					# Idmat = tf.reshape(Id_tensor,[1,1,3,3])
-					# # [batch, N, 3, 3]
-					# Idmat = Idmat + tf.zeros_like(rot_coef)
-					# #Idmat = tf.tile(Idmat,[batch_size,num_points,1,1])
-
-
-					# # [batch, N, 3, 3]
-					# rot = Idmat + ssm + tf.multiply(tf.matmul(ssm,ssm), rot_coef)
-					# # [batch, N, K, 3, 3]
-
 		rot = getRotationToAxis(x)
 
 		rot = tf.tile(tf.expand_dims(rot,axis=2),[1,1,K,1,1])
@@ -2438,4 +2383,195 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			out_channels_reg = 3
 			y_conv = custom_lin(h_fc1, out_channels_reg)
 			return y_conv
+
+		if architecture == 11:		# Normals, conv16, conv32, pool4, conv64, conv32, upsamp4, Lin256, Lin3
+			x = tf.slice(x,[0,0,0],[-1,-1,3])	#Take normals only
+			coarsening_steps=2
+			M_conv = 6
+
+			# Conv1
+			out_channels_conv1 = 8
+			#h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
+			h_conv1, _ = custom_conv2d(x, adjs[0], out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+			h_conv1_act = lrelu(h_conv1,alpha)
+			# [batch, N, 16]
+
+			out_channels_conv2 = 16
+			h_conv2, _ = custom_conv2d(h_conv1_act, adjs[0], out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+			h_conv2_act = lrelu(h_conv2,alpha)
+
+			# Pooling 1
+			pool1 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
+			# [batch, N/2, 16]
+
+			# Conv3
+			out_channels_conv3 = 24
+			h_conv3, _ = custom_conv2d(pool1, adjs[1], out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			h_conv3_act = lrelu(h_conv3,alpha)
+			# [batch, N/2, 32]
+
+			# --- Central features ---
+
+			#DeConv2
+			dconv2, _ = custom_conv2d(h_conv3_act, adjs[1], out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv2_act = lrelu(dconv2,alpha)
+			# [batch, N/4, 32]
+
+			#Upsampling1
+			upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
+			concat1 = tf.concat([upsamp1, h_conv2_act], axis=-1)
+
+			#DeConv1
+			dconv1, _ = custom_conv2d(concat1, adjs[0], out_channels_conv1, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv1_act = lrelu(dconv1,alpha)
+
+			# Lin(1024)
+			out_channels_fc1 = 128
+			h_fc1 = lrelu(custom_lin(dconv1_act, out_channels_fc1),alpha)
+			
+			# Lin(num_classes)
+			out_channels_reg = 3
+			y_conv = custom_lin(h_fc1, out_channels_reg)
+			return y_conv
+
+		if architecture == 12:		# Branching out before 1st pooling, classification leading to 4 separate branches.
+			x = tf.slice(x,[0,0,0],[-1,-1,3])	#Take normals only
+			coarsening_steps=2
+			M_conv = 6
+
+			# Conv1
+			out_channels_conv1 = 8
+			#h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
+			h_conv1, _ = custom_conv2d(x, adjs[0], out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+			h_conv1_act = lrelu(h_conv1,alpha)
+			# [batch, N, 16]
+
+			out_channels_conv2 = 12
+			h_conv2, _ = custom_conv2d(h_conv1_act, adjs[0], out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+			h_conv2_act = lrelu(h_conv2,alpha)
+
+			# Classification
+			branches_num = 4
+			p_classes = lrelu(custom_lin(h_conv2_act, branches_num),alpha)
+			p_classes = tf.nn.softmax(p_classes)
+			# [batch, N, 4]
+
+			# Pooling 1
+			pool1 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)	# TODO: deal with fake nodes??
+			# [batch, N/2, 16]
+
+			out_channels_conv3 = 16
+			out_channels_fc1 = 64
+			# ---branches: ---
+
+			#Branch 0
+			# Conv3
+			h_conv3_0, _ = custom_conv2d(pool1, adjs[1], out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			h_conv3_0_act = lrelu(h_conv3_0,alpha)
+
+			#DeConv2
+			dconv2_0, _ = custom_conv2d(h_conv3_0_act, adjs[1], out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv2_0_act = lrelu(dconv2_0,alpha)
+			# [batch, N/4, 32]
+
+			#Upsampling1
+			upsamp1_0 = custom_upsampling(dconv2_0_act, steps=coarsening_steps)
+			concat1_0 = tf.concat([upsamp1_0, h_conv2_act], axis=-1)
+
+			#DeConv1
+			dconv1_0, _ = custom_conv2d(concat1_0, adjs[0], out_channels_conv1, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv1_0_act = lrelu(dconv1_0,alpha)
+
+			# Lin
+			h_fc1_0 = lrelu(custom_lin(dconv1_0_act, out_channels_fc1),alpha)
+			
+			#Branch 1
+			# Conv3
+			h_conv3_1, _ = custom_conv2d(pool1, adjs[1], out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			h_conv3_1_act = lrelu(h_conv3_1,alpha)
+
+			#DeConv2
+			dconv2_1, _ = custom_conv2d(h_conv3_1_act, adjs[1], out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv2_1_act = lrelu(dconv2_1,alpha)
+			# [batch, N/4, 32]
+
+			#Upsampling1
+			upsamp1_1 = custom_upsampling(dconv2_1_act, steps=coarsening_steps)
+			concat1_1 = tf.concat([upsamp1_1, h_conv2_act], axis=-1)
+
+			#DeConv1
+			dconv1_1, _ = custom_conv2d(concat1_1, adjs[0], out_channels_conv1, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv1_1_act = lrelu(dconv1_1,alpha)
+
+			# Lin
+			h_fc1_1 = lrelu(custom_lin(dconv1_1_act, out_channels_fc1),alpha)
+
+			#Branch 2
+			# Conv3
+			h_conv3_2, _ = custom_conv2d(pool1, adjs[1], out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			h_conv3_2_act = lrelu(h_conv3_2,alpha)
+
+			#DeConv2
+			dconv2_2, _ = custom_conv2d(h_conv3_2_act, adjs[1], out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv2_2_act = lrelu(dconv2_2,alpha)
+			# [batch, N/4, 32]
+
+			#Upsampling1
+			upsamp1_2 = custom_upsampling(dconv2_2_act, steps=coarsening_steps)
+			concat1_2 = tf.concat([upsamp1_2, h_conv2_act], axis=-1)
+
+			#DeConv1
+			dconv1_2, _ = custom_conv2d(concat1_2, adjs[0], out_channels_conv1, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv1_2_act = lrelu(dconv1_2,alpha)
+
+			# Lin
+			h_fc1_2 = lrelu(custom_lin(dconv1_2_act, out_channels_fc1),alpha)
+
+			#Branch 3
+			# Conv3
+			h_conv3_3, _ = custom_conv2d(pool1, adjs[1], out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			h_conv3_3_act = lrelu(h_conv3_3,alpha)
+
+			#DeConv2
+			dconv2_3, _ = custom_conv2d(h_conv3_3_act, adjs[1], out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv2_3_act = lrelu(dconv2_3,alpha)
+			# [batch, N/4, 32]
+
+			#Upsampling1
+			upsamp1_3 = custom_upsampling(dconv2_3_act, steps=coarsening_steps)
+			concat1_3 = tf.concat([upsamp1_3, h_conv2_act], axis=-1)
+
+			#DeConv1
+			dconv1_3, _ = custom_conv2d(concat1_3, adjs[0], out_channels_conv1, M_conv,translation_invariance=bTransInvariant, rotation_invariance=False)
+			dconv1_3_act = lrelu(dconv1_3,alpha)
+
+			# Lin
+			h_fc1_3 = lrelu(custom_lin(dconv1_3_act, out_channels_fc1),alpha)
+			# [batch, N, 3]
+
+			# merging
+
+			h_fc1_0 = tf.expand_dims(h_fc1_0,axis=-1)
+			# [batch, N, 128, 1]
+			h_fc1_1 = tf.expand_dims(h_fc1_1,axis=-1)
+			h_fc1_2 = tf.expand_dims(h_fc1_2,axis=-1)
+			h_fc1_3 = tf.expand_dims(h_fc1_3,axis=-1)
+
+
+			h_fc_final = tf.concat([h_fc1_0,h_fc1_1,h_fc1_2,h_fc1_3], axis=-1)
+
+
+			p_classes = tf.expand_dims(p_classes,axis=2)
+			# [batch, N, 1, 4]
+			p_classes = tf.tile(p_classes,[1,1,out_channels_fc1,1])
+			# [batch, N, 128, 4]
+
+			h_fc_final = tf.multiply(h_fc_final,p_classes)
+
+			h_fc_final = tf.reduce_sum(h_fc_final,axis=-1)
+			# Lin(num_classes)
+			out_channels_reg = 3
+			y_conv = custom_lin(h_fc_final, out_channels_reg)
+			return y_conv
+
 # End
