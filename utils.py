@@ -436,7 +436,6 @@ def load_mesh(path,filename,K,bGetAdj):
             v2 = faces[f,1]
             v3 = faces[f,2]
 
-
             #print("v1 = "+str(v1)+", free_ind[v1] = "+str(free_ind[v1]))
 
             # For each of the 3 vertices, add opposite edge to temp_adj

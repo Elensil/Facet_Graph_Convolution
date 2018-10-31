@@ -75,10 +75,10 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map,images_lists,
 		my_feed_dict = {xp_:in_points, faces_:faces, fn_: f_normals, fadj: f_adj,
                                                 e_map_: edge_map, ve_map_: v_e_map, keep_prob:1,
                                                 images_:input_images, calibs_:input_calibs}
-"""
+                """
 		my_feed_dict = {xp_:in_points, faces_:faces, fn_: f_normals, fadj0: f_adj[0], fadj1: f_adj[1], fadj2: f_adj[2],
 						e_map_: edge_map, ve_map_: v_e_map, keep_prob:1}
-"""
+                """
 		
 		
 		batch = tf.Variable(0, trainable=False)
@@ -185,8 +185,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 	with tf.variable_scope("model"):
 
                 #n_conv = get_model_reg(fn_, fadj, ARCHITECTURE, keep_prob)
-                n_conv = get_appearance_model_reg(fn_, fadj, ARCHITECTURE, keep_prob,images_,calibs_)
-
+                #n_conv = get_appearance_model_reg(fn_, fadj, ARCHITECTURE, keep_prob,images_,calibs_)
+                n_conv = get_model_reg_multi_scale_appearance(fn_, fadjs, ARCHITECTURE, keep_prob, images_, calibs_)
 		# n_conv = get_model_reg(fn_, fadj0, ARCHITECTURE, keep_prob)
 		#n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 		#n_conv = get_model_reg_multi_scale(fn_normal_only, fadjs, ARCHITECTURE, keep_prob)
@@ -254,6 +254,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 	with tf.device(DEVICE):
 		lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
 		last_loss = 0
+                first=True
 		for iter in range(NUM_ITERATIONS):
 
 			# Get random sample from training dictionary
@@ -263,20 +264,23 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 
                         input_images = [images_lists[batch_num]]
                         input_calibs = [calibs_lists[batch_num]]
-			train_fd = {fn_: f_normals_list[batch_num], fadj: f_adj_list[batch_num], tfn_: GTfn_list[batch_num],
-                                                        sample_ind: random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
+                        #train_fd = {fn_: f_normals_list[batch_num], fadj: f_adj_list[batch_num], tfn_: GTfn_list[batch_num],
+                        #                                sample_ind: random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
 
-			#train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
-			#				fadj2: f_adj_list[batch_num][2], tfn_: GTfn_list[batch_num],
-			#				sample_ind: random_ind, keep_prob:1}
+                        train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0],
+                            fadj1: f_adj_list[batch_num][1],fadj2: f_adj_list[batch_num][2],
+                            tfn_: GTfn_list[batch_num],sample_ind: random_ind, keep_prob:1,
+                            images_:input_images, calibs_:input_calibs}
 
 
 			#sess.run(customLoss,feed_dict=train_fd)
-			train_loss += customLoss.eval(feed_dict=train_fd)
+                        local_train_loss = sess.run(customLoss,feed_dict=train_fd)
+                        print("Local Training Loss: "+str(local_train_loss))
+                        train_loss += local_train_loss
 			train_samp+=1
 			# Show smoothed training loss
 			if (iter%10 == 0):
-				train_loss = train_loss/train_samp
+                                train_loss = train_loss/train_samp
 				# sess.run(customLoss2,feed_dict=my_feed_dict)
 				# train_loss2 = customLoss2.eval(feed_dict=my_feed_dict)
 				# sess.run(customLoss3,feed_dict=my_feed_dict)
@@ -287,8 +291,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 				# print("Iteration %d, training loss3 %g"%(iter, train_loss3))
 
 				lossArray[int(iter/10),0]=train_loss
-				train_loss=0
-				train_samp=0
+                                train_loss = 0
+                                train_samp = 0
 
 			# Compute validation loss
                         if (iter%20 == 0):
@@ -299,31 +303,26 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 
                                     input_images = [valid_images_lists[vbm]]
                                     input_calibs = [valid_calibs_lists[vbm]]
-                                    valid_fd = {fn_: valid_f_normals_list[vbm], fadj: valid_f_adj_list[vbm], tfn_: valid_GTfn_list[vbm],
-                                                    sample_ind: valid_random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
-                                    #valid_loss += validLoss.eval(feed_dict=valid_fd)
-                                    valid_loss += customLoss.eval(feed_dict=valid_fd)
-
-                                    # valid_fd = {fn_: valid_f_normals_list[vbm], fadj: valid_f_adj_list[vbm], tfn_: valid_GTfn_list[vbm],
-                                    # 		sample_ind: valid_random_ind, keep_prob:1}
-
-                                    # valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm],
-                                    # 		sample_ind: valid_random_ind, keep_prob:1}
-
-                                    #valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], fadj1: valid_f_adj_list[vbm][1],
-                                    #		fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm],
-                                    #		sample_ind: valid_random_ind, keep_prob:1}
+                                    #valid_fd = {fn_: valid_f_normals_list[vbm], fadj: valid_f_adj_list[vbm], tfn_: valid_GTfn_list[vbm],
+                                    #                sample_ind: valid_random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
+                                    valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], fadj1: valid_f_adj_list[vbm][1],
+                                                fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm],
+                                                sample_ind: valid_random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
+                                    local_valid_loss = sess.run(customLoss,feed_dict=valid_fd)
+                                    print("Local Valid Loss: "+str(local_valid_loss))
+                                    valid_loss += local_valid_loss
 
 
-                                    #valid_loss += validLoss.eval(feed_dict=valid_fd)
-                                    #valid_loss += customLoss.eval(feed_dict=valid_fd)
-
-				valid_loss/=valid_samp
+                                valid_loss/=valid_samp
 				print("Iteration %d, validation loss %g"%(iter, valid_loss))
 				lossArray[int(iter/10),1]=valid_loss
 				if iter>0:
+                                    if first:
+                                        lossArray[int(iter/10)-1,1] = valid_loss
+                                        first=False
+                                    else:
 					lossArray[int(iter/10)-1,1] = (valid_loss+last_loss)/2
-					last_loss=valid_loss
+                                    last_loss=valid_loss
 
 			sess.run(train_step,feed_dict=train_fd)
 			# sess.run(train_step2,feed_dict=my_feed_dict)
@@ -334,7 +333,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 	saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep)
 	sess.close()
 
-
+        csv_filename = RESULTS_PATH+'/'+NET_NAME+"_training.csv"
 	f = open(csv_filename,'ab')
 	np.savetxt(f,lossArray, delimiter=",")
 
@@ -362,10 +361,12 @@ def faceNormalsLoss(fn,gt_fn):
 	#version 1
 	n_dt = tensorDotProduct(fn,gt_fn)
 	#loss = tf.acos(n_dt-1e-5)	# So that it stays differentiable close to 1
-	loss = tf.acos(0.9999*n_dt)	# So that it stays differentiable close to 1 and -1
+        close_to_one = 0.999999999
+        loss = tf.acos(tf.maximum(tf.minimum(n_dt,close_to_one),-close_to_one))	# So that it stays differentiable close to 1 and -1
 
 	fakenodes = tf.less_equal(gt_fn,10e-4)
 	fakenodes = tf.reduce_all(fakenodes,axis=-1)
+
 	zeroVec = tf.zeros_like(loss)
 	oneVec = tf.ones_like(loss)
 	realnodes = tf.where(fakenodes,zeroVec,oneVec)
@@ -680,14 +681,13 @@ def simpleNormalTensor(x,faces,tensName=None):
 
 def normalizeTensor(x):
 	with tf.variable_scope("normalization"):
-		#norm = tf.norm(x,axis=-1)
-		epsilon = tf.constant(1e-5,name="epsilon")
-		square = tf.square(x,name="square")
+                #norm = tf.norm(x,axis=-1)
+                square = tf.square(x,name="square")
 		square_sum = tf.reduce_sum(square,axis=-1,name="square_sum")
-		norm = tf.sqrt(epsilon+square_sum,name="sqrt")
-		
-		norm_non_zeros = tf.greater(norm,epsilon)
-		inv_norm = tf.where(norm_non_zeros,tf.reciprocal(norm+epsilon,name="norm_division"),tf.zeros_like(norm,name="zeros"))
+                norm = tf.sqrt(square_sum,name="sqrt")
+
+                norm_non_zeros = tf.greater(norm,0.0)
+                inv_norm = tf.where(norm_non_zeros,tf.reciprocal(norm,name="norm_division"),tf.zeros_like(norm,name="zeros"))
 		newX = tf.multiply(x, tf.expand_dims(inv_norm,axis=-1),name="result")
 	return newX
 
@@ -882,12 +882,11 @@ def mainFunction():
                 maxSize = 800
                 patchSize = 500
 
-
                 inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/images"
-                validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images"
-
-		training_meshes_num = 0
-		valid_meshes_num = 0
+                #validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images"
+                validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/eval/images"
+                training_meshes_num = [0]
+                valid_meshes_num = [0]
 
 		#print("training_meshes_num 0 " + str(training_meshes_num))
 		if pickleLoad:
@@ -919,12 +918,12 @@ def mainFunction():
 			for filename in os.listdir(inputFilePath):
                             print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
                             gtfilename = filename+"/Ground_Truth/000.obj"
-                            addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num,images_lists,calibs_lists)
+                            addMesh(inputFilePath, filename, inputFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num,images_lists,calibs_lists)
 
 			# Validation set
 			for filename in os.listdir(validFilePath):
                             gtfilename = filename+"/Ground_Truth/000.obj"
-                            addMesh(validFilePath, filename, gtFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_meshes_num,valid_images_lists,valid_calibs_lists)
+                            addMesh(validFilePath, filename, validFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_meshes_num,valid_images_lists,valid_calibs_lists)
 					
 			if pickleSave:
 				# Training
@@ -998,8 +997,8 @@ def mainFunction():
 
 
 
-        """
-	elif running_mode == 1:
+                """
+                elif running_mode == 1:
 		# # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/MeshesDB/"
 		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/BlenderDB/"
 		# gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/BlenderDB/"
@@ -1065,7 +1064,7 @@ def mainFunction():
 		write_mesh(upV, faces0, RESULTS_PATH+"testOut.obj")
 
 		trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
-        """
+                """
 
 	elif running_mode == 2:
 		
@@ -1221,7 +1220,7 @@ def mainFunction():
                     faces0 = np.concatenate((faces_gt, padding3),axis=0)
                     # Reorder nodes
                     f_normals_pos0 = f_normals_pos0[newToOld]
-                    GTf_normals0 = GTf_normals0[newToOld]
+                    GTf_normals0 = GTf_normals0[newToOld]train_samp
                     faces0 = faces0[newToOld]
 
                     # Change adj format
