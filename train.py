@@ -542,7 +542,7 @@ def mainFunction():
 		GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
 		GTf_normals0 = computeFacesNormals(GT0, faces0)
 
-		curvStats0 = computeCurvature(GT0,GTf_normals0, f_adj0)
+		curvStats0 = computeCurvature(f_pos0,GTf_normals0, f_adj0)
 		clusterNum0 = closest_centroid(curvStats,centroids)
 
 		# Get patches if mesh is too big
@@ -695,7 +695,7 @@ def mainFunction():
 		else:
 			# Training set
 			for filename in os.listdir(inputFilePath):
-				if training_meshes_num[0]>1000:
+				if training_meshes_num[0]>10:
 					break
 				if (filename.endswith(".obj")):
 					print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
@@ -1168,20 +1168,8 @@ def mainFunction():
 		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
 
 		with open(binDumpPath+'centroids_8', 'wb') as fp:
-			pickle.dump(centroids, fp)
+			pickle.dump(centroids, fp, protocol=2)
 		
-		cc1 = 0.7
-		cc2 = 0.4
-		colors = np.array([[cc1,1,1],[1,cc1,1],[1,1,cc1],[cc1,cc1,1],[cc1,1,cc1],[1,cc1,cc1],[1,cc1,cc2],[1,cc2,cc1]])
-
-		for clu in range(8):
-			clu_color = colors[clu]
-			v_clu = V0
-			clu_color = np.tile(clu_color,[v_clu.shape[0],1])
-			v_clu = np.concatenate((v_clu,clu_color),axis=1)
-			f_clu = faces0[closest==clu]
-
-			write_mesh(v_clu,f_clu, "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/clustertri" + str(clu) + ".obj")
 
 	elif running_mode == 6:
 
