@@ -571,6 +571,7 @@ def mainFunction():
 				padding1 =np.zeros((new_N-old_N,1))
 				print("padding6 shape: "+str(padding6.shape))
 				print("patchFNormals shape: "+str(patchFNormals.shape))
+				print("patchClusterNum shape: "+str(patchClusterNum.shape))
 				patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
 				patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
 				patchClusterNum = np.concatenate((patchClusterNum,padding1),axis=0)
