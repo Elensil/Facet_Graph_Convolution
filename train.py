@@ -544,7 +544,7 @@ def mainFunction():
 
 		curvStats0 = computeCurvature(f_pos0,GTf_normals0, f_adj0)
 		clusterNum0 = closest_centroid(curvStats0,centroids)
-		clusterNum0 = np.reshape(clusterNum0,(-1,1))
+		#clusterNum0 = np.reshape(clusterNum0,(-1,1))
 
 		# Get patches if mesh is too big
 		facesNum = faces0.shape[0]
@@ -569,7 +569,7 @@ def mainFunction():
 				old_N = patchFNormals.shape[0]
 				padding6 =np.zeros((new_N-old_N,6))
 				padding3 =np.zeros((new_N-old_N,3))
-				padding1 =np.zeros((new_N-old_N,1))
+				padding1 =np.zeros((new_N-old_N))
 				print("padding6 shape: "+str(padding6.shape))
 				print("patchFNormals shape: "+str(patchFNormals.shape))
 				print("patchClusterNum shape: "+str(patchClusterNum.shape))
@@ -618,7 +618,7 @@ def mainFunction():
 			old_N = facesNum
 			padding6 =np.zeros((new_N-old_N,6))
 			padding3 =np.zeros((new_N-old_N,3))
-			padding1 =np.zeros((new_N-old_N,1))
+			padding1 =np.zeros((new_N-old_N))
 			f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
 			GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
 			clusterNum = np.concatenate((clusterNum0,padding1),axis=0)
