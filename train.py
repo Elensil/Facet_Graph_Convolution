@@ -180,7 +180,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 
 	
 	with tf.device(DEVICE):
-		customLoss = faceNormalsLoss(n_conv, tfn_) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses)
+		customLoss = faceNormalsLoss(n_conv, tfn_) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses_)
 		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
 		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
 		train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
@@ -243,7 +243,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 			# 				sample_ind: random_ind, keep_prob:1}
 
 			train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
-							fadj2: f_adj_list[batch_num][2], tfn_: GTfn_list[batch_num],
+							fadj2: f_adj_list[batch_num][2], tfn_: GTfn_list[batch_num], gtClasses_:f_labels_list[batch_num],
 							sample_ind: random_ind, keep_prob:1}
 
 			#i = train_shuffle[iter%(len(train_data))]
@@ -281,7 +281,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 					# 		sample_ind: valid_random_ind, keep_prob:1}
 
 					valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], fadj1: valid_f_adj_list[vbm][1],
-							fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm],
+							fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm], gtClasses_:valid_f_labels_list[vbm],
 							sample_ind: valid_random_ind, keep_prob:1}
 
 					valid_loss += customLoss.eval(feed_dict=valid_fd)
@@ -685,6 +685,8 @@ def mainFunction():
 				GTfn_list = pickle.load(fp)
 			with open(binDumpPath+'f_adj_list', 'rb') as fp:
 				f_adj_list = pickle.load(fp)
+			with open(binDumpPath+'f_labels_list', 'rb') as fp:
+				f_labels_list = pickle.load(fp)
 			# Validation
 			with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
 				valid_f_normals_list = pickle.load(fp)
@@ -692,7 +694,8 @@ def mainFunction():
 				valid_GTfn_list = pickle.load(fp)
 			with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
 				valid_f_adj_list = pickle.load(fp)
-
+			with open(binDumpPath+'valid_f_labels_list', 'rb') as fp:
+				valid_f_labels_list = pickle.load(fp)
 
 		else:
 			# Training set
@@ -719,6 +722,8 @@ def mainFunction():
 					pickle.dump(GTfn_list, fp)
 				with open(binDumpPath+'f_adj_list', 'wb') as fp:
 					pickle.dump(f_adj_list, fp)
+				with open(binDumpPath+'f_labels_list', 'wb') as fp:
+					pickle.dump(f_labels_list, fp)
 				# Validation
 				with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
 					pickle.dump(valid_f_normals_list, fp)
@@ -726,6 +731,8 @@ def mainFunction():
 					pickle.dump(valid_GTfn_list, fp)
 				with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
 					pickle.dump(valid_f_adj_list, fp)
+				with open(binDumpPath+'valid_f_labels_list', 'wb') as fp:
+					pickle.dump(valid_f_labels_list, fp)
 
 
 
