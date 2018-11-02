@@ -544,6 +544,7 @@ def mainFunction():
 
 		curvStats0 = computeCurvature(f_pos0,GTf_normals0, f_adj0)
 		clusterNum0 = closest_centroid(curvStats0,centroids)
+		clusterNum0 = np.reshape(clusterNum0,(-1,1))
 
 		# Get patches if mesh is too big
 		facesNum = faces0.shape[0]
