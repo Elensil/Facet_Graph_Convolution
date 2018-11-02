@@ -1071,6 +1071,12 @@ def get_model(x, adj, num_classes, architecture):
 				y_conv = custom_lin(h_fc1, num_classes)
 				return y_conv
 
+def get_classification_model(features,num_classes):
+	out_channels_fc1 = 1024
+	h_fc1 = tf.nn.relu(custom_lin(features, out_channels_fc1))
+	# Lin(num_classes)
+	prediction = custom_lin(h_fc1, num_classes)
+	return prediction
 
 
 def get_model_reg(x, adj, architecture, keep_prob):
@@ -2300,7 +2306,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# Lin(3)
 			out_channels_reg = 3
 			y_conv = custom_lin(h_fc1, out_channels_reg)
-			return y_conv
+			return y_conv, h_conv1_act
 
 		if architecture == 10:		# Like 9, without the position for assignment
 			alpha = 0.1
@@ -2382,7 +2388,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 			# Lin(3)
 			out_channels_reg = 3
 			y_conv = custom_lin(h_fc1, out_channels_reg)
-			return y_conv
+			return y_conv, h_conv1_act
 
 		if architecture == 11:		# Normals, conv16, conv32, pool4, conv64, conv32, upsamp4, Lin256, Lin3
 			x = tf.slice(x,[0,0,0],[-1,-1,3])	#Take normals only

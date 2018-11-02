@@ -107,7 +107,7 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 	return outPoints, outN
 
 
-def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
+def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_f_labels_list):
 	
 	random_seed = 0
 	np.random.seed(random_seed)
@@ -131,6 +131,10 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 	BATCH_SIZE=1
 	K_faces = f_adj_list[0][0].shape[2]
 	NUM_IN_CHANNELS = f_normals_list[0].shape[2]
+	NUM_CLASSES = f_labels_list[0].shape[2]
+
+	loss_lmbd = 1
+
 	# training data
 	fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
 	#fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj')
@@ -141,10 +145,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
 	tfn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='tfn_')
 
-	# Validation data
-	valid_fn = tf.placeholder('float32', shape=(BATCH_SIZE, None,NUM_IN_CHANNELS),name='valid_fn')
-	valid_tn = tf.placeholder('float32', shape=(BATCH_SIZE, None,3),name='valid_tn')
-	valid_fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='valid_fadj')
+	gtClasses_ = tf.placeholder(tf.int8, shape=[BATCH_SIZE, None, NUM_CLASSES], name='gtClasses')
 
 	sample_ind = tf.placeholder(tf.int32, shape=[10000], name='sample_ind')
 
@@ -164,8 +165,10 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 	fn_normal_only = tf.slice(fn_,[0,0,0],[-1,-1,3])
 	with tf.variable_scope("model"):
 		# n_conv = get_model_reg(fn_, fadj0, ARCHITECTURE, keep_prob)
-		n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+		n_conv, pred_features = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 		#n_conv = get_model_reg_multi_scale(fn_normal_only, fadjs, ARCHITECTURE, keep_prob)
+		prediction = get_classification_model(pred_features,NUM_CLASSES)
+
 
 
 	# n_conv = normalizeTensor(n_conv)
@@ -177,7 +180,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
 	
 	with tf.device(DEVICE):
-		customLoss = faceNormalsLoss(n_conv, tfn_)
+		customLoss = faceNormalsLoss(n_conv, tfn_) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses)
 		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
 		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
 		train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
@@ -346,6 +349,10 @@ def faceNormalsLoss(fn,gt_fn):
 	#loss = tf.reduce_mean(loss)
 	return loss
 
+def faceSegmentationLoss(prediction, gtClasses):
+
+	return tf.nn.softmax_cross_entropy_with_logits(labels=gtClasses, logits=prediction)
+
 
 def is_almost_equal(x,y,threshold):
 	if np.sum((x-y)**2)<threshold**2:
@@ -481,7 +488,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = True
+	pickleLoad = False
 	pickleSave = True
 
 	K_faces = 25
@@ -496,8 +503,14 @@ def mainFunction():
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
 
+	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/classTest/"
+
 	#binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/MS9_res/"
 
+	centroidDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
+
+	with open(centroidDumpPath+'centroids_8', 'rb') as fp:
+		centroids = pickle.load(fp)
 
 	running_mode = RUNNING_MODE
 	###################################################################################################
@@ -509,7 +522,7 @@ def mainFunction():
 
 
 	#Takes the path to noisy and GT meshes as input, and add data to the lists fed to tensroflow graph, with the right format
-	def addMesh(inputFilePath,filename, gtFilePath, gtfilename, in_list, gt_list, adj_list, mesh_count_list):
+	def addMesh(inputFilePath,filename, gtFilePath, gtfilename, in_list, gt_list, adj_list, labels_list, mesh_count_list):
 		# --- Load mesh ---
 		V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
 		# Compute normals
@@ -524,13 +537,13 @@ def mainFunction():
 
 		f_pos0 = np.reshape(f_pos0,(-1,3))
 		f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
-		# f_area0 = getTrianglesArea(V0,faces0)
-		# f_area0 = np.reshape(f_area0, (-1,1))
-		# f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
 
 		# Load GT
 		GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
 		GTf_normals0 = computeFacesNormals(GT0, faces0)
+
+		curvStats0 = computeCurvature(GT0,GTf_normals0, f_adj0)
+		clusterNum0 = closest_centroid(curvStats,centroids)
 
 		# Get patches if mesh is too big
 		facesNum = faces0.shape[0]
@@ -544,6 +557,7 @@ def mainFunction():
 				#patchFNormals = f_normals0[fOldInd]
 				patchFNormals = f_normals_pos[fOldInd]
 				patchGTFNormals = GTf_normals0[fOldInd]
+				patchClusterNum = clusterNum0[fOldInd]
 
 				# Convert to sparse matrix and coarsen graph
 				coo_adj = listToSparse(testPatchAdj, patchFNormals[:,3:])
@@ -554,13 +568,18 @@ def mainFunction():
 				old_N = patchFNormals.shape[0]
 				padding6 =np.zeros((new_N-old_N,6))
 				padding3 =np.zeros((new_N-old_N,3))
+				padding1 =np.zeros((new_N-old_N,1))
 				print("padding6 shape: "+str(padding6.shape))
 				print("patchFNormals shape: "+str(patchFNormals.shape))
 				patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
 				patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+				patchClusterNum = np.concatenate((patchClusterNum,padding1),axis=0)
 				# Reorder nodes
 				patchFNormals = patchFNormals[newToOld]
 				patchGTFNormals = patchGTFNormals[newToOld]
+				patchClusterNum = patchClusterNum[newToOld]
+
+				patchClusterOneHot = one_hot_encoding_batch(patchClusterNum,8)
 
 				# Change adj format
 				fAdjs = []
@@ -577,23 +596,16 @@ def mainFunction():
 				#f_adj = np.expand_dims(testPatchAdj, axis=0)
 				GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
 
+				f_cluster_oneHot = np.expand_dims(patchClusterOneHot, axis=0)
+
 				in_list.append(f_normals)
 				adj_list.append(fAdjs)
 				gt_list.append(GTf_normals)
+				labels_list.append(f_cluster_oneHot)
 
 				print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(mesh_count_list[0]) + ")")
 				mesh_count_list[0]+=1
 		else: 		#Small mesh case
-
-
-
-			# print("f_adj: \n"+str(f_adj0))
-			# print("faces0: \n"+str(faces0))
-
-			# print("normals: \n"+str(f_normals0))
-			# print("GT normals: \n"+str(GTf_normals0))
-			# print("V0: \n"+str(V0))
-			# print("GT0: \n"+str(GT0))
 
 			# Convert to sparse matrix and coarsen graph
 			coo_adj = listToSparse(f_adj0, f_pos0)
@@ -604,11 +616,16 @@ def mainFunction():
 			old_N = facesNum
 			padding6 =np.zeros((new_N-old_N,6))
 			padding3 =np.zeros((new_N-old_N,3))
+			padding1 =np.zeros((new_N-old_N,1))
 			f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
 			GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+			clusterNum = np.concatenate((clusterNum0,padding1),axis=0)
 			# Reorder nodes
 			f_normals_pos = f_normals_pos[newToOld]
 			GTf_normals0 = GTf_normals0[newToOld]
+			clusterNum = clusterNum[newToOld]
+
+			clusterOneHot = one_hot_encoding_batch(clusterNum,8)
 
 			# Change adj format
 			fAdjs = []
@@ -617,28 +634,16 @@ def mainFunction():
 				fadj = np.expand_dims(fadj, axis=0)
 				fAdjs.append(fadj)
 
-						# fAdjs = []
-						# f_adj = np.expand_dims(f_adj0, axis=0)
-						# fAdjs.append(f_adj)
-
 			# Expand dimensions
 			f_normals = np.expand_dims(f_normals_pos, axis=0)
 			#f_adj = np.expand_dims(f_adj0, axis=0)
 			GTf_normals = np.expand_dims(GTf_normals0, axis=0)
-
-
-			# print("f_adj: \n"+str(fAdjs[0]))
-			# #print("faces0: \n"+str(faces0[0:5,:]))
-
-			# print("normals: \n"+str(f_normals_pos[:,:3]))
-			# print("GT normals: \n"+str(GTf_normals0))
-
-			# print("perm: \n"+str(newToOld))
-
+			f_cluster_oneHot = np.expand_dims(clusterOneHot, axis=0)
 
 			in_list.append(f_normals)
 			adj_list.append(fAdjs)
 			gt_list.append(GTf_normals)
+			labels_list.append(f_cluster_oneHot)
 		
 			print("Added training mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
 
@@ -652,10 +657,13 @@ def mainFunction():
 		f_adj_list = []
 		GTfn_list = []
 
+		f_labels_list = []
+
 		valid_f_normals_list = []
 		valid_f_adj_list = []
 		valid_GTfn_list = []
 
+		valid_f_labels_list = []
 
 		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
 		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
@@ -687,26 +695,20 @@ def mainFunction():
 		else:
 			# Training set
 			for filename in os.listdir(inputFilePath):
-				#print("training_meshes_num start_iter " + str(training_meshes_num))
 				if training_meshes_num[0]>1000:
 					break
-				#if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
-				#if (filename.endswith(".obj") and not(filename.startswith("buste"))):
-				if (filename.endswith(".obj") and not(filename.startswith("aabust")) and not(filename.startswith("aaJulius")) and not(filename.startswith("aaleg")) \
-					and not(filename.startswith("aavase")) and not(filename.startswith("aadragon"))):
-
+				if (filename.endswith(".obj")):
 					print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
 					gtfilename = filename[:-gtnameoffset]+".obj"
-					addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
+					addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, f_labels_list, training_meshes_num)
 
 			# Validation set
 			for filename in os.listdir(validFilePath):
 				if (filename.endswith(".obj")):
 					gtfilename = filename[:-gtnameoffset]+".obj"
-					addMesh(validFilePath, filename, gtFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_meshes_num)
+					addMesh(validFilePath, filename, gtFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_f_labels_list, valid_meshes_num)
 					
 
-				#print("training_meshes_num end_iter " + str(training_meshes_num))
 			if pickleSave:
 				# Training
 				with open(binDumpPath+'f_normals_list', 'wb') as fp:
@@ -725,7 +727,7 @@ def mainFunction():
 
 
 
-		trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+		trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_f_labels_list)
 
 	elif running_mode == 2:
 		
