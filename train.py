@@ -181,6 +181,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 	
 	with tf.device(DEVICE):
 		customLoss = faceNormalsLoss(n_conv, tfn_) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses_)
+		customLoss = tf.reduce_mean(customLoss)
 		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
 		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
 		train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
@@ -326,7 +327,7 @@ def checkNan(my_feed_dict):
 	# print("nan6: " + str(np.any(nan0)))
 
 
-def faceNormalsLoss(fn,gt_fn):
+def faceNormalsLoss(fn,gt_fn, reduce=True):
 
 	#version 1
 	n_dt = tensorDotProduct(fn,gt_fn)
@@ -345,14 +346,22 @@ def faceNormalsLoss(fn,gt_fn):
 
 	#Set loss to zero for fake nodes
 	loss = tf.where(fakenodes,zeroVec,loss)
-	loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
+	if reduce:
+		loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
 	#loss = tf.reduce_mean(loss)
 	return loss
 
 def faceSegmentationLoss(prediction, gtClasses):
 
-	return tf.nn.softmax_cross_entropy_with_logits(labels=gtClasses, logits=prediction)
+	ce = tf.nn.softmax_cross_entropy_with_logits(labels=gtClasses, logits=prediction)
 
+	fakenodes = tf.less_equal(gtClasses,10e-4)
+	fakenodes = tf.reduce_all(fakenodes,axis=1)
+	zeroVec = tf.zeros_like(loss)
+
+	loss = tf.where(fakenodes,zeroVec,ce)
+
+	return loss
 
 def is_almost_equal(x,y,threshold):
 	if np.sum((x-y)**2)<threshold**2:
@@ -488,7 +497,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = False
+	pickleLoad = True
 	pickleSave = True
 
 	K_faces = 25
