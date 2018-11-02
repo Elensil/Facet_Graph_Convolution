@@ -355,7 +355,7 @@ def faceSegmentationLoss(prediction, gtClasses):
 
 	ce = tf.nn.softmax_cross_entropy_with_logits(labels=gtClasses, logits=prediction)
 
-	fakenodes = tf.less_equal(gtClasses,10e-4)
+	fakenodes = tf.equal(gtClasses,0)
 	fakenodes = tf.reduce_all(fakenodes,axis=1)
 	zeroVec = tf.zeros_like(loss)
 
