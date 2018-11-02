@@ -543,7 +543,7 @@ def mainFunction():
 		GTf_normals0 = computeFacesNormals(GT0, faces0)
 
 		curvStats0 = computeCurvature(f_pos0,GTf_normals0, f_adj0)
-		clusterNum0 = closest_centroid(curvStats,centroids)
+		clusterNum0 = closest_centroid(curvStats0,centroids)
 
 		# Get patches if mesh is too big
 		facesNum = faces0.shape[0]
