@@ -357,7 +357,7 @@ def faceSegmentationLoss(prediction, gtClasses):
 
 	fakenodes = tf.equal(gtClasses,0)
 	fakenodes = tf.reduce_all(fakenodes,axis=1)
-	zeroVec = tf.zeros_like(loss)
+	zeroVec = tf.zeros_like(ce)
 
 	loss = tf.where(fakenodes,zeroVec,ce)
 
