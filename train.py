@@ -180,7 +180,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 
 	
 	with tf.device(DEVICE):
-		customLoss = faceNormalsLoss(n_conv, tfn_) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses_)
+		customLoss = faceNormalsLoss(n_conv, tfn_,reduce=False) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses_)
 		customLoss = tf.reduce_mean(customLoss)
 		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
 		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
@@ -355,8 +355,13 @@ def faceSegmentationLoss(prediction, gtClasses):
 
 	ce = tf.nn.softmax_cross_entropy_with_logits(labels=gtClasses, logits=prediction)
 
+	print("prediction shape: "+str(prediction.shape))
+	print("gtClasses shape: "+str(gtClasses.shape))
+	print("ce shape: "+str(ce.shape))
 	fakenodes = tf.equal(gtClasses,0)
+	print("fakenodes shape: "+str(fakenodes.shape))
 	fakenodes = tf.reduce_all(fakenodes,axis=1)
+	print("fakenodes shape: "+str(fakenodes.shape))
 	zeroVec = tf.zeros_like(ce)
 
 	loss = tf.where(fakenodes,zeroVec,ce)
