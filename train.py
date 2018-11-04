@@ -133,7 +133,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 	NUM_IN_CHANNELS = f_normals_list[0].shape[2]
 	NUM_CLASSES = f_labels_list[0].shape[2]
 
-	loss_lmbd = 1
+	loss_lmbd = 0.1
 
 	# training data
 	fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
@@ -502,7 +502,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = False
+	pickleLoad = True
 	pickleSave = True
 
 	K_faces = 25
