@@ -355,13 +355,13 @@ def faceSegmentationLoss(prediction, gtClasses):
 
 	ce = tf.nn.softmax_cross_entropy_with_logits(labels=gtClasses, logits=prediction)
 
-	print("prediction shape: "+str(prediction.shape))
-	print("gtClasses shape: "+str(gtClasses.shape))
-	print("ce shape: "+str(ce.shape))
+	# print("prediction shape: "+str(prediction.shape))
+	# print("gtClasses shape: "+str(gtClasses.shape))
+	# print("ce shape: "+str(ce.shape))
 	fakenodes = tf.equal(gtClasses,0)
-	print("fakenodes shape: "+str(fakenodes.shape))
+	# print("fakenodes shape: "+str(fakenodes.shape))
 	fakenodes = tf.reduce_all(fakenodes,axis=2)
-	print("fakenodes shape: "+str(fakenodes.shape))
+	# print("fakenodes shape: "+str(fakenodes.shape))
 	zeroVec = tf.zeros_like(ce)
 
 	loss = tf.where(fakenodes,zeroVec,ce)
@@ -502,7 +502,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = True
+	pickleLoad = False
 	pickleSave = True
 
 	K_faces = 25
@@ -714,7 +714,7 @@ def mainFunction():
 		else:
 			# Training set
 			for filename in os.listdir(inputFilePath):
-				if training_meshes_num[0]>10:
+				if training_meshes_num[0]>1000:
 					break
 				if (filename.endswith(".obj")):
 					print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
