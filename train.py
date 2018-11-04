@@ -360,7 +360,7 @@ def faceSegmentationLoss(prediction, gtClasses):
 	print("ce shape: "+str(ce.shape))
 	fakenodes = tf.equal(gtClasses,0)
 	print("fakenodes shape: "+str(fakenodes.shape))
-	fakenodes = tf.reduce_all(fakenodes,axis=1)
+	fakenodes = tf.reduce_all(fakenodes,axis=2)
 	print("fakenodes shape: "+str(fakenodes.shape))
 	zeroVec = tf.zeros_like(ce)
 
