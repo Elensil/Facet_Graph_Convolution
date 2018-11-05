@@ -60,6 +60,7 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 
 		e_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_EDGES,4], name='e_map_')
 		ve_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_POINTS,MAX_EDGES], name='ve_map_')
+
 		keep_prob = tf.placeholder(tf.float32)
 
 		
@@ -73,9 +74,8 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		#rotTens = getRotationToAxis(fn_)
 		fn_normal_only = tf.slice(fn_,[0,0,0],[-1,-1,3])
 		with tf.variable_scope("model"):
-			#n_conv = get_model_reg(fn_, fadj, ARCHITECTURE, keep_prob)
-			n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
-			#n_conv = get_model_reg_multi_scale(fn_normal_only, fadjs, ARCHITECTURE, keep_prob)
+			n_conv, pred_features = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+			# prediction = get_classification_model(pred_features,NUM_CLASSES)
 
 		# n_conv = normalizeTensor(n_conv)
 		# n_conv = tf.expand_dims(n_conv,axis=-1)
@@ -94,7 +94,6 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map):
 		if ckpt and ckpt.model_checkpoint_path:
 			saver.restore(sess, ckpt.model_checkpoint_path)
 
-		
 		refined_x = update_position2(xp_, n_conv, e_map_, ve_map_)
 
 		points = tf.squeeze(refined_x)
@@ -133,7 +132,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 	NUM_IN_CHANNELS = f_normals_list[0].shape[2]
 	NUM_CLASSES = f_labels_list[0].shape[2]
 
-	loss_lmbd = 0.1
+	loss_lmbd = 10
 
 	# training data
 	fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
@@ -180,8 +179,9 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 
 	
 	with tf.device(DEVICE):
-		customLoss = faceNormalsLoss(n_conv, tfn_,reduce=False) + loss_lmbd * faceSegmentationLoss(prediction,gtClasses_)
-		customLoss = tf.reduce_mean(customLoss)
+		customLoss, totalWeight = faceNormalsLoss(n_conv, tfn_,reduce=False)
+		customLoss = customLoss + loss_lmbd * faceSegmentationLoss(prediction,gtClasses_)
+		customLoss = tf.reduce_sum(customLoss)/totalWeight
 		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
 		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
 		train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
@@ -349,7 +349,7 @@ def faceNormalsLoss(fn,gt_fn, reduce=True):
 	if reduce:
 		loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
 	#loss = tf.reduce_mean(loss)
-	return loss
+	return loss, tf.reduce_sum(realnodes)
 
 def faceSegmentationLoss(prediction, gtClasses):
 
@@ -523,8 +523,6 @@ def mainFunction():
 
 	centroidDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
 
-	with open(centroidDumpPath+'centroids_8', 'rb') as fp:
-		centroids = pickle.load(fp)
 
 	running_mode = RUNNING_MODE
 	###################################################################################################
@@ -668,6 +666,8 @@ def mainFunction():
 
 	if running_mode == 0:
 
+		with open(centroidDumpPath+'centroids_8', 'rb') as fp:
+			centroids = pickle.load(fp)
 		gtnameoffset = 15
 		f_normals_list = []
 		f_adj_list = []
