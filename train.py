@@ -447,7 +447,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 
-	pickleLoad = True
+	pickleLoad = False
 	pickleSave = True
 
 	K_faces = 25
@@ -461,6 +461,8 @@ def mainFunction():
 	#binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/smallAdj/"
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
 	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+
+	binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v1/coarsening4/"
 
 	#binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/MS9_res/"
 
@@ -613,7 +615,7 @@ def mainFunction():
 
 	if running_mode == 0:
 
-		gtnameoffset = 15
+		gtnameoffset = 10
 		f_normals_list = []
 		f_adj_list = []
 		GTfn_list = []
@@ -627,9 +629,9 @@ def mainFunction():
 		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
 		# gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 
-		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_train/"
-		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_valid/"
-		gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/noisy/"
+		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/valid/"
+		gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/original/"
 		
 
 		#print("training_meshes_num 0 " + str(training_meshes_num))
@@ -658,8 +660,7 @@ def mainFunction():
 					break
 				#if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
 				#if (filename.endswith(".obj") and not(filename.startswith("buste"))):
-				if (filename.endswith(".obj") and not(filename.startswith("aabust")) and not(filename.startswith("aaJulius")) and not(filename.startswith("aaleg")) \
-					and not(filename.startswith("aavase")) and not(filename.startswith("aadragon"))):
+				if (filename.endswith(".obj")):
 
 					print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
 					gtfilename = filename[:-gtnameoffset]+".obj"
