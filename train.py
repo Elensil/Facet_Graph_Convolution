@@ -304,25 +304,6 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 	np.savetxt(f,lossArray, delimiter=",")
 
 
-def checkNan(my_feed_dict):
-	sess = tf.get_default_session()
-	nan0 = sess.run('nan0:0',feed_dict=my_feed_dict)
-	# nan1 = sess.run('nan1:0',feed_dict=my_feed_dict)
-	# nan2 = sess.run('nan2:0',feed_dict=my_feed_dict)
-	# nan3 = sess.run('nan3:0',feed_dict=my_feed_dict)
-	# nan4 = sess.run('nan4:0',feed_dict=my_feed_dict)
-	# nan5 = sess.run('nan5:0',feed_dict=my_feed_dict)
-	# nan6 = sess.run('nan6:0',feed_dict=my_feed_dict)
-
-	print("nan0: " + str(np.any(nan0)))
-	# print("nan1: " + str(np.any(nan0)))
-	# print("nan2: " + str(np.any(nan0)))
-	# print("nan3: " + str(np.any(nan0)))
-	# print("nan4: " + str(np.any(nan0)))
-	# print("nan5: " + str(np.any(nan0)))
-	# print("nan6: " + str(np.any(nan0)))
-
-
 def faceNormalsLoss(fn,gt_fn):
 
 	#version 1
@@ -345,21 +326,6 @@ def faceNormalsLoss(fn,gt_fn):
 	loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
 	#loss = tf.reduce_mean(loss)
 	return loss
-
-
-def is_almost_equal(x,y,threshold):
-	if np.sum((x-y)**2)<threshold**2:
-		return True
-	else:
-		return False
-
-
-def unique_columns2(data):
-	dt = np.dtype((np.void, data.dtype.itemsize * data.shape[0]))
-	dataf = np.asfortranarray(data).view(dt)
-	u,uind = np.unique(dataf, return_inverse=True)
-	u = u.view(data.dtype).reshape(-1,data.shape[0]).T
-	return (u,uind)
 
 
 
@@ -470,7 +436,7 @@ def normalizeTensor(x):
 		square = tf.square(x,name="square")
 		square_sum = tf.reduce_sum(square,axis=-1,name="square_sum")
 		norm = tf.sqrt(epsilon+square_sum,name="sqrt")
-		
+
 		norm_non_zeros = tf.greater(norm,epsilon)
 		inv_norm = tf.where(norm_non_zeros,tf.reciprocal(norm+epsilon,name="norm_division"),tf.zeros_like(norm,name="zeros"))
 		newX = tf.multiply(x, tf.expand_dims(inv_norm,axis=-1),name="result")
@@ -480,7 +446,7 @@ def normalizeTensor(x):
 
 def mainFunction():
 
-	
+
 	pickleLoad = True
 	pickleSave = True
 
@@ -752,7 +718,7 @@ def mainFunction():
 			# if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("eros")) or (gtFileName.startswith("armad")) or \
 			# 	(gtFileName.startswith("carter")) or (gtFileName.startswith("chinese")) or (gtFileName.startswith("gargoyle")) or \
 			# 	(gtFileName.startswith("Nicolo")) or (gtFileName.startswith("pulley")) or (gtFileName.startswith("fertility")):
-			if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("Merlion")) or (gtFileName.startswith("armadillo")) or (gtFileName.startswith("gargoyle")) or \
+			if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("Merlion")) or (gtFileName.startswith("armadillo")) or (gtFileName.startswith("aagargoyle")) or \
 			(gtFileName.startswith("dragon")):
 				continue
 
@@ -1224,49 +1190,6 @@ def mainFunction():
 		# write_xyz(fpos0[closest==6], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster6.xyz")
 		# write_xyz(fpos0[closest==7], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster7.xyz")
 
-		
-
-def refineMesh(x,displacement,normals,adj):		#params are tensors
-	
-	batch_size, num_points, in_channels = x.get_shape().as_list()
-	K = adj.shape[2]
-	#compute displacement vector for each point
-	displacement_vector = tf.multiply(tf.tile(displacement,[1,1,3]),normals)
-
-	#return displacement_vector+x
-	# deformation model:
-	# each point vi is displaced by (1/2)*di + (1/2) * sum(j in neighbourhood Ni) ((1/|Ni|) * dj)
-
-	#First, compute neighbourhood size:
-
-	# Calculate neighbourhood size for each input - [batch_size, input_size, neighbours]
-	adj_size = tf.count_nonzero(adj, 2)-1 		# -1 because we do not include point in its neighbourhood this time
-	#deal with unconnected points: replace NaN with 0
-	non_zeros = tf.not_equal(adj_size, 0)
-	adj_size = tf.cast(adj_size, tf.float32)
-	adj_size = tf.where(non_zeros,tf.reciprocal(adj_size,name="neighbourhood_size_inv")*0.5,tf.zeros_like(adj_size))	#1 / 2*|Ni|
-	# [batch_size, input_size, 1, 1]
-	#adj_size = tf.reshape(adj_size, [batch_size, input_size, 1])
-	adj_size = tf.expand_dims(adj_size,axis=-1)
-
-	# Then, get slices of displacement vectors and weight depending on neighbourhood
-	# 
-
-	#n_weight = get_slices(tf.expand_dims(adj_size,axis=-1),adj[:,:,1:])
-
-	n_weight = tf.tile(adj_size,[1,1,K-1])
-	#n_weight = get_slices(adj_size,adj[:,:,1:])
-
-	n_weight = tf.concat([tf.constant(0.5,shape=[batch_size,num_points,1]),n_weight],axis=2)		# 1 for cloumn K=0, 1 for channels number (in_channels)
-	n_weight = tf.tile(tf.expand_dims(n_weight,axis=-1),[1,1,1,3])
-
-	n_displacement = get_slices(displacement_vector,adj)
-
-	total_displacement = tf.multiply(n_weight,n_displacement)
-
-	total_displacement = tf.reduce_sum(total_displacement, axis=2)
-
-	return total_displacement+x
 
 
 if __name__ == "__main__":

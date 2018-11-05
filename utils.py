@@ -958,3 +958,17 @@ def closest_centroid(points, centroids):
 def move_centroids(points, closest, centroids):
     """returns the new centroids assigned from the points closest to them"""
     return np.array([points[closest==k].mean(axis=0) for k in range(centroids.shape[0])])
+
+
+def unique_columns2(data):
+    dt = np.dtype((np.void, data.dtype.itemsize * data.shape[0]))
+    dataf = np.asfortranarray(data).view(dt)
+    u,uind = np.unique(dataf, return_inverse=True)
+    u = u.view(data.dtype).reshape(-1,data.shape[0]).T
+    return (u,uind)
+
+def is_almost_equal(x,y,threshold):
+    if np.sum((x-y)**2)<threshold**2:
+        return True
+    else:
+        return False
