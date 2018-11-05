@@ -939,6 +939,113 @@ def computeCurvature(fpos, fn, adj):
     # print("curv_stat 0: "+str(curv_stat[0,:,]))
     return curv_stat
 
+# Based on std_dev, median
+def computeCurvature2(fpos, fn, adj):
+    
+    #keep neighbours only
+    adj_n = adj[:,1:]
+    adj_n = adj_n-1
+
+    neighbours_normals = fn[adj_n]
+
+    neighbours_pos = fpos[adj_n]
+
+    # print(" fn 0: "+str(fn[0,:]))
+
+    # print(" adj 0: "+str(adj[0,:]))
+
+    # print(" adj_n 0: "+str(adj_n[0,:]))
+
+    K = adj_n.shape[1]
+
+    fn_n = np.tile(np.expand_dims(fn,axis=1), [1,K,1])
+    # [N, K, 3]
+    fpos_n = np.tile(np.expand_dims(fpos,axis=1), [1,K,1])
+
+
+    fvec = np.subtract(neighbours_pos, fpos_n)
+
+
+    # print("fn_n 0: "+str(fn_n[0,:,:]))
+    # print("n_n 0: "+str(neighbours_normals[0,:,:]))
+
+    #dotP = np.sum(np.multiply(fn_n,neighbours_normals),axis=2)
+
+    dotP = np.sum(np.multiply(fn_n,fvec),axis=2)
+
+    # print("dp 0: "+str(dotP[0,:]))
+    non_zeros = np.not_equal(adj_n, np.zeros_like(adj_n)-1)
+
+    dotP = np.where(non_zeros,dotP,np.zeros_like(dotP))
+
+    dotPWeight = np.where(non_zeros,np.ones_like(dotP),np.zeros_like(dotP))
+
+
+
+    # print("dp 0: "+str(dotP[0,:]))
+    # [N, K]
+
+    curv_med = np.median(dotP,axis=1,keepdims=True)
+    curv_std = np.std(dotP,axis=1,keepdims=True)
+
+    curv_stat = np.concatenate((curv_med,curv_std),axis=1)
+
+    # print("curv_stat 0: "+str(curv_stat[0,:,]))
+    return curv_stat
+
+# Based on 5*var and median
+def computeCurvature3(fpos, fn, adj):
+    
+    #keep neighbours only
+    adj_n = adj[:,1:]
+    adj_n = adj_n-1
+
+    neighbours_normals = fn[adj_n]
+
+    neighbours_pos = fpos[adj_n]
+
+    # print(" fn 0: "+str(fn[0,:]))
+
+    # print(" adj 0: "+str(adj[0,:]))
+
+    # print(" adj_n 0: "+str(adj_n[0,:]))
+
+    K = adj_n.shape[1]
+
+    fn_n = np.tile(np.expand_dims(fn,axis=1), [1,K,1])
+    # [N, K, 3]
+    fpos_n = np.tile(np.expand_dims(fpos,axis=1), [1,K,1])
+
+
+    fvec = np.subtract(neighbours_pos, fpos_n)
+
+
+    # print("fn_n 0: "+str(fn_n[0,:,:]))
+    # print("n_n 0: "+str(neighbours_normals[0,:,:]))
+
+    #dotP = np.sum(np.multiply(fn_n,neighbours_normals),axis=2)
+
+    dotP = np.sum(np.multiply(fn_n,fvec),axis=2)
+
+    # print("dp 0: "+str(dotP[0,:]))
+    non_zeros = np.not_equal(adj_n, np.zeros_like(adj_n)-1)
+
+    dotP = np.where(non_zeros,dotP,np.zeros_like(dotP))
+
+    dotPWeight = np.where(non_zeros,np.ones_like(dotP),np.zeros_like(dotP))
+
+
+
+    # print("dp 0: "+str(dotP[0,:]))
+    # [N, K]
+
+    curv_med = np.median(dotP,axis=1,keepdims=True)
+    curv_var = np.var(dotP,axis=1,keepdims=True)
+
+    curv_stat = np.concatenate((curv_med,5*curv_var),axis=1)
+
+    # print("curv_stat 0: "+str(curv_stat[0,:,]))
+    return curv_stat
 
 def customKMeans(points, k, iternum=500):
 

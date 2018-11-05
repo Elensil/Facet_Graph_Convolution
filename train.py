@@ -132,7 +132,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, f_labels_list, valid_f_norma
 	NUM_IN_CHANNELS = f_normals_list[0].shape[2]
 	NUM_CLASSES = f_labels_list[0].shape[2]
 
-	loss_lmbd = 10
+	loss_lmbd = 1
 
 	# training data
 	fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
@@ -502,7 +502,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 	
-	pickleLoad = True
+	pickleLoad = False
 	pickleSave = True
 
 	K_faces = 25
@@ -666,9 +666,9 @@ def mainFunction():
 
 	if running_mode == 0:
 
-		with open(centroidDumpPath+'centroids_8', 'rb') as fp:
+		with open(centroidDumpPath+'centroids_4', 'rb') as fp:
 			centroids = pickle.load(fp)
-		gtnameoffset = 15
+		gtnameoffset = 7
 		f_normals_list = []
 		f_adj_list = []
 		GTfn_list = []
@@ -681,13 +681,13 @@ def mainFunction():
 
 		valid_f_labels_list = []
 
-		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-		# gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
-
-		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_train/"
-		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_valid/"
+		inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+		validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
 		gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+
+		# inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_train/"
+		# validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/first_pass_valid/"
+		# gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 		
 
 		#print("training_meshes_num 0 " + str(training_meshes_num))
@@ -1166,7 +1166,7 @@ def mainFunction():
 				f_normals0 = computeFacesNormals(V0, faces0)
 				f_adj0 = getFacesLargeAdj(faces0,K_faces)
 				fpos0 = getTrianglesBarycenter(V0, faces0)
-				curv_stat0 = computeCurvature(fpos0, f_normals0,f_adj0)
+				curv_stat0 = computeCurvature3(fpos0, f_normals0,f_adj0)
 
 				if not 'curv_stat' in locals():
 					curv_stat = curv_stat0
@@ -1186,11 +1186,11 @@ def mainFunction():
 
 		# curv_stat = computeCurvature(fpos0, f_normals0,f_adj0)
 
-		centroids, closest = customKMeans(curv_stat, 8)
+		centroids, closest = customKMeans(curv_stat, 4)
 
 		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
 
-		with open(binDumpPath+'centroids_8', 'wb') as fp:
+		with open(binDumpPath+'centroids_4_var', 'wb') as fp:
 			pickle.dump(centroids, fp, protocol=2)
 		
 
@@ -1204,7 +1204,7 @@ def mainFunction():
 
 		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/class_centroids/"
 
-		with open(binDumpPath+'centroids_8', 'rb') as fp:
+		with open(binDumpPath+'centroids_4_var', 'rb') as fp:
 			centroids = pickle.load(fp)
 		
 		# Training set
@@ -1215,18 +1215,18 @@ def mainFunction():
 				f_normals0 = computeFacesNormals(V0, faces0)
 				f_adj0 = getFacesLargeAdj(faces0,K_faces)
 				fpos0 = getTrianglesBarycenter(V0, faces0)
-				curv_stat0 = computeCurvature(fpos0, f_normals0,f_adj0)
+				curv_stat0 = computeCurvature3(fpos0, f_normals0,f_adj0)
 
 				closest0 = closest_centroid(curv_stat0, centroids)
 
-				for clu in range(8):
+				for clu in range(4):
 					clu_color = colors[clu]
 					v_clu = V0
 					clu_color = np.tile(clu_color,[v_clu.shape[0],1])
 					v_clu = np.concatenate((v_clu,clu_color),axis=1)
 					f_clu = faces0[closest0==clu]
 
-					write_mesh(v_clu,f_clu, "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/" + filename + str(clu) + ".obj")
+					write_mesh(v_clu,f_clu, "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/clustering_4_var/" + filename + str(clu) + ".obj")
 
 		# write_xyz(fpos0[closest==0], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster0.xyz")
 		# write_xyz(fpos0[closest==1], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster1.xyz")
@@ -1237,6 +1237,33 @@ def mainFunction():
 		# write_xyz(fpos0[closest==6], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster6.xyz")
 		# write_xyz(fpos0[closest==7], "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/cluster7.xyz")
 
+	elif running_mode == 7:
+
+		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
+		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+
+		binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/classTest/"
+		# Validation
+		with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
+			valid_f_normals_list = pickle.load(fp,encoding='latin1')
+		with open(binDumpPath+'valid_GTfn_list', 'rb') as fp:
+			valid_GTfn_list = pickle.load(fp,encoding='latin1')
+		print("size: "+str(valid_f_normals_list[10].shape))
+		print("size: "+str(valid_f_normals_list[9].shape))
+		print("size: "+str(valid_f_normals_list[8].shape))
+		print("size: "+str(valid_f_normals_list[7].shape))
+		print("size: "+str(valid_f_normals_list[6].shape))
+		print("size: "+str(valid_f_normals_list[5].shape))
+		print("size: "+str(valid_f_normals_list[4].shape))
+		print("size: "+str(valid_f_normals_list[4].shape))
+		print("size: "+str(valid_f_normals_list[3].shape))
+		print("size: "+str(valid_f_normals_list[2].shape))
+		print("size: "+str(valid_f_normals_list[1].shape))
+		print("size: "+str(valid_f_normals_list[0].shape))
+		
+
+		print("f_normals samp: "+str(valid_f_normals_list[5][0,0:3,:3]))
+		print("GT_normals samp: "+str(valid_GTfn_list[5][0,0:3,:]))
 		
 
 def refineMesh(x,displacement,normals,adj):		#params are tensors
