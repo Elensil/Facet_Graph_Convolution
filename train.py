@@ -100,10 +100,11 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
                     # remove fake nodes from prediction
                     outN = outN[0:num_wofake_nodes[i]]
                     for count in range(old_to_new_permutations[i].shape[0]):
-                        predicted_normals[old_to_new_permutations[i][count]] = outN[i]
+                        predicted_normals[old_to_new_permutations[i][count]][0] = outN[count][0]
+                        predicted_normals[old_to_new_permutations[i][count]][1] = outN[count][1]
+                        predicted_normals[old_to_new_permutations[i][count]][2] = outN[count][2]
 
                 #Update vertices position
-
                 new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
                 #refined_x = update_position(xp_,fadj, n_conv)
                 refined_x = update_position2(xp_, new_normals, e_map_, ve_map_)
