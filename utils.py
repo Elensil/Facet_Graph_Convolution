@@ -596,7 +596,7 @@ def oneSidedHausdorff(V0,V1):
 # Returns a pair of floats: the average angular difference (in degrees) between pairs of normals, and the std
 
 # Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
-def angularDiff(n0,n1):
+def angularDiff(n0,n1, mean=True):
 
     faceNum = n0.shape[0]
 
@@ -639,7 +639,36 @@ def angularDiff(n0,n1):
     # print("angDiffTest = "+str(angDiffTest))
     # print("mean angDiff = "+str(np.mean(angDiff)))
     # print("angDiff example: "+str(angDiff[0]))
-    return np.mean(angDiff), np.std(angDiff)
+    if mean:
+        return np.mean(angDiff), np.std(angDiff)
+    else:
+        return angDiff
+
+
+# Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
+def angularDiffVec(n0,n1):
+
+    faceNum = n0.shape[0]
+
+    fakenodes = np.less_equal(np.absolute(n1),10e-4)
+    fakenodes = np.all(fakenodes,axis=-1)
+    
+    n0 = normalize(n0)
+    n1 = normalize(n1)
+
+    # print("n0 example: "+str(n0[0,:]))
+    # print("n1 example: "+str(n1[0,:]))
+
+    dotP = np.sum(np.multiply(n0,n1),axis=1)
+    #print("dotP example: "+str(dotP[0]))
+
+    # print("min dotP = "+str(np.amin(dotP)))
+    # print("max dotP = "+str(np.amax(dotP)))
+
+    angDiff = np.arccos(0.999999*dotP)
+    angDiff = angDiff*180/math.pi
+    
+    return angDiff
 
 # Takes a mesh as input (vertices list vl, faces list fl), and returns a list of faces areas (faces are assumed to be triangular)
 def getTrianglesArea(vl,fl):
@@ -972,3 +1001,30 @@ def is_almost_equal(x,y,threshold):
         return True
     else:
         return False
+
+
+def getHeatMapMesh(V, F, heatmap):
+
+    facesNum = F.shape[0]
+    newV = np.array([])
+
+    for f in range(facesNum):
+        vCol = np.full((3,3),heatmap[f])
+        myF = F[f,:]
+        v0 = np.expand_dims(V[myF[0]],axis=0)
+        v1 = np.expand_dims(V[myF[1]],axis=0)
+        v2 = np.expand_dims(V[myF[2]],axis=0)
+        
+        #print("vCol shape: "+str(vCol.shape))
+        vArr = np.concatenate((v0,v1,v2),axis=0)
+        #print("vArr shape: "+str(vArr.shape))
+        vArr = np.concatenate((vArr,vCol),axis=1)
+        #print("vArr shape: "+str(vArr.shape))
+        if f==0:
+            newV = vArr
+        else:
+            newV = np.append(newV,vArr,axis=0)
+
+    newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
+
+    return newV, newF
