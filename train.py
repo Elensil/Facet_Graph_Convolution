@@ -93,7 +93,7 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
 		# points shape should now be [NUM_POINTS, 3]
                 predicted_normals = np.zeros([num_faces,3])
                 for i in range(len(f_normals)):
-                    print("Patch "+str(i+1)+" / "+len(f_normals))
+                    print("Patch "+str(i+1)+" / "+str(len(f_normals)))
                     my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2],
                                     keep_prob:1.0, images_:[input_images[i]], calibs_:[input_calibs[i]]}
                     outN = sess.run(tf.squeeze(n_conv),feed_dict=my_feed_dict)
