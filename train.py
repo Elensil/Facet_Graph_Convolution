@@ -882,7 +882,7 @@ def mainFunction():
 
 			mesh_count_list[0]+=1
 
-            def addBigMesh(inputFilePath,filename, gtFilePath, gtfilename, in_list, gt_list, adj_list, mesh_count_list,images_list,calibs_list):
+        def addBigMesh(inputFilePath,filename, gtFilePath, gtfilename, in_list, gt_list, adj_list, mesh_count_list,images_list,calibs_list):
                     new_to_old_permutations_list = []
                     num_faces = []
                     # --- Load mesh ---
@@ -1049,6 +1049,7 @@ def mainFunction():
 
                             mesh_count_list[0]+=1
                     return num_faces, new_to_old_permutations_list
+
 	if running_mode == 0:
                 # Training patch size
                 maxSize = 1100
@@ -1256,8 +1257,8 @@ def mainFunction():
 
 	elif running_mode == 2:
                 # Training patch size
-                maxSize = 100100
-                patchSize = 100000
+                maxSize = 110
+                patchSize = 100
 
                 # Generate array of metrics on reconstructions
 		nameArray = []		# String array, to now which row is what
