@@ -2638,7 +2638,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         # Discard invalid normal_z_coords
         #subtract normal's depths to barycenter's
         subtraction = tf.subtract(normal_z_coords,z_coords,name='visibility_subtraction')
-        visibility_mask = tf.greater(subtraction,tf.zeros_like(subtraction),name='visibility_mask') ## tf.less() or greater?
+        visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask') ## tf.less() or greater?
         mask = tf.logical_and(mask,visibility_mask) #
 
         print("Mask Shape: ",mask.get_shape().as_list())
@@ -3003,7 +3003,7 @@ def getAverageProjFeat(x,images_,calibs_):
         ################### Discard cameras behind triangle: ###################
         #recover z coordinate of (barycenter + normal).
         #if z(barycenter +normal) - z(barycenter) > 0 discard (camera behind) else, accept
-
+	## (Innacurate but good enough)
         #Multiply 3D coordinates with projection matrices
         num_cameras = calibs_.get_shape().as_list()[1]
         #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])

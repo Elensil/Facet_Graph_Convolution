@@ -618,7 +618,7 @@ def angularDiff(n0,n1):
 
     faceNum = n0.shape[0]
 
-    fakenodes = np.less_equal(n1,10e-4)
+    fakenodes = np.less_equal(np.absolute(n1),10e-4)
     fakenodes = np.all(fakenodes,axis=-1)
     
     n0 = normalize(n0)

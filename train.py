@@ -13,7 +13,7 @@ from tensorflow.python import debug as tf_debug
 import random
 from lib.coarsening import *
 
-def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_lists):
+def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_lists,num_fake_nodes,old_to_new_permutations,num_faces):
 
 	with tf.Graph().as_default():
 		random_seed = 0
@@ -28,8 +28,6 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map,images_lists,
 		if not os.path.exists(RESULTS_PATH):
 				os.makedirs(RESULTS_PATH)
 
-		if not os.path.exists(NETWORK_PATH):
-				os.makedirs(NETWORK_PATH)
 		"""
 		Load dataset 
 		x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
@@ -42,7 +40,7 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map,images_lists,
 		NUM_FACES = f_normals.shape[1]
 		MAX_EDGES = v_e_map.shape[2]
 		NUM_EDGES = edge_map.shape[1]
-		K_faces = f_adj[0].shape[2]
+                K_faces = f_adj[0].shape[2]
 		NUM_IN_CHANNELS = f_normals.shape[2]
 
 
@@ -52,7 +50,6 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map,images_lists,
                 IMG_CHANNELS = np.shape(images_lists)[4]
 
 		xp_ = tf.placeholder('float32', shape=(BATCH_SIZE, NUM_POINTS,3),name='xp_')
-		faces_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_FACES,3], name='faces_')
 
 		fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, NUM_FACES, NUM_IN_CHANNELS], name='fn_')
 		#fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_FACES, K_faces], name='fadj')
@@ -71,56 +68,51 @@ def inferNet(in_points, faces, f_normals, f_adj, edge_map, v_e_map,images_lists,
 
                 input_images = images_lists
                 input_calibs = calibs_lists
-
-		my_feed_dict = {xp_:in_points, faces_:faces, fn_: f_normals, fadj: f_adj,
-                                                e_map_: edge_map, ve_map_: v_e_map, keep_prob:1,
-                                                images_:input_images, calibs_:input_calibs}
-                """
-		my_feed_dict = {xp_:in_points, faces_:faces, fn_: f_normals, fadj0: f_adj[0], fadj1: f_adj[1], fadj2: f_adj[2],
-						e_map_: edge_map, ve_map_: v_e_map, keep_prob:1}
-                """
-		
 		
 		batch = tf.Variable(0, trainable=False)
 		fadjs = [fadj0,fadj1,fadj2]
 		# --- Starting iterative process ---
 		#rotTens = getRotationToAxis(fn_)
-		fn_normal_only = tf.slice(fn_,[0,0,0],[-1,-1,3])
+                #fn_normal_only = tf.slice(fn_,[0,0,0],[-1,-1,3])
 		with tf.variable_scope("model"):
-			n_conv = get_appearance_model_reg(fn_, fadj, ARCHITECTURE, keep_prob,images_,calibs_)
+                        #n_conv = get_appearance_model_reg(fn_, fadj, ARCHITECTURE, keep_prob,images_,calibs_)
+                        n_conv = get_model_reg_multi_scale_appearance(fn_, fadjs, ARCHITECTURE, keep_prob, images_, calibs_)
 			#n_conv = get_model_reg(fn_, fadj, ARCHITECTURE, keep_prob)
 			#n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 			#n_conv = get_model_reg_multi_scale(fn_normal_only, fadjs, ARCHITECTURE, keep_prob)
 
-		# n_conv = normalizeTensor(n_conv)
-		# n_conv = tf.expand_dims(n_conv,axis=-1)
-		# n_conv = tf.matmul(tf.transpose(rotTens,[0,1,3,2]),n_conv)
-		# n_conv = tf.reshape(n_conv,[BATCH_SIZE,-1,3])
-		#n_conv = tf.slice(fn_,[0,0,0],[-1,-1,3])+n_conv
 
 		n_conv = normalizeTensor(n_conv)
-
 
 		saver = tf.train.Saver()
 		sess.run(tf.global_variables_initializer())
 
-		
-		ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
+                ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
 		if ckpt and ckpt.model_checkpoint_path:
 			saver.restore(sess, ckpt.model_checkpoint_path)
 
-		
-                #refined_x = update_position(xp_,fadj, n_conv)
-                refined_x = update_position2(xp_, n_conv, e_map_, ve_map_)
-
-		points = tf.squeeze(refined_x)
 		# points shape should now be [NUM_POINTS, 3]
+                predicted_normals = []
+                for i in range(num_patches):
+                    my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2],
+                                    keep_prob:1.0, images_:input_images, calibs_:input_calibs}
+                    outN = sess.run(n_conv,feed_dict=my_feed_dict)
+                    predicted_normals.append(outN)
+                    print("outN shape: ",outN.shape)
+                    exit()
 
-		my_feed_dict[keep_prob]=1
-		
-		outPoints, outN = sess.run([points,tf.squeeze(n_conv)],feed_dict=my_feed_dict)
+                #Now gather patches predictions and update vertices position
+
+                new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
+                #refined_x = update_position(xp_,fadj, n_conv)
+                refined_x = update_position2(xp_, new_normals, e_map_, ve_map_)
+                points = tf.squeeze(refined_x)
+
+                update_feed_dict = {xp_:in_points, new_normals: outN, e_map_: edge_map, ve_map_: v_e_map}
+                outPoints = sess.run(points,feed_dict=update_feed_dict)
 		sess.close()
-	return outPoints, outN
+
+        return outPoints, predicted_normals
 
 def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list,valid_images_lists,valid_calibs_lists):
 	
@@ -142,7 +134,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 	"""
 	BATCH_SIZE=f_normals_list[0].shape[0]
 	BATCH_SIZE=1
-	K_faces = f_adj_list[0][0].shape[2]
+        K_faces = f_adj_list[0][0].shape[2]
 	NUM_IN_CHANNELS = f_normals_list[0].shape[2]
 
         NUM_CAMS = np.shape(images_lists)[1]
@@ -202,15 +194,16 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 
 	
 	with tf.device(DEVICE):
-		#validLoss = faceNormalsLoss(n_conv, tfn_)
-		#validLoss = faceNormalsSampledLoss(n_conv, tfn_, sample_ind)
-		#customLoss = faceNormalsSampledLoss(n_conv, tfn_, sample_ind)
-		customLoss = faceNormalsLoss(n_conv, tfn_)
-		# customLoss2 = faceNormalsLoss(n_conv2, tfn_)
-		# customLoss3 = faceNormalsLoss(n_conv3, tfn_)
-		train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
-		# train_step2 = tf.train.AdamOptimizer().minimize(customLoss2, global_step=batch)
-		# train_step3 = tf.train.AdamOptimizer().minimize(customLoss3, global_step=batch)
+                with tf.variable_scope("loss"):
+                    #validLoss = faceNormalsLoss(n_conv, tfn_)
+                    #validLoss = faceNormalsSampledLoss(n_conv, tfn_, sample_ind)
+                    #customLoss = faceNormalsSampledLoss(n_conv, tfn_, sample_ind)
+                    customLoss = faceNormalsLoss(n_conv, tfn_)
+                    # customLoss2 = faceNormalsLoss(n_conv2, tfn_)
+                    # customLoss3 = faceNormalsLoss(n_conv3, tfn_)
+                    train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
+                    # train_step2 = tf.train.AdamOptimizer().minimize(customLoss2, global_step=batch)
+                    # train_step3 = tf.train.AdamOptimizer().minimize(customLoss3, global_step=batch)
 
 	saver = tf.train.Saver()
 
@@ -275,7 +268,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 
 			#sess.run(customLoss,feed_dict=train_fd)
                         local_train_loss = sess.run(customLoss,feed_dict=train_fd)
-                        print("Local Training Loss: "+str(local_train_loss))
+                        #print("Local Training Loss: "+str(local_train_loss))
                         train_loss += local_train_loss
 			train_samp+=1
 			# Show smoothed training loss
@@ -309,7 +302,10 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
                                                 fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm],
                                                 sample_ind: valid_random_ind, keep_prob:1, images_:input_images, calibs_:input_calibs}
                                     local_valid_loss = sess.run(customLoss,feed_dict=valid_fd)
-                                    print("Local Valid Loss: "+str(local_valid_loss))
+                                    #print("Local Valid Loss: "+str(local_valid_loss))
+                                    if local_valid_loss != local_valid_loss:
+                                        print("Found NaN Loss!")
+                                        print(valid_GTfn_list[vbm][0][0:50][:])
                                     valid_loss += local_valid_loss
 
 
@@ -363,9 +359,14 @@ def faceNormalsLoss(fn,gt_fn):
 	#loss = tf.acos(n_dt-1e-5)	# So that it stays differentiable close to 1
         close_to_one = 0.999999999
         loss = tf.acos(tf.maximum(tf.minimum(n_dt,close_to_one),-close_to_one))	# So that it stays differentiable close to 1 and -1
-
-	fakenodes = tf.less_equal(gt_fn,10e-4)
-	fakenodes = tf.reduce_all(fakenodes,axis=-1)
+        print("GTFN shape: ",gt_fn.get_shape().as_list())
+        gtfn_abs_sum = tf.reduce_sum(tf.abs(gt_fn),axis=2)
+        print("Summed GTFN shape: ",gtfn_abs_sum.get_shape().as_list())
+        fakenodes = tf.less_equal(gtfn_abs_sum,10e-4,name='FakeNodesMask')
+        #fakenodes = tf.reduce_all(fakenodes,axis=-1)
+        print("fakenodes shape: ",fakenodes.get_shape().as_list())
+        print("Loss shape: ",loss.get_shape().as_list())
+        #exit()
 
 	zeroVec = tf.zeros_like(loss)
 	oneVec = tf.ones_like(loss)
@@ -699,9 +700,6 @@ def mainFunction():
 
 	K_faces = 25
 
-	maxSize = 30000
-	patchSize = 25000
-
 	training_meshes_num = [0]
 	valid_meshes_num = [0]
 
@@ -718,6 +716,8 @@ def mainFunction():
 
         #Takes the path to noisy and GT meshes as input, and add data to the lists fed to tensorflow graph, with the right format
         def addMesh(inputFilePath,filename, gtFilePath, gtfilename, in_list, gt_list, adj_list, mesh_count_list,images_list,calibs_list):
+                new_to_old_permutations_list = []
+                num_faces = []
 		# --- Load mesh ---
                 V0,_,_, faces0, _ = load_mesh(inputFilePath, filename+'/Noisy/000.obj', 0, False)
 		# Compute normals
@@ -768,7 +768,6 @@ def mainFunction():
 				faceSeed = np.random.randint(facesNum)
 				testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
 
-				GTPatchV = GT0[vOldInd]
 				#patchFNormals = f_normals0[fOldInd]
 				patchFNormals = f_normals_pos[fOldInd]
 				patchGTFNormals = GTf_normals0[fOldInd]
@@ -780,6 +779,12 @@ def mainFunction():
 				# There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
 				new_N = len(newToOld)
 				old_N = patchFNormals.shape[0]
+
+                                ##### Save number of triangles and patch new_to_old permutation #####
+                                num_faces.append(old_N)
+                                new_to_old_permutations_list.append(fOldInd)
+                                #####################################################################
+
 				padding6 =np.zeros((new_N-old_N,6))
 				padding3 =np.zeros((new_N-old_N,3))
 				print("padding6 shape: "+str(padding6.shape))
@@ -805,14 +810,21 @@ def mainFunction():
 				#f_adj = np.expand_dims(testPatchAdj, axis=0)
 				GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
 
-				in_list.append(f_normals)
-				adj_list.append(fAdjs)
-				gt_list.append(GTf_normals)
-                                images_list.append(loaded_images)
-                                calibs_list.append(loaded_calibs)
+                                print("f_normals shape: ",np.shape(f_normals))
+                                print("GTf_normals shape: ",np.shape(GTf_normals))
+                                if np.sum(np.abs(GTf_normals)) > 0.0:
+                                    in_list.append(f_normals)
+                                    adj_list.append(fAdjs)
+                                    gt_list.append(GTf_normals)
+                                    images_list.append(loaded_images)
+                                    calibs_list.append(loaded_calibs)
 
-				print("Added training patch: mesh " + filename + ", patch " + str(p) + " (" + str(mesh_count_list[0]) + ")")
-				mesh_count_list[0]+=1
+                                    print("Added patch: mesh " + filename + ", patch " + str(p) + " (" + str(mesh_count_list[0]) + ")")
+                                    mesh_count_list[0]+=1
+                                else:
+                                    print("Found only fake nodes graph, discarding!")
+                                    exit()
+
 		else: 		#Small mesh case
 
 			# print("f_adj: \n"+str(f_adj0))
@@ -834,6 +846,12 @@ def mainFunction():
 			padding3 =np.zeros((new_N-old_N,3))
 			f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
 			GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+
+                        ##### Save number of triangles and patch new_to_old permutation #####
+                        num_faces.append(old_N) # Keep track of fake nodes
+                        new_to_old_permutations_list.append([]) # Nothing to append here, faces are already correctly ordered
+                        #####################################################################
+
 			# Reorder nodes
 			f_normals_pos = f_normals_pos[newToOld]
 			GTf_normals0 = GTf_normals0[newToOld]
@@ -860,11 +878,181 @@ def mainFunction():
                         images_list.append(loaded_images)
                         calibs_list.append(loaded_calibs)
 		
-			print("Added training mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
+                        print("Added mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
 
 			mesh_count_list[0]+=1
 
+            def addBigMesh(inputFilePath,filename, gtFilePath, gtfilename, in_list, gt_list, adj_list, mesh_count_list,images_list,calibs_list):
+                    new_to_old_permutations_list = []
+                    num_faces = []
+                    # --- Load mesh ---
+                    V0,_,_, faces0, _ = load_mesh(inputFilePath, filename+'/Noisy/000.obj', 0, False)
+                    # Compute normals
+                    f_normals0 = computeFacesNormals(V0, faces0)
+                    # Get adjacency
+                    # print("WARNING!!!!! Hardcoded a change in faces adjacency")
+                    # f_adj0, _, _ = getFacesAdj2(faces0)
+                    f_adj0 = getFacesLargeAdj(faces0,K_faces)
+                    # Get faces position
+                    f_pos0 = getTrianglesBarycenter(V0, faces0)
+
+
+                    f_pos0 = np.reshape(f_pos0,(-1,3))
+                    f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
+                    # f_area0 = getTrianglesArea(V0,faces0)
+                    # f_area0 = np.reshape(f_area0, (-1,1))
+                    # f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
+
+                    # Load GT
+                    GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
+                    GTf_normals0 = computeFacesNormals(GT0, faces0)
+
+                    #Load Projection Matrices
+                    loaded_calibs = []
+                    for cam_calib in os.listdir(inputFilePath+'/'+filename+"/Calib/"):
+                        cam_calib_file=inputFilePath+'/'+filename+"/Calib/"+cam_calib
+                        if cam_calib_file.endswith(".txt"):
+                            #Read txt file
+                            loaded_calibs.append(read_calib_file(cam_calib_file))
+
+                    #print("Loaded Matrices shape:",np.shape(loaded_calibs))
+
+                    #Load Corresponding Images
+                    loaded_images = []
+                    for cam_image_folder in os.listdir(inputFilePath+'/'+filename+"/Images/"):
+                        image_file_name = inputFilePath+'/'+filename+"/Images/"+cam_image_folder+"/0001.png"
+                        loaded_images.append(load_image(image_file_name))
+                    #print("Loaded Images Shape: ",np.shape(loaded_images))
+                    if np.shape(loaded_calibs)[0] != np.shape(loaded_images)[0]:
+                        print("Data Parsing Error: mismatch between camera numbers for images and calibs")
+                        exit()
+
+                    # Get patches if mesh is too big
+                    facesNum = faces0.shape[0]
+                    if facesNum>maxSize:
+                            patchNum = int(facesNum/patchSize)+1
+                            for p in range(patchNum):
+                                    faceSeed = np.random.randint(facesNum)
+                                    testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
+
+                                    #patchFNormals = f_normals0[fOldInd]
+                                    patchFNormals = f_normals_pos[fOldInd]
+                                    patchGTFNormals = GTf_normals0[fOldInd]
+
+                                    # Convert to sparse matrix and coarsen graph
+                                    coo_adj = listToSparse(testPatchAdj, patchFNormals[:,3:])
+                                    adjs, newToOld = coarsen(coo_adj,4)
+
+                                    # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                                    new_N = len(newToOld)
+                                    old_N = patchFNormals.shape[0]
+
+                                    ##### Save number of triangles and patch new_to_old permutation #####
+                                    num_faces.append(old_N)
+                                    new_to_old_permutations_list.append(fOldInd)
+                                    #####################################################################
+
+                                    padding6 =np.zeros((new_N-old_N,6))
+                                    padding3 =np.zeros((new_N-old_N,3))
+                                    print("padding6 shape: "+str(padding6.shape))
+                                    print("patchFNormals shape: "+str(patchFNormals.shape))
+                                    patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
+                                    patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+                                    # Reorder nodes
+                                    patchFNormals = patchFNormals[newToOld]
+                                    patchGTFNormals = patchGTFNormals[newToOld]
+
+                                    # Change adj format
+                                    fAdjs = []
+                                    for lvl in range(3):
+                                            fadj = sparseToList(adjs[2*lvl],K_faces)
+                                            fadj = np.expand_dims(fadj, axis=0)
+                                            fAdjs.append(fadj)
+                                                    # fAdjs = []
+                                                    # f_adj = np.expand_dims(testPatchAdj, axis=0)
+                                                    # fAdjs.append(f_adj)
+
+                                    # Expand dimensions
+                                    f_normals = np.expand_dims(patchFNormals, axis=0)
+                                    #f_adj = np.expand_dims(testPatchAdj, axis=0)
+                                    GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
+
+                                    print("f_normals shape: ",np.shape(f_normals))
+                                    print("GTf_normals shape: ",np.shape(GTf_normals))
+                                    if np.sum(np.abs(GTf_normals)) > 0.0:
+                                        in_list.append(f_normals)
+                                        adj_list.append(fAdjs)
+                                        gt_list.append(GTf_normals)
+                                        images_list.append(loaded_images)
+                                        calibs_list.append(loaded_calibs)
+
+                                        print("Added patch: mesh " + filename + ", patch " + str(p) + " (" + str(mesh_count_list[0]) + ")")
+                                        mesh_count_list[0]+=1
+                                    else:
+                                        print("Found only fake nodes graph, discarding!")
+                                        exit()
+
+                    else: 		#Small mesh case
+
+                            # print("f_adj: \n"+str(f_adj0))
+                            # print("faces0: \n"+str(faces0))
+
+                            # print("normals: \n"+str(f_normals0))
+                            # print("GT normals: \n"+str(GTf_normals0))
+                            # print("V0: \n"+str(V0))
+                            # print("GT0: \n"+str(GT0))
+
+                            # Convert to sparse matrix and coarsen graph
+                            coo_adj = listToSparse(f_adj0, f_pos0)
+                            adjs, newToOld = coarsen(coo_adj,4)
+
+                            # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                            new_N = len(newToOld)
+                            old_N = facesNum
+                            padding6 =np.zeros((new_N-old_N,6))
+                            padding3 =np.zeros((new_N-old_N,3))
+                            f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
+                            GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+
+                            ##### Save number of triangles and patch new_to_old permutation #####
+                            num_faces.append(old_N) # Keep track of fake nodes
+                            new_to_old_permutations_list.append([]) # Nothing to append here, faces are already correctly ordered
+                            #####################################################################
+
+                            # Reorder nodes
+                            f_normals_pos = f_normals_pos[newToOld]
+                            GTf_normals0 = GTf_normals0[newToOld]
+
+                            # Change adj format
+                            fAdjs = []
+                            for lvl in range(3):
+                                    fadj = sparseToList(adjs[2*lvl],K_faces)
+                                    fadj = np.expand_dims(fadj, axis=0)
+                                    fAdjs.append(fadj)
+
+                                    # fAdjs = []
+                                    # f_adj = np.expand_dims(f_adj0, axis=0)
+                                    # fAdjs.append(f_adj)
+
+                            # Expand dimensions
+                            f_normals = np.expand_dims(f_normals_pos, axis=0)
+                            #f_adj = np.expand_dims(f_adj0, axis=0)
+                            GTf_normals = np.expand_dims(GTf_normals0, axis=0)
+
+                            in_list.append(f_normals)
+                            adj_list.append(fAdjs)
+                            gt_list.append(GTf_normals)
+                            images_list.append(loaded_images)
+                            calibs_list.append(loaded_calibs)
+
+                            print("Added mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
+
+                            mesh_count_list[0]+=1
+                    return num_faces, new_to_old_permutations_list
 	if running_mode == 0:
+                # Training patch size
+                maxSize = 1100
+                patchSize = 1000
 
 		f_normals_list = []
 		f_adj_list = []
@@ -879,12 +1067,12 @@ def mainFunction():
                 valid_images_lists = []
                 valid_calibs_lists = []
 
-                maxSize = 800
-                patchSize = 500
+
 
                 inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/images"
                 #validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images"
-                validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/eval/images"
+                validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/valid/images"
+
                 training_meshes_num = [0]
                 valid_meshes_num = [0]
 
@@ -896,7 +1084,7 @@ def mainFunction():
 			with open(binDumpPath+'GTfn_list', 'rb') as fp:
 				GTfn_list = pickle.load(fp)
 			with open(binDumpPath+'f_adj_list', 'rb') as fp:
-				f_adj_list = pickle.load(fp)
+                                f_adj_list = pickle.load(fp)
                         with open(binDumpPath+'images_lists', 'rb') as fp:
                                 images_lists = pickle.load(fp)
                         with open(binDumpPath+'calibs_lists', 'rb') as fp:
@@ -908,9 +1096,9 @@ def mainFunction():
 				valid_GTfn_list = pickle.load(fp)
 			with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
 				valid_f_adj_list = pickle.load(fp)
-                        with open(binDumpPath+'images_lists', 'rb') as fp:
+                        with open(binDumpPath+'valid_images_lists', 'rb') as fp:
                                 valid_images_lists = pickle.load(fp)
-                        with open(binDumpPath+'calibs_lists', 'rb') as fp:
+                        with open(binDumpPath+'valid_calibs_lists', 'rb') as fp:
                                 valid_calibs_lists = pickle.load(fp)
 
 		else:
@@ -1067,13 +1255,25 @@ def mainFunction():
                 """
 
 	elif running_mode == 2:
-		
-		# Take the opportunity to generate array of metrics on reconstructions
+                # Training patch size
+                maxSize = 100100
+                patchSize = 100000
+
+                # Generate array of metrics on reconstructions
 		nameArray = []		# String array, to now which row is what
 		resultsArray = []	# results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
 							# [Max distance, Mean distance, Mean angle, std angle, face num]
+                #DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images/"
+                DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/dummy/images/"
 
-                DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images/"
+                f_normals_list = []
+                GTfn_list = []
+                f_adj_list = []
+                images_lists = []
+                calibs_lists = []
+
+                mesh_count = [0]
+
 		# results file name
                 csv_filename = RESULTS_PATH+"/results_eval.csv"
 		
@@ -1082,80 +1282,28 @@ def mainFunction():
 			nameArray = []
 			resultsArray = []
                         gtFolder=DataFolder+filename+"/Ground_Truth/"
-                        noisyFolder=DataFolder+filename+"/Smooth/"
+                        noisyFolder=DataFolder+filename+"/Noisy/"
                         gtFileName ="000.obj"
                         # Get smooth meshes
                         noisyFile0 = "000.obj"
                         denoizedFile0 = filename+"_denoized.obj"
 
+                        # Load GT and Noisy Meshes
+                        gtfilename = filename+"/Ground_Truth/000.obj"
+                        faces_num, permutations = addBigMesh(DataFolder, filename, DataFolder, gtfilename, f_normals_list, GTfn_list, f_adj_list, mesh_count,images_lists,calibs_lists)
 
-                        if os.path.isfile(RESULTS_PATH+denoizedFile0): #don't overwrite previous results
-				continue
-
-			# Load GT mesh
-			GT,_,_,faces_gt,_ = load_mesh(gtFolder, gtFileName, 0, False)
-			GTf_normals = computeFacesNormals(GT, faces_gt)
-
-			facesNum = faces_gt.shape[0]
-			# We only need to load faces once. Connectivity doesn't change for noisy meshes
-			# Same for adjacency matrix
-
-			_, edge_map, v_e_map = getFacesAdj2(faces_gt)
-			f_adj = getFacesLargeAdj(faces_gt,K_faces)
-			# print("WARNING!!!!! Hardcoded a change in faces adjacency")
-			# f_adj, edge_map, v_e_map = getFacesAdj2(faces_gt)
-			
-			faces_gt = np.array(faces_gt).astype(np.int32)
-
-			faces = np.expand_dims(faces_gt,axis=0)
-			#faces = np.array(faces).astype(np.int32)
-			#f_adj = np.expand_dims(f_adj, axis=0)
-			#edge_map = np.expand_dims(edge_map, axis=0)
-			v_e_map = np.expand_dims(v_e_map, axis=0)
-
-                        #Load Projection Matrices
-                        loaded_calibs = []
-                        for cam_calib in os.listdir(DataFolder+'/'+filename+"/Calib/"):
-                            cam_calib_file=DataFolder+'/'+filename+"/Calib/"+cam_calib
-                            if cam_calib_file.endswith(".txt"):
-                                #Read txt file
-                                loaded_calibs.append(read_calib_file(cam_calib_file))
-
-                        #print("Loaded Matrices shape:",np.shape(loaded_calibs))
-
-                        #Load Corresponding Images
-                        loaded_images = []
-                        for cam_image_folder in os.listdir(DataFolder+'/'+filename+"/Images/"):
-                            image_file_name = DataFolder+'/'+filename+"/Images/"+cam_image_folder+"/0001.png"
-                            loaded_images.append(load_image(image_file_name))
-
-                        #print("Loaded Images Shape: ",np.shape(loaded_images))
-                        if np.shape(loaded_calibs)[0] != np.shape(loaded_images)[0]:
-                            print("Data Parsing Error: mismatch between camera numbers for images and calibs")
-                            exit()
-
+                        # Now recover vertices positions and create Edge maps
                         V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile0, 0, False)
-                        f_normals0 = computeFacesNormals(V0, faces_noisy)
-
-                        f_pos0 = getTrianglesBarycenter(V0, faces_noisy)
-                        f_pos0 = np.reshape(f_pos0,(-1,3))
-                        f_normals0 = np.concatenate((f_normals0, f_pos0), axis=1)
-
-                        V0 = np.expand_dims(V0, axis=0)
-                        f_normals0 = np.expand_dims(f_normals0, axis=0)
-
-                        faces_noisy_modif = np.expand_dims(faces_noisy,axis=0)
-                        faces_noisy_modif = np.array(faces_noisy_modif).astype(np.int32)
-
 
                         _, edge_map_noisy , v_e_map_noisy  = getFacesAdj2(faces_noisy)
                         f_adj_noisy = getFacesLargeAdj(faces_noisy,K_faces)
-                        f_adj_noisy = np.expand_dims(f_adj_noisy, axis=0)
+
                         edge_map_noisy = np.expand_dims(edge_map_noisy, axis=0)
                         v_e_map_noisy = np.expand_dims(v_e_map_noisy, axis=0)
+
                         print("running ...")
-                        upV, upN0 = inferNet(V0, faces_noisy_modif, f_normals0, f_adj_noisy, edge_map_noisy, v_e_map_noisy,[loaded_images],[loaded_calibs])
-                        write_mesh(upV, faces_noisy, RESULTS_PATH+"testOut.obj")
+                        upV, upN0 = inferNet(V0, f_normals_list, f_adj_list, edge_map_noisy, v_e_map_noisy,images_lists,calibs_lists,faces_num, permutations,faces_noisy.shape[0])
+                        write_mesh(upV, faces_noisy, RESULTS_PATH+denoizedFile0)
                         #print("computing Hausdorff 1...")
                         #haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
                         #angDist0, angStd0 = angularDiff(upN0, GTf_normals)
@@ -1671,7 +1819,6 @@ if __name__ == "__main__":
         parser.add_argument('--device', type=str, default='/gpu:0')
 	parser.add_argument('--net_name', type=str, default='unnamed_net')
 	parser.add_argument('--pretrained', type=bool, default=False)
-	parser.add_argument('--running_mode', type=int, default=0)
         parser.add_argument('--mode',type=int,default=0)
 
 	FLAGS = parser.parse_args()
