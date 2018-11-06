@@ -13,7 +13,7 @@ from tensorflow.python import debug as tf_debug
 import random
 from lib.coarsening import *
 
-def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_lists,num_fake_nodes,old_to_new_permutations,num_faces):
+def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_lists,num_wofake_nodes,old_to_new_permutations,num_faces):
 
 	with tf.Graph().as_default():
 		random_seed = 0
@@ -34,14 +34,13 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
 		adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices of neigbors of each vertex. (Index starting with 1)
 												  K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
 		"""
-		BATCH_SIZE=in_points.shape[0]
-		#BATCH_SIZE=1
-		NUM_POINTS=in_points.shape[1]
-		NUM_FACES = f_normals.shape[1]
+
+                BATCH_SIZE=f_normals[0].shape[0]
+                NUM_POINTS=in_points.shape[0]
 		MAX_EDGES = v_e_map.shape[2]
 		NUM_EDGES = edge_map.shape[1]
-                K_faces = f_adj[0].shape[2]
-		NUM_IN_CHANNELS = f_normals.shape[2]
+                K_faces = f_adj[0][0].shape[2]
+                NUM_IN_CHANNELS = f_normals[0].shape[2]
 
 
                 NUM_CAMS = np.shape(images_lists)[1]
@@ -49,10 +48,10 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
                 IMG_HEIGHT = np.shape(images_lists)[3]
                 IMG_CHANNELS = np.shape(images_lists)[4]
 
+
 		xp_ = tf.placeholder('float32', shape=(BATCH_SIZE, NUM_POINTS,3),name='xp_')
 
-		fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, NUM_FACES, NUM_IN_CHANNELS], name='fn_')
-		#fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, NUM_FACES, K_faces], name='fadj')
+                fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
 
 		fadj0 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj0')
 		fadj1 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj1')
@@ -92,23 +91,25 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
 			saver.restore(sess, ckpt.model_checkpoint_path)
 
 		# points shape should now be [NUM_POINTS, 3]
-                predicted_normals = []
-                for i in range(num_patches):
+                predicted_normals = np.zeros([num_faces,3])
+                for i in range(len(f_normals)):
+                    print("Patch "+str(i+1)+" / "+len(f_normals))
                     my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2],
-                                    keep_prob:1.0, images_:input_images, calibs_:input_calibs}
-                    outN = sess.run(n_conv,feed_dict=my_feed_dict)
-                    predicted_normals.append(outN)
-                    print("outN shape: ",outN.shape)
-                    exit()
+                                    keep_prob:1.0, images_:[input_images[i]], calibs_:[input_calibs[i]]}
+                    outN = sess.run(tf.squeeze(n_conv),feed_dict=my_feed_dict)
+                    # remove fake nodes from prediction
+                    outN = outN[0:num_wofake_nodes[i]]
+                    for count in range(old_to_new_permutations[i].shape[0]):
+                        predicted_normals[old_to_new_permutations[i][count]] = outN[i]
 
-                #Now gather patches predictions and update vertices position
+                #Update vertices position
 
                 new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
                 #refined_x = update_position(xp_,fadj, n_conv)
                 refined_x = update_position2(xp_, new_normals, e_map_, ve_map_)
                 points = tf.squeeze(refined_x)
 
-                update_feed_dict = {xp_:in_points, new_normals: outN, e_map_: edge_map, ve_map_: v_e_map}
+                update_feed_dict = {xp_:[in_points], new_normals: [predicted_normals], e_map_: edge_map, ve_map_: v_e_map}
                 outPoints = sess.run(points,feed_dict=update_feed_dict)
 		sess.close()
 
