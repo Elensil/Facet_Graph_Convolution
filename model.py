@@ -2449,7 +2449,7 @@ def encode_images(images):
     images = tf.reshape(images,[dim1,dim2,dim3,dim4])
 
     # Conv 1
-    out_channels1=16
+    out_channels1=8
     wc1_w = 4
     wc1_h = 4
     wc1 = weight_variable([wc1_w,wc1_h,dim4,out_channels1])
@@ -2461,7 +2461,7 @@ def encode_images(images):
 
 
     # Conv 2
-    out_channels2=2#32
+    out_channels2=16
     wc2_w = 4
     wc2_h = 4
     bc2 = weight_variable([out_channels2])
@@ -2470,9 +2470,9 @@ def encode_images(images):
     conv2 = tf.nn.convolution(conv1,wc2,padding)
     conv2 = tf.nn.bias_add(conv2, bc2)
     conv2 = tf.nn.relu(conv2)
-    """
+
     # Conv 3
-    out_channels3=64
+    out_channels3=32
     wc3_w = 4
     wc3_h = 4
     bc3 = weight_variable([out_channels3])
@@ -2482,9 +2482,9 @@ def encode_images(images):
     conv3 = tf.nn.bias_add(conv3, bc3)
     conv3 = tf.nn.relu(conv3)
 
-
+    """
     # Conv 4: conv 1x1 to go to a 2D vector for each pixel
-    out_channels4=2
+    out_channels4=32
     wc4_w = 1
     wc4_h = 1
     bc4 = weight_variable([out_channels4])
@@ -2493,11 +2493,10 @@ def encode_images(images):
     conv4 = tf.nn.convolution(conv3,wc4,padding)
     conv4 = tf.nn.bias_add(conv4, bc4)
     #conv4 = tf.nn.relu(conv4) # No relu at the end: we want to keep negative values
-
-    return conv4
-    #return images
     """
-    return conv2
+    return conv3
+    #return images
+    #return conv2
 
 def broadcast_matmul(A, B):
     "Compute A @ B, broadcasting over the first `N-2` ranks"
@@ -2638,7 +2637,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
         # Discard invalid normal_z_coords
         #subtract normal's depths to barycenter's
         subtraction = tf.subtract(normal_z_coords,z_coords,name='visibility_subtraction')
-        visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask') ## tf.less() or greater?
+        visibility_mask = tf.greater(subtraction,tf.zeros_like(subtraction),name='visibility_mask') ## tf.less() or greater?
         mask = tf.logical_and(mask,visibility_mask) #
 
         print("Mask Shape: ",mask.get_shape().as_list())
@@ -3003,7 +3002,7 @@ def getAverageProjFeat(x,images_,calibs_):
         ################### Discard cameras behind triangle: ###################
         #recover z coordinate of (barycenter + normal).
         #if z(barycenter +normal) - z(barycenter) > 0 discard (camera behind) else, accept
-	## (Innacurate but good enough)
+
         #Multiply 3D coordinates with projection matrices
         num_cameras = calibs_.get_shape().as_list()[1]
         #calibs_ = tf.reshape(calibs_,[num_cameras,3,4,])
