@@ -288,7 +288,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
                 # print("Iteration %d, training loss2 %g"%(iter, train_loss2))
                 # print("Iteration %d, training loss3 %g"%(iter, train_loss3))
 
-                lossArray[int(iter/10),0]=train_loss
+                lossArray[int(iter/50),0]=train_loss
                 train_loss = 0
                 train_samp = 0
 
@@ -316,13 +316,13 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 
                 valid_loss/=valid_samp
                 print("Iteration %d, validation loss %g"%(iter, valid_loss))
-                lossArray[int(iter/10),1]=valid_loss
+                lossArray[int(iter/50),1]=valid_loss
                 if iter>0:
                     if first:
-                        lossArray[int(iter/10)-1,1] = valid_loss
+                        lossArray[int(iter/50)-1,1] = valid_loss
                         first=False
                     else:
-                        lossArray[int(iter/10)-1,1] = (valid_loss+last_loss)/2
+                        lossArray[int(iter/50)-1,1] = (valid_loss+last_loss)/2
                         last_loss=valid_loss
 
             sess.run(train_step,feed_dict=train_fd)
@@ -1354,6 +1354,116 @@ def mainFunction():
 
         outputFile.close()
 
+    elif running_mode == 8:
+        # Take the opportunity to generate array of metrics on reconstructions
+        nameArray = []      # String array, to now which row is what
+        resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
+                            # [Max distance, Mean distance, Mean angle, std angle, face num]
+
+        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
+
+        # results file name
+        csv_filename = RESULTS_PATH+"results_heat.csv"
+
+        # Get GT mesh
+        for gtFileName in os.listdir(gtFolder):
+
+            nameArray = []
+            resultsArray = []
+
+            denoizedFile0 = gtFileName[:-4]+"_n1_denoized.obj"
+            denoizedFile1 = gtFileName[:-4]+"_n2_denoized.obj"
+            denoizedFile2 = gtFileName[:-4]+"_n3_denoized.obj"
+
+            heatFile0 = gtFileName[:-4]+"_n1_heatmap.obj"
+            heatFile1 = gtFileName[:-4]+"_n2_heatmap.obj"
+            heatFile2 = gtFileName[:-4]+"_n3_heatmap.obj"
+
+            if (os.path.isfile(RESULTS_PATH+heatFile0)) and (os.path.isfile(RESULTS_PATH+heatFile1)) and (os.path.isfile(RESULTS_PATH+heatFile2)):
+                continue
+
+            # Load GT mesh
+            GT,_,_,faces_gt,_ = load_mesh(gtFolder, gtFileName, 0, False)
+            GTf_normals = computeFacesNormals(GT, faces_gt)
+
+            facesNum = faces_gt.shape[0]
+            # We only need to load faces once. Connectivity doesn't change for noisy meshes
+            # Same for adjacency matrix
+
+            _, edge_map, v_e_map = getFacesAdj2(faces_gt)
+            f_adj = getFacesLargeAdj(faces_gt,K_faces)
+            # print("WARNING!!!!! Hardcoded a change in faces adjacency")
+            # f_adj, edge_map, v_e_map = getFacesAdj2(faces_gt)
+
+
+            faces_gt = np.array(faces_gt).astype(np.int32)
+            faces = np.expand_dims(faces_gt,axis=0)
+            #faces = np.array(faces).astype(np.int32)
+            #f_adj = np.expand_dims(f_adj, axis=0)
+            #edge_map = np.expand_dims(edge_map, axis=0)
+            v_e_map = np.expand_dims(v_e_map, axis=0)
+
+            empiricMax = 20.0
+
+            denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
+            heatMapFilesList = [heatFile0,heatFile1,heatFile2]
+
+            for fileNum in range(len(denoizedFilesList)):
+
+                denoizedFile = denoizedFilesList[fileNum]
+                heatFile = heatMapFilesList[fileNum]
+
+                if not os.path.isfile(RESULTS_PATH+heatFile):
+
+                    V0,_,_, _, _ = load_mesh(RESULTS_PATH, denoizedFile, 0, False)
+                    f_normals0 = computeFacesNormals(V0, faces_gt)
+
+                    print("computing Hausdorff "+str(fileNum+1)+"...")
+                    haus_dist0, avg_dist0 = oneSidedHausdorff(V0, GT)
+                    angDistVec = angularDiffVec(f_normals0, GTf_normals)
+                    angDist0, angStd0 = angularDiff(f_normals0, GTf_normals)
+                    print("max angle: "+str(np.amax(angDistVec)))
+
+                    # --- Test heatmap ---
+                    angColor = angDistVec / empiricMax
+                    # print("max color: "+str(np.amax(angColor)))
+                    # print("min color: "+str(np.amin(angColor)))
+                    # print("mean color: "+str(np.mean(angColor)))
+                    angColor = 1 - angColor
+                    angColor = np.maximum(angColor, np.zeros_like(angColor))
+                    # print("max color: "+str(np.amax(angColor)))
+                    # print("min color: "+str(np.amin(angColor)))
+                    # print("mean color: "+str(np.mean(angColor)))
+                    newV, newF = getHeatMapMesh(V0, faces_gt, angColor)
+
+                    write_mesh(newV, newF, RESULTS_PATH+heatFile)
+                    #write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
+
+                    # Fill arrays
+                    nameArray.append(denoizedFile)
+                    resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
+
+            # print("Hausdorff distances: ("+str(haus_dist0)+", "+str(haus_dist1)+", "+str(haus_dist2)+")")
+            # print("Average angular differences: ("+str(angDist0)+", "+str(angDist1)+", "+str(angDist2)+")")
+
+            outputFile = open(csv_filename,'a')
+            nameArray = np.array(nameArray)
+            resultsArray = np.array(resultsArray,dtype=np.float32)
+
+            tempArray = resultsArray.flatten()
+            resStr = ["%.7f" % number for number in tempArray]
+            resStr = np.reshape(resStr,resultsArray.shape)
+
+            nameArray = np.expand_dims(nameArray, axis=-1)
+
+            finalArray = np.concatenate((nameArray,resStr),axis=1)
+            for row in range(finalArray.shape[0]):
+                for col in range(finalArray.shape[1]):
+                    outputFile.write(finalArray[row,col])
+                    outputFile.write(' ')
+                outputFile.write('\n')
+
+            outputFile.close()
         """
     elif running_mode == 3:
         inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/"
