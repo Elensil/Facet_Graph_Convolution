@@ -894,3 +894,124 @@ def inv_perm(perm):
     for i, p in enumerate(perm):
         inverse[p] = i
     return inverse
+
+# return max curvature, min curvature, and average. Used to generate clusters for classification
+def computeCurvature(fpos, fn, adj):
+
+    #keep neighbours only
+    adj_n = adj[:,1:]
+    adj_n = adj_n-1
+
+    neighbours_normals = fn[adj_n]
+
+    neighbours_pos = fpos[adj_n]
+
+    # print(" fn 0: "+str(fn[0,:]))
+
+    # print(" adj 0: "+str(adj[0,:]))
+
+    # print(" adj_n 0: "+str(adj_n[0,:]))
+
+    K = adj_n.shape[1]
+
+    fn_n = np.tile(np.expand_dims(fn,axis=1), [1,K,1])
+    # [N, K, 3]
+    fpos_n = np.tile(np.expand_dims(fpos,axis=1), [1,K,1])
+
+
+    fvec = np.subtract(neighbours_pos, fpos_n)
+
+
+    # print("fn_n 0: "+str(fn_n[0,:,:]))
+    # print("n_n 0: "+str(neighbours_normals[0,:,:]))
+
+    #dotP = np.sum(np.multiply(fn_n,neighbours_normals),axis=2)
+
+    dotP = np.sum(np.multiply(fn_n,fvec),axis=2)
+
+    # print("dp 0: "+str(dotP[0,:]))
+    non_zeros = np.not_equal(adj_n, np.zeros_like(adj_n)-1)
+
+    dotP = np.where(non_zeros,dotP,np.zeros_like(dotP))
+
+    dotPWeight = np.where(non_zeros,np.ones_like(dotP),np.zeros_like(dotP))
+
+
+
+    # print("dp 0: "+str(dotP[0,:]))
+    # [N, K]
+
+    curv_min = np.amin(dotP,axis=1,keepdims=True)
+    curv_max = np.amax(dotP,axis=1,keepdims=True)
+    curv_mean = np.sum(dotP,axis=1,keepdims=True)/np.sum(dotPWeight,axis=1,keepdims=True)
+
+
+    curv_stat = np.concatenate((curv_min,curv_max,curv_mean),axis=1)
+
+    # print("curv_stat 0: "+str(curv_stat[0,:,]))
+    return curv_stat
+
+
+def customKMeans(points, k, iternum=500):
+
+    # Initialize random centroids
+    centroids = points.copy()
+    np.random.shuffle(centroids)
+    centroids = centroids[:k]
+
+    for i in range(iternum):
+        closest = closest_centroid(points, centroids)
+        move_centroids(points, closest, centroids)
+
+    return centroids, closest
+
+
+def closest_centroid(points, centroids):
+    """returns an array containing the index to the nearest centroid for each point"""
+    distances = np.sqrt(((points - centroids[:, np.newaxis])**2).sum(axis=2))
+    return np.argmin(distances, axis=0)
+
+def move_centroids(points, closest, centroids):
+    """returns the new centroids assigned from the points closest to them"""
+    return np.array([points[closest==k].mean(axis=0) for k in range(centroids.shape[0])])
+
+
+def unique_columns2(data):
+    dt = np.dtype((np.void, data.dtype.itemsize * data.shape[0]))
+    dataf = np.asfortranarray(data).view(dt)
+    u,uind = np.unique(dataf, return_inverse=True)
+    u = u.view(data.dtype).reshape(-1,data.shape[0]).T
+    return (u,uind)
+
+def is_almost_equal(x,y,threshold):
+    if np.sum((x-y)**2)<threshold**2:
+        return True
+    else:
+        return False
+
+
+def getHeatMapMesh(V, F, heatmap):
+
+    facesNum = F.shape[0]
+    newV = np.array([])
+
+    for f in range(facesNum):
+        vCol = np.full((3,3),heatmap[f])
+        myF = F[f,:]
+        v0 = np.expand_dims(V[myF[0]],axis=0)
+        v1 = np.expand_dims(V[myF[1]],axis=0)
+        v2 = np.expand_dims(V[myF[2]],axis=0)
+
+        #print("vCol shape: "+str(vCol.shape))
+        vArr = np.concatenate((v0,v1,v2),axis=0)
+        #print("vArr shape: "+str(vArr.shape))
+        vArr = np.concatenate((vArr,vCol),axis=1)
+        #print("vArr shape: "+str(vArr.shape))
+        if f==0:
+            newV = vArr
+        else:
+            newV = np.append(newV,vArr,axis=0)
+
+    newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
+
+    return newV, newF
