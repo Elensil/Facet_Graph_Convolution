@@ -250,7 +250,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
     train_samp=0
 
     with tf.device(DEVICE):
-        lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
+        lossArray = np.zeros([int(NUM_ITERATIONS/50),2])
         last_loss = 0
         first=True
         for iter in range(NUM_ITERATIONS):
@@ -1360,7 +1360,7 @@ def mainFunction():
         resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
                             # [Max distance, Mean distance, Mean angle, std angle, face num]
 
-        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
+        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
 
         # results file name
         csv_filename = RESULTS_PATH+"results_heat.csv"
