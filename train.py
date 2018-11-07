@@ -28,7 +28,7 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
                 os.makedirs(RESULTS_PATH)
 
         """
-        Load dataset 
+        Load dataset
         x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
         adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices of neigbors of each vertex. (Index starting with 1)
                                                   K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
@@ -66,7 +66,7 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
 
         input_images = images_lists
         input_calibs = calibs_lists
-        
+
         batch = tf.Variable(0, trainable=False)
         fadjs = [fadj0,fadj1,fadj2]
         # --- Starting iterative process ---
@@ -120,7 +120,7 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,images_lists,calibs_
         return outPoints, predicted_normals
 
 def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list,valid_images_lists,valid_calibs_lists):
-    
+
     random_seed = 0
     np.random.seed(random_seed)
 
@@ -132,7 +132,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
             os.makedirs(RESULTS_PATH)
 
     """
-    Load dataset 
+    Load dataset
     x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
     adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices of neigbors of each vertex. (Index starting with 1)
                                               K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
@@ -169,7 +169,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
 
     images_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE,NUM_CAMS,IMG_WIDTH,IMG_HEIGHT,IMG_CHANNELS])
     calibs_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE,NUM_CAMS,3,4])
-    
+
     batch = tf.Variable(0, trainable=False)
 
     # --- Starting iterative process ---
@@ -197,7 +197,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
     # n_conv = tf.slice(fn_,[0,0,0],[-1,-1,3])+n_conv
     n_conv = normalizeTensor(n_conv)
 
-    
+
     with tf.device(DEVICE):
         with tf.variable_scope("loss"):
             #validLoss = faceNormalsLoss(n_conv, tfn_)
@@ -389,7 +389,7 @@ def faceNormalsSampledLoss(fn,gt_fn,indices):
     #version 1
     n_dt = tensorDotProduct(fn,gt_fn)
     # shape = [batch, N, 3] ?
-    
+
     # loss = 1 - n_dt
     #loss = tf.acos(n_dt-1e-5)  # So that it stays differentiable close to 1
     loss = tf.acos(0.9999*n_dt) # So that it stays differentiable close to 1 and -1
@@ -419,13 +419,13 @@ def unique_columns2(data):
     return (u,uind)
 
 def update_position(x, adj, n,iter_num=15):
-    
+
     lmbd = 1/18
     _,_,K = adj.get_shape().as_list()
     #K = adj.shape[2]
 
     for it in range(iter_num):
-        
+
         #Building neighbourhood
         neigh = get_slices(x,adj)
         #shape = (batch, points, neighbourhood (K), space_dims)
@@ -444,7 +444,7 @@ def update_position(x, adj, n,iter_num=15):
         neigh_normals = get_slices(n, adj)
         #Compute edge normal as the average between the two vertices normals
         #edge_normals = tf.add(neigh_normals[:,:,1:,:],tf.expand_dims(neigh_normals[:,:,0,:],2))
-        
+
         edge_normals = tf.tile(tf.expand_dims(neigh_normals[:,:,0,:],2),[1,1,K-1,1])
 
         edge_normals = normalizeTensor(edge_normals)
@@ -463,7 +463,7 @@ def update_position(x, adj, n,iter_num=15):
     return x
 
 # Original update algorithm from Taubin (Linear anisotropic mesh filtering)
-# Copied from function above, which was my own adaptation of Taubin's algorithm with vertices normals 
+# Copied from function above, which was my own adaptation of Taubin's algorithm with vertices normals
 def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
 
     lmbd = 1/18
@@ -480,7 +480,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
     # shape = (batch_size, num_points, max_edges (50))
 
     v_edges=v_edges+1   # start indexing from 1. Transform unused slots (-1) to 0
-    
+
 
     # Offset both 'faces' columns: we switch from 0-indexing to 1-indexing
     e_offset = tf.constant([[[0,0,1,1]]],dtype = tf.int32)
@@ -513,7 +513,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
     n_f_normals = tf.tile(n_f_normals,[1,1,1,2,1])
 
     for it in range(iter_num):
-        
+
         v_slice = tf.slice(n_edges, [0,0,0],[-1,-1,2])
 
         x = tf.transpose(x,[1,0,2])
@@ -556,7 +556,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
         x_update = lmbd * pos_update
 
         x = tf.add(x,x_update)
-        
+
     return x
 
 
@@ -570,7 +570,7 @@ def normalTensor(x,adj,tensName=None):
     K = adj.shape[2]
     #x shape = (batch, points, space_dims)
     #adj shape = (batch, points, K)
-    
+
     #Building neighbourhood
     neigh = get_slices(x,adj)
     #shape = (batch, points, neighbourhood (K), space_dims)
@@ -585,7 +585,7 @@ def normalTensor(x,adj,tensName=None):
     non_zeros = tf.not_equal(adj[:,:,1:], 0)
     non_zeros = tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,1,3])
     edges = tf.where(non_zeros, edges,tf.zeros_like(edges))
-    
+
     #generate pairs of edges. The way vertices are organized, these pairs should correspond to faces
     edges1 = edges[:,:,:-1,:]
     edges2 = edges[:,:,1:,:]
@@ -638,8 +638,8 @@ def simpleNormalTensor(x,faces,tensName=None):
     T = tf.reshape(T,[batch_size,num_faces,3,3])
     print("T shape: "+str(T.shape))
     # shape = (batch_size,face_num,3 (vertices),3 (coordinates))
-    
-    
+
+
     #T = verts[faces]
     E1 = tf.subtract(T[:,:,1,:],T[:,:,0,:])
     print("E1 shape: "+str(E1.shape))
@@ -656,12 +656,12 @@ def simpleNormalTensor(x,faces,tensName=None):
     Nn=normalizeTensor(N)
     #print("Nn shape: "+str(Nn.shape))
     #normals = np.zeros(verts.shape, dtype=np.float32)
-    
+
     #normals = tf.zeros_like(x)
     normals = tf.Variable(tf.zeros_like(x))
 
     Nn = tf.tile(Nn,[1,3,1])
-    
+
     faces_t = tf.transpose(faces,[0,2,1])
     faces_col = tf.reshape(faces_t,[batch_size,num_faces*3])
 
@@ -942,11 +942,11 @@ def mainFunction():
                     toBeProcessed = faceRange[faceCheck==0]
                     faceSeed = np.random.randint(toBeProcessed.shape[0])
                     faceSeed = toBeProcessed[faceSeed]
-                    
+
                     testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
 
                     faceCheck[fOldInd]+=1
-                    
+
                     #patchFNormals = f_normals0[fOldInd]
                     patchFNormals = f_normals_pos[fOldInd]
                     patchGTFNormals = GTf_normals0[fOldInd]
@@ -1127,7 +1127,7 @@ def mainFunction():
             for filename in os.listdir(validFilePath):
                 gtfilename = filename+"/Ground_Truth/000.obj"
                 addMesh(validFilePath, filename, validFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_meshes_num,valid_images_lists,valid_calibs_lists)
-                    
+
             if pickleSave:
                 # Training
                 with open(binDumpPath+'f_normals_list', 'wb') as fp:
@@ -1217,7 +1217,7 @@ def mainFunction():
         gtFileName = "Chinese_dragon_65k_1_gt.obj"
 
         inputFileName = "bunny_iH_noisy_2.obj"
-        gtFileName = "bunny_iH.obj"     
+        gtFileName = "bunny_iH.obj"
 
         V0,_,num_neighbours0, faces0, _ = load_mesh(inputFilePath, inputFileName, 0, False)
 
@@ -1286,7 +1286,7 @@ def mainFunction():
 
         # results file name
         csv_filename = RESULTS_PATH+"/results_eval.csv"
-        
+
         # Get GT mesh
         for filename in os.listdir(DataFolder):
 
@@ -1357,11 +1357,11 @@ def mainFunction():
         """
     elif running_mode == 3:
         inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/"
-        
-        
+
+
         #inputFileName = "bunny_iH_noisy_2.obj"
         inputFileName = "armadillo.obj"
-        
+
         V0,_,_, faces0, _ = load_mesh(inputFilePath, inputFileName, 0, False)
 
                     f_pos0 = getTrianglesBarycenter(V0, faces_gt)
@@ -1614,19 +1614,19 @@ def mainFunction():
                 print("noisy Haus_dist = " + str(haus_dist))
 
         inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/"
-        
-        
+
+
         #inputFileName = "bunny_iH_noisy_2.obj"
         inputFileName = "armadillo.obj"
-        
+
         V0,_,_, faces0, _ = load_mesh(inputFilePath, inputFileName, 0, False)
 
         inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/paper-dataset/Benchmark/"
-        
-        
+
+
         inputFileName = "bunny_iH.obj"
         #inputFileName = "armadillo.obj"
-        
+
         V0,_,_, faces0, _ = load_mesh(inputFilePath, inputFileName, 0, False)
 
 
@@ -1641,7 +1641,7 @@ def mainFunction():
 
         print("barycenters: ")
         f_pos0 = getTrianglesBarycenter(V0, faces0)
-        
+
 
         print("compute sparse matrix")
         coo_adj = listToSparse(f_adj0, f_pos0)
@@ -1752,7 +1752,7 @@ def mainFunction():
         inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/"
 
         gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/"
-        
+
         # Training set
         for filename in os.listdir(inputFilePath):
             #print("training_meshes_num start_iter " + str(training_meshes_num))
@@ -1780,7 +1780,7 @@ def mainFunction():
 
 
 def refineMesh(x,displacement,normals,adj):     #params are tensors
-    
+
     batch_size, num_points, in_channels = x.get_shape().as_list()
     K = adj.shape[2]
     #compute displacement vector for each point
@@ -1803,7 +1803,7 @@ def refineMesh(x,displacement,normals,adj):     #params are tensors
     adj_size = tf.expand_dims(adj_size,axis=-1)
 
     # Then, get slices of displacement vectors and weight depending on neighbourhood
-    # 
+    #
 
     #n_weight = get_slices(tf.expand_dims(adj_size,axis=-1),adj[:,:,1:])
 
@@ -1823,7 +1823,7 @@ def refineMesh(x,displacement,normals,adj):     #params are tensors
 
 
 if __name__ == "__main__":
-    
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--architecture', type=int, default=0)
     #parser.add_argument('--dataset_path')
