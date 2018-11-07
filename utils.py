@@ -596,7 +596,7 @@ def oneSidedHausdorff(V0,V1):
 # Returns a pair of floats: the average angular difference (in degrees) between pairs of normals, and the std
 
 # Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
-def angularDiff(n0,n1, mean=True):
+def angularDiff(n0,n1):
 
     faceNum = n0.shape[0]
 
@@ -639,10 +639,9 @@ def angularDiff(n0,n1, mean=True):
     # print("angDiffTest = "+str(angDiffTest))
     # print("mean angDiff = "+str(np.mean(angDiff)))
     # print("angDiff example: "+str(angDiff[0]))
-    if mean:
-        return np.mean(angDiff), np.std(angDiff)
-    else:
-        return angDiff
+
+    return np.mean(angDiff), np.std(angDiff)
+
 
 
 # Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
