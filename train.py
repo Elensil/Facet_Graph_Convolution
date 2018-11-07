@@ -1333,26 +1333,26 @@ def mainFunction():
 
             # Fill arrays
             nameArray.append(denoizedFile0)
-            resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
+            resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, faces_noisy.shape[0]])
 
-            outputFile = open(csv_filename,'a')
-            nameArray = np.array(nameArray)
-            resultsArray = np.array(resultsArray,dtype=np.float32)
+        outputFile = open(csv_filename,'a')
+        nameArray = np.array(nameArray)
+        resultsArray = np.array(resultsArray,dtype=np.float32)
 
-            #tempArray = resultsArray.flatten()
-            #resStr = ["%.7f" % number for number in tempArray]
-            #resStr = np.reshape(resStr,resultsArray.shape)
+        tempArray = resultsArray.flatten()
+        resStr = ["%.7f" % number for number in tempArray]
+        resStr = np.reshape(resStr,resultsArray.shape)
 
-            #nameArray = np.expand_dims(nameArray, axis=-1)
+        nameArray = np.expand_dims(nameArray, axis=-1)
 
-            #finalArray = np.concatenate((nameArray,resStr),axis=1)
-            #for row in range(finalArray.shape[0]):
-            #        for col in range(finalArray.shape[1]):
-            #                outputFile.write(finalArray[row,col])
-            #                outputFile.write(' ')
-            #        outputFile.write('\n')
+        finalArray = np.concatenate((nameArray,resStr),axis=1)
+        for row in range(finalArray.shape[0]):
+                for col in range(finalArray.shape[1]):
+                        outputFile.write(finalArray[row,col])
+                        outputFile.write(' ')
+                outputFile.write('\n')
 
-            #outputFile.close()
+        outputFile.close()
 
         """
     elif running_mode == 3:
