@@ -1027,3 +1027,60 @@ def getHeatMapMesh(V, F, heatmap):
     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
 
     return newV, newF
+
+def getColoredMesh(V, F, faceColors):
+
+    facesNum = F.shape[0]
+    newV = np.array([])
+
+    for f in range(facesNum):
+        vCol = np.tile(np.expand_dims(faceColors[f,:],axis=0),(3,1))
+        #vCol = np.full((3,3),heatmap[f])
+        myF = F[f,:]
+        v0 = np.expand_dims(V[myF[0]],axis=0)
+        v1 = np.expand_dims(V[myF[1]],axis=0)
+        v2 = np.expand_dims(V[myF[2]],axis=0)
+        
+        #print("vCol shape: "+str(vCol.shape))
+        vArr = np.concatenate((v0,v1,v2),axis=0)
+        #print("vArr shape: "+str(vArr.shape))
+        vArr = np.concatenate((vArr,vCol),axis=1)
+        #print("vArr shape: "+str(vArr.shape))
+        if f==0:
+            newV = vArr
+        else:
+            newV = np.append(newV,vArr,axis=0)
+
+    newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
+
+    return newV, newF
+
+
+def getHeatMapColor(myVec):
+
+    heatmap = np.empty((myVec.shape[0],3))
+    c0 = np.array([0.0,0.0,1.0])
+    c1 = np.array([0.0,1.0,1.0])
+    c2 = np.array([0.0,1.0,0.0])
+    c3 = np.array([1.0,1.0,0.0])
+    c4 = np.array([1.0,0.0,0.0])
+
+    #coef0 = 4*np.maximum(0.25-myVec,np.zeros_like(myVec))
+
+    for myInd in range(myVec.shape[0]):
+        entry = myVec[myInd]
+
+        if entry<0.25:
+            coef1 = 4*entry
+            heatmap[myInd,:] = coef1 * c1 + (1-coef1) * c0
+        elif entry<0.5:
+            coef2 = 4*entry-1
+            heatmap[myInd,:] = coef2 * c2 + (1-coef2) * c1
+        elif entry<0.75:
+            coef3 = 4*entry-2
+            heatmap[myInd,:] = coef3 * c3 + (1-coef3) * c2
+        else:
+            coef4 = 4*entry-3
+            heatmap[myInd,:] = coef4 * c4 + (1-coef4) * c3
+
+    return heatmap
