@@ -659,6 +659,31 @@ def angularDiff(n0,n1):
     # print("angDiff example: "+str(angDiff[0]))
     return np.mean(angDiff), np.std(angDiff)
 
+# Now, ignore cases when n1 is equal to zero (in our case, fake nodes, n1 is normally GT)
+def angularDiffVec(n0,n1):
+
+    faceNum = n0.shape[0]
+
+    fakenodes = np.less_equal(np.absolute(n1),10e-4)
+    fakenodes = np.all(fakenodes,axis=-1)
+
+    n0 = normalize(n0)
+    n1 = normalize(n1)
+
+    # print("n0 example: "+str(n0[0,:]))
+    # print("n1 example: "+str(n1[0,:]))
+
+    dotP = np.sum(np.multiply(n0,n1),axis=1)
+    #print("dotP example: "+str(dotP[0]))
+
+    # print("min dotP = "+str(np.amin(dotP)))
+    # print("max dotP = "+str(np.amax(dotP)))
+
+    angDiff = np.arccos(0.999999*dotP)
+    angDiff = angDiff*180/math.pi
+
+    return angDiff
+
 # Takes a mesh as input (vertices list vl, faces list fl), and returns a list of faces areas (faces are assumed to be triangular)
 def getTrianglesArea(vl,fl):
 
