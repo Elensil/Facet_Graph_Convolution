@@ -504,7 +504,7 @@ def write_xyz(vec, strFileName):
     #outputFile = open(strFileName,"w")
 
     np.savetxt(strFileName, vec)
-
+"""
 def write_mesh(vl,fl,strFileName):
 
     vnum = vl.shape[0]
@@ -548,6 +548,53 @@ def write_mesh(vl,fl,strFileName):
             outputFile.write(faces[row,col])
             outputFile.write(' ')
         outputFile.write('\n')
+"""
+def write_mesh(vl,fl,strFileName):
+
+    vnum = vl.shape[0]
+    v_ch = vl.shape[1]
+    vVec = np.full((vnum,1), 'v')
+
+    vl = vl.flatten()
+
+    vstr = ["%.6f" % number for number in vl]
+    #print("vstr shape: "+str(vstr.shape))
+    vstr = np.array(vstr)
+
+    vstr = np.reshape(vstr, (vnum,v_ch))
+
+    #vstr = vl.astype('|S8')
+    vstr = np.concatenate((vVec,vstr),axis=1)
+
+    #writeStringArray(vstr, strFileName, fl)
+
+
+    outputFile = open(strFileName,"w")
+
+    for row in range(vstr.shape[0]):
+        for col in range(vstr.shape[1]):
+            outputFile.write(vstr[row,col])
+            outputFile.write(' ')
+        outputFile.write('\n')
+
+    # # write vertices
+    # np.savetxt(outputFile,vstr, delimiter=",")
+
+    #transform to one-indexed for obj format
+    faces = fl
+    faces = faces+1
+
+    faces = faces.astype(str)
+    for row in range(faces.shape[0]):
+        if((faces[row,0]=='1')and(faces[row,1]=='1')):
+            break
+        outputFile.write('f ')
+        for col in range(faces.shape[1]):
+            outputFile.write(faces[row,col])
+            outputFile.write(' ')
+        outputFile.write('\n')
+
+
 
 
 # Returns the one-sided Hausdorff distance from point set V0 to point set V1, normalized by diagonal length of the bounding box of U(V0,V1)

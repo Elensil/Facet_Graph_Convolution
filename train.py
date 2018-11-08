@@ -1361,6 +1361,7 @@ def mainFunction():
                             # [Max distance, Mean distance, Mean angle, std angle, face num]
 
         gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
+        #gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/test/"
 
         # results file name
         csv_filename = RESULTS_PATH+"results_heat.csv"

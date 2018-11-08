@@ -7,7 +7,7 @@ from utils import *
 #import h5py
 
 random_seed=0
-std_dev=0.05
+std_dev=0.5
 
 # Levi-Civita tensor of dimension 3
 LC_tensor = tf.constant([[[0,0,0],[0,0,1],[0,-1,0]],[[0,0,-1],[0,0,0],[1,0,0]],[[0,1,0],[-1,0,0],[0,0,0]]],dtype=tf.float32)
@@ -1098,7 +1098,7 @@ def custom_upsampling(x, steps=1):
 	return outputs
 
 
-def lrelu(x, alpha):
+def lrelu(x, alpha = 0.1):
   return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
 
 def get_model(x, adj, num_classes, architecture):
@@ -2446,42 +2446,50 @@ def encode_images(images):
     dim2 = images.get_shape().as_list()[2]
     dim3 = images.get_shape().as_list()[3]
     dim4 = images.get_shape().as_list()[4]
+
+    #Convert RGB to Grayscale (simple averaging atm)
+    #print("Images input",images.get_shape().as_list())
+    images = tf.reduce_mean(images,axis=4)
+    #print("Images avg",images.get_shape().as_list())
+    dim4 = 1
     images = tf.reshape(images,[dim1,dim2,dim3,dim4])
+    #print("Images reshaped",images.get_shape().as_list())
 
     # Conv 1
     out_channels1=8
-    wc1_w = 4
-    wc1_h = 4
+    wc1_w = 3
+    wc1_h = 3
     wc1 = weight_variable([wc1_w,wc1_h,dim4,out_channels1])
     bc1 = weight_variable([out_channels1])
     padding='SAME'
     conv1 = tf.nn.convolution(images,wc1,padding)
     conv1 = tf.nn.bias_add(conv1, bc1)
-    conv1 = tf.nn.relu(conv1)
-
+    #conv1 = tf.nn.relu(conv1)
+    conv1 = lrelu(conv1)
 
     # Conv 2
     out_channels2=16
-    wc2_w = 4
-    wc2_h = 4
+    wc2_w = 3
+    wc2_h = 3
     bc2 = weight_variable([out_channels2])
     wc2 = weight_variable([wc2_w,wc2_h,out_channels1,out_channels2])
     padding='SAME'
     conv2 = tf.nn.convolution(conv1,wc2,padding)
     conv2 = tf.nn.bias_add(conv2, bc2)
-    conv2 = tf.nn.relu(conv2)
+    #conv2 = tf.nn.relu(conv2)
+    conv2 = lrelu(conv2)
 
     # Conv 3
     out_channels3=32
-    wc3_w = 4
-    wc3_h = 4
+    wc3_w = 3
+    wc3_h = 3
     bc3 = weight_variable([out_channels3])
     wc3 = weight_variable([wc3_w,wc3_h,out_channels2,out_channels3])
     padding='SAME'
     conv3 = tf.nn.convolution(conv2,wc3,padding)
     conv3 = tf.nn.bias_add(conv3, bc3)
-    conv3 = tf.nn.relu(conv3)
-
+    #conv3 = tf.nn.relu(conv3)
+    conv3 = lrelu(conv3)
     """
     # Conv 4: conv 1x1 to go to a 2D vector for each pixel
     out_channels4=32
