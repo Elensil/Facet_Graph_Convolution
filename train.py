@@ -454,7 +454,7 @@ def mainFunction():
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/smallAdj/"
     # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
-    # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+    binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
 
 
     empiricMax = 30.0
@@ -463,7 +463,7 @@ def mainFunction():
 
     # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v2/coarsening4/"
 
-    binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_fusion/coarsening4/"
+    # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_fusion/coarsening4/"
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/MS9_res/"
 
@@ -723,14 +723,14 @@ def mainFunction():
         resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
                             # [Max distance, Mean distance, Mean angle, std angle, face num]
 
-        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
-        # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
+        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
+        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
 
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/noisy/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/original/"
 
-        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
-        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/original/"
+        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
+        # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/original/"
 
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
@@ -762,9 +762,9 @@ def mainFunction():
             noisyFile1 = gtFileName[:-4]+"_n2.obj"
             noisyFile2 = gtFileName[:-4]+"_n3.obj"
 
-            denoizedFile0 = gtFileName[:-4]+"_denoized_1.obj"
-            denoizedFile1 = gtFileName[:-4]+"_denoized_2.obj"
-            denoizedFile2 = gtFileName[:-4]+"_denoized_3.obj"
+            denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
+            denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
+            denoizedFile2 = gtFileName[:-4]+"_denoized_gray_3.obj"
 
             if (os.path.isfile(RESULTS_PATH+denoizedFile0)) and (os.path.isfile(RESULTS_PATH+denoizedFile1)) and (os.path.isfile(RESULTS_PATH+denoizedFile2)):
                 continue
@@ -823,59 +823,59 @@ def mainFunction():
                     print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
 
 
-                    print("computing Hausdorff "+str(fileNum+1)+"...")
-                    t0 = time.clock()
-                    haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
-                    print("Hausdorff complete ("+str(1000*(time.clock()-t0))+"ms)")
-                    print("computing Angular diff "+str(fileNum+1)+"...")
-                    t0 = time.clock()
-                    angDistVec = angularDiffVec(upN0, GTf_normals)
-                    angDist0, angStd0 = angularDiff(upN0, GTf_normals)
-                    print("Angular diff complete ("+str(1000*(time.clock()-t0))+"ms)")
-                    print("max angle: "+str(np.amax(angDistVec)))
+                    # print("computing Hausdorff "+str(fileNum+1)+"...")
+                    # t0 = time.clock()
+                    # haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
+                    # print("Hausdorff complete ("+str(1000*(time.clock()-t0))+"ms)")
+                    # print("computing Angular diff "+str(fileNum+1)+"...")
+                    # t0 = time.clock()
+                    # angDistVec = angularDiffVec(upN0, GTf_normals)
+                    # angDist0, angStd0 = angularDiff(upN0, GTf_normals)
+                    # print("Angular diff complete ("+str(1000*(time.clock()-t0))+"ms)")
+                    # print("max angle: "+str(np.amax(angDistVec)))
 
                     #angDistVec = angDistVec[oldToNew]
                     # --- Test heatmap ---
-                    angColor = angDistVec / empiricMax
+                    # angColor = angDistVec / empiricMax
 
-                    angColor = 1 - angColor
-                    angColor = np.maximum(angColor, np.zeros_like(angColor))
+                    # angColor = 1 - angColor
+                    # angColor = np.maximum(angColor, np.zeros_like(angColor))
 
-                    print("getting colormap "+str(fileNum+1)+"...")
-                    t0 = time.clock()
-                    colormap = getHeatMapColor(1-angColor)
-                    print("colormap shape: "+str(colormap.shape))
-                    newV, newF = getColoredMesh(upV0, faces_gt, colormap)
-                    print("colormap complete ("+str(1000*(time.clock()-t0))+"ms)")
-                    #newV, newF = getHeatMapMesh(upV0, faces_gt, angColor)
-                    print("writing mesh...")
-                    t0 = time.clock()
-                    write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                    print("mesh written ("+str(1000*(time.clock()-t0))+"ms)")
-                    #write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
+                    # print("getting colormap "+str(fileNum+1)+"...")
+                    # t0 = time.clock()
+                    # colormap = getHeatMapColor(1-angColor)
+                    # print("colormap shape: "+str(colormap.shape))
+                    # newV, newF = getColoredMesh(upV0, faces_gt, colormap)
+                    # print("colormap complete ("+str(1000*(time.clock()-t0))+"ms)")
+                    # #newV, newF = getHeatMapMesh(upV0, faces_gt, angColor)
+                    # print("writing mesh...")
+                    # t0 = time.clock()
+                    # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+                    # print("mesh written ("+str(1000*(time.clock()-t0))+"ms)")
+                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
 
                     # Fill arrays
-                    nameArray.append(denoizedFile)
-                    resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
+                    # nameArray.append(denoizedFile)
+                    # resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
 
-            outputFile = open(csv_filename,'a')
-            nameArray = np.array(nameArray)
-            resultsArray = np.array(resultsArray,dtype=np.float32)
+            # outputFile = open(csv_filename,'a')
+            # nameArray = np.array(nameArray)
+            # resultsArray = np.array(resultsArray,dtype=np.float32)
 
-            tempArray = resultsArray.flatten()
-            resStr = ["%.7f" % number for number in tempArray]
-            resStr = np.reshape(resStr,resultsArray.shape)
+            # tempArray = resultsArray.flatten()
+            # resStr = ["%.7f" % number for number in tempArray]
+            # resStr = np.reshape(resStr,resultsArray.shape)
 
-            nameArray = np.expand_dims(nameArray, axis=-1)
+            # nameArray = np.expand_dims(nameArray, axis=-1)
 
-            finalArray = np.concatenate((nameArray,resStr),axis=1)
-            for row in range(finalArray.shape[0]):
-                for col in range(finalArray.shape[1]):
-                    outputFile.write(finalArray[row,col])
-                    outputFile.write(' ')
-                outputFile.write('\n')
+            # finalArray = np.concatenate((nameArray,resStr),axis=1)
+            # for row in range(finalArray.shape[0]):
+            #     for col in range(finalArray.shape[1]):
+            #         outputFile.write(finalArray[row,col])
+            #         outputFile.write(' ')
+            #     outputFile.write('\n')
 
-            outputFile.close()
+            # outputFile.close()
 
     elif running_mode == 5:
 
