@@ -227,7 +227,7 @@ def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge
     fadj = np.zeros([fnum,K], dtype=np.int32)     # triangular faces only
     find = np.ones([fnum], dtype=np.int8)
 
-    vnum = int(fnum*0.55) + 50  # Arbitrary choice
+    vnum = int(fnum*0.6) + 200  # Arbitrary choice
     v_adj = np.zeros([vnum,3*K],dtype=np.int32)  # Will contain a list of adjacent faces for each vertex
     v_ind = np.zeros([vnum], dtype=np.int32)     # Keep track of index for each vertex
 
@@ -307,7 +307,6 @@ def load_image(path,filename):
 
 def load_mesh(path,filename,K,bGetAdj):
     strFileName = os.path.join(path,filename)
-    print(strFileName)
     vertices = []
     adj=[]
     # texcoords = []    not used
@@ -591,6 +590,56 @@ def oneSidedHausdorff(V0,V1):
     distAvg/=N0
     return distM, distAvg
 
+
+# Returns the one-sided Hausdorff distance from point set V0 to mesh (V1,F) normalized by diagonal length of the bounding box of U(V0,V1)
+# V0: numpy array (float) of shape (N0,3)
+# V0: numpy array (float) of shape (N1,3)
+# F: numpy array (int) of shape (Fnum,3)
+# Returns a pair of float: (max distance, mean distance)
+def oneSidedHausdorffNew(V0, V1, F):
+    
+    #First, normalize
+    xmin = min(np.amin(V0[:,0]),np.amin(V1[:,0]))
+    ymin = min(np.amin(V0[:,1]),np.amin(V1[:,1]))
+    zmin = min(np.amin(V0[:,2]),np.amin(V1[:,2]))
+    xmax = max(np.amax(V0[:,0]),np.amax(V1[:,0]))
+    ymax = max(np.amax(V0[:,1]),np.amax(V1[:,1]))
+    zmax = max(np.amax(V0[:,2]),np.amax(V1[:,2]))
+
+    diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
+
+    V0 = V0/diag
+    V1 = V1/diag
+
+    N0 = V0.shape[0]
+    N1 = V1.shape[0]
+    Fnum = F.shape[0]
+
+    # Compute distance between every pair of points
+
+    distM = 0
+    distAvg=0
+    v1Ind = -1
+    for v in range(N0):
+
+        bV0 = np.reshape(V0[v,:], (1,3))
+        bV0 = np.tile(bV0, (N1,1))
+
+        diff_vec = V1-bV0
+        dist_vec = np.linalg.norm(diff_vec,axis=1)
+        vdist = np.amin(dist_vec)
+
+        #Get ind of closest vertex
+        v1Ind = np.argmin(dist_vec)
+
+
+        distAvg+=vdist
+        # Update general dist if this point's dist is higher than the current max
+        if vdist>distM:
+            distM=vdist
+
+    distAvg/=N0
+    return distM, distAvg
 
 # Takes two sets of face normals with one-one correspondance
 # Returns a pair of floats: the average angular difference (in degrees) between pairs of normals, and the std
@@ -1028,28 +1077,49 @@ def getHeatMapMesh(V, F, heatmap):
 
     return newV, newF
 
+# def getColoredMesh(V, F, faceColors):
+
+#     facesNum = F.shape[0]
+#     newV = np.array([])
+
+#     for f in range(facesNum):
+#         vCol = np.tile(np.expand_dims(faceColors[f,:],axis=0),(3,1))
+#         #vCol = np.full((3,3),heatmap[f])
+#         myF = F[f,:]
+#         v0 = np.expand_dims(V[myF[0]],axis=0)
+#         v1 = np.expand_dims(V[myF[1]],axis=0)
+#         v2 = np.expand_dims(V[myF[2]],axis=0)
+        
+#         #print("vCol shape: "+str(vCol.shape))
+#         vArr = np.concatenate((v0,v1,v2),axis=0)
+#         #print("vArr shape: "+str(vArr.shape))
+#         vArr = np.concatenate((vArr,vCol),axis=1)
+#         #print("vArr shape: "+str(vArr.shape))
+#         if f==0:
+#             newV = vArr
+#         else:
+#             newV = np.append(newV,vArr,axis=0)
+
+#     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
+
+#     return newV, newF
+
 def getColoredMesh(V, F, faceColors):
 
     facesNum = F.shape[0]
     newV = np.array([])
 
-    for f in range(facesNum):
-        vCol = np.tile(np.expand_dims(faceColors[f,:],axis=0),(3,1))
-        #vCol = np.full((3,3),heatmap[f])
-        myF = F[f,:]
-        v0 = np.expand_dims(V[myF[0]],axis=0)
-        v1 = np.expand_dims(V[myF[1]],axis=0)
-        v2 = np.expand_dims(V[myF[2]],axis=0)
-        
-        #print("vCol shape: "+str(vCol.shape))
-        vArr = np.concatenate((v0,v1,v2),axis=0)
-        #print("vArr shape: "+str(vArr.shape))
-        vArr = np.concatenate((vArr,vCol),axis=1)
-        #print("vArr shape: "+str(vArr.shape))
-        if f==0:
-            newV = vArr
-        else:
-            newV = np.append(newV,vArr,axis=0)
+    Vl = V[F];
+    # Shape (facesNum,3,3)
+
+    faceColors = np.expand_dims(faceColors,axis=-1)
+    # Shape (facesNum,3,1)
+    faceColors = np.tile(faceColors,(1,1,3))
+    # Shape (facesNum,3,3)
+
+    vArr = np.concatenate((Vl,faceColors),axis=-1)
+    # Shape (facesNum,3,6)
+    newV = np.reshape(vArr,(facesNum,6))
 
     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
 
