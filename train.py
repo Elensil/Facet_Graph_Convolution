@@ -55,8 +55,10 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,pat
         ve_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_POINTS,MAX_EDGES], name='ve_map_')
         keep_prob = tf.placeholder(tf.float32)
 
-        batch = tf.Variable(0, trainable=False)
+        # batch = tf.Variable(0, trainable=False)
+        
         fadjs = [fadj0,fadj1,fadj2]
+        
         # --- Starting iterative process ---
         #rotTens = getRotationToAxis(fn_)
         with tf.variable_scope("model"):
@@ -304,7 +306,7 @@ def faceNormalsLoss(fn,gt_fn):
     n_dt = tensorDotProduct(fn,gt_fn)
     #loss = tf.acos(n_dt-1e-5)    # So that it stays differentiable close to 1
     close_to_one = 0.999999999
-    loss = tf.acos(tf.maximum(tf.minimum(n_dt,close_to_one),-close_to_one))    # So that it stays differentiable close to 1 and -1
+    loss = tf.acos(tf.minimum(tf.maximum(n_dt,-close_to_one),close_to_one))    # So that it stays differentiable close to 1 and -1
     gtfn_abs_sum = tf.reduce_sum(tf.abs(gt_fn),axis=2)
     fakenodes = tf.less_equal(gtfn_abs_sum,10e-4)
     #fakenodes = tf.reduce_all(fakenodes,axis=-1)
@@ -441,7 +443,7 @@ def normalizeTensor(x):
 def mainFunction():
 
 
-    pickleLoad = False
+    pickleLoad = True
     pickleSave = True
 
     K_faces = 25
@@ -454,14 +456,14 @@ def mainFunction():
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/smallAdj/"
     # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
-    binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+    # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
 
 
     empiricMax = 30.0
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v1/coarsening4/"
 
-    # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v2/coarsening4/"
+    binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v2/coarsening4/"
 
     # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_fusion/coarsening4/"
 
@@ -711,6 +713,77 @@ def mainFunction():
 
         trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
+    # Simple inference, no GT mesh involved
+    elif running_mode == 1:
+        
+        maxSize = 100000
+        patchSize = 100000
+
+        # noisyFolder = "/morpheo-nas2/vincent/DTU_Robot_Image_Dataset/Surface/furu/"
+
+
+        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/DTU/furu/data/"
+        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
+
+
+        # Get GT mesh
+        for noisyFile in os.listdir(noisyFolder):
+
+
+            if (not noisyFile.endswith(".obj")):
+                continue
+            mesh_count = [0]
+
+
+            denoizedFile = noisyFile[:-4]+"_denoized_gray.obj"
+
+
+            noisyFilesList = [noisyFile]
+            denoizedFilesList = [denoizedFile]
+
+            for fileNum in range(len(denoizedFilesList)):
+                
+                denoizedFile = denoizedFilesList[fileNum]
+                noisyFile = noisyFilesList[fileNum]
+                
+                if not os.path.isfile(RESULTS_PATH+denoizedFile):
+                    
+
+                    f_normals_list = []
+                    GTfn_list = []
+                    f_adj_list = []
+
+                    print("Adding mesh "+noisyFile+"...")
+                    t0 = time.clock()
+                    faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, GTfn_list, f_adj_list, mesh_count)
+                    print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                    # Now recover vertices positions and create Edge maps
+                    V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
+
+                    facesNum = faces_noisy.shape[0]
+                    V0 = np.expand_dims(V0, axis=0)
+
+                    _, edge_map, v_e_map = getFacesAdj2(faces_noisy)
+                    f_adj = getFacesLargeAdj(faces_noisy,K_faces)
+                    # print("WARNING!!!!! Hardcoded a change in faces adjacency")
+                    # f_adj, edge_map, v_e_map = getFacesAdj2(faces_gt)
+                    
+
+                    faces_noisy = np.array(faces_noisy).astype(np.int32)
+                    faces = np.expand_dims(faces_noisy,axis=0)
+                    edge_map = np.expand_dims(edge_map, axis=0)
+                    v_e_map = np.expand_dims(v_e_map, axis=0)
+
+                    print("Inference ...")
+                    t0 = time.clock()
+                    #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                    upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                    print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
+
+                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
+
+
+
     # Inference: Denoise set, save meshes (colored with heatmap), compute metrics
     elif running_mode == 2:
         
@@ -745,8 +818,7 @@ def mainFunction():
 
             nameArray = []
             resultsArray = []
-            if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("aaMerlion")) or (gtFileName.startswith("aaarmadillo")) or (gtFileName.startswith("agargoyle")) or \
-            (gtFileName.startswith("aadragon")):
+            if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("aaMerlion")) or (gtFileName.startswith("armadillo")):
                 continue
             mesh_count = [0]
 
@@ -852,7 +924,7 @@ def mainFunction():
                     # t0 = time.clock()
                     # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
                     # print("mesh written ("+str(1000*(time.clock()-t0))+"ms)")
-                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
+                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
 
                     # Fill arrays
                     # nameArray.append(denoizedFile)
@@ -1135,9 +1207,9 @@ def mainFunction():
             # denoizedFile1 = gtFileName[:-4]+"_n2-dtree3.obj"
             # denoizedFile2 = gtFileName[:-4]+"_n3-dtree3.obj"
 
-            denoizedFile0 = gtFileName[:-4]+"_denoized_1.obj"
-            denoizedFile1 = gtFileName[:-4]+"_denoized_2.obj"
-            denoizedFile2 = gtFileName[:-4]+"_denoized_3.obj"
+            denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
+            denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
+            denoizedFile2 = gtFileName[:-4]+"_denoized_gray_3.obj"
 
             # heatFile0 = gtFileName[:-4]+"_dtree3_heatmap_1.obj"
             # heatFile1 = gtFileName[:-4]+"_dtree3_heatmap_2.obj"
@@ -1194,11 +1266,14 @@ def mainFunction():
                     angColor = angDistVec / empiricMax
                     angColor = 1 - angColor
                     angColor = np.maximum(angColor, np.zeros_like(angColor))
-                    newV, newF = getHeatMapMesh(V0, faces_gt, angColor)
+
+                    colormap = getHeatMapColor(1-angColor)
+                    newV, newF = getColoredMesh(V0, faces_gt, colormap)
+
+                    # newV, newF = getHeatMapMesh(V0, faces_gt, angColor)
 
                     write_mesh(newV, newF, RESULTS_PATH+heatFile)
-                    #write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
-
+                    
                     # Fill arrays
                     nameArray.append(denoizedFile)
                     resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])

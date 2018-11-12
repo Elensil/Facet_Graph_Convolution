@@ -1112,14 +1112,14 @@ def getColoredMesh(V, F, faceColors):
     Vl = V[F];
     # Shape (facesNum,3,3)
 
-    faceColors = np.expand_dims(faceColors,axis=-1)
+    faceColors = np.expand_dims(faceColors,axis=1)
     # Shape (facesNum,3,1)
-    faceColors = np.tile(faceColors,(1,1,3))
+    faceColors = np.tile(faceColors,(1,3,1))
     # Shape (facesNum,3,3)
 
     vArr = np.concatenate((Vl,faceColors),axis=-1)
     # Shape (facesNum,3,6)
-    newV = np.reshape(vArr,(facesNum,6))
+    newV = np.reshape(vArr,(3*facesNum,6))
 
     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
 
