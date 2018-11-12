@@ -229,7 +229,7 @@ def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge
     fadj = np.zeros([fnum,K], dtype=np.int32)     # triangular faces only
     find = np.ones([fnum], dtype=np.int8)
 
-    vnum = int(fnum*0.55) + 50  # Arbitrary choice
+    vnum = int(fnum*0.6) + 200  # Arbitrary choice
     v_adj = np.zeros([vnum,3*K],dtype=np.int32)  # Will contain a list of adjacent faces for each vertex
     v_ind = np.zeros([vnum], dtype=np.int32)     # Keep track of index for each vertex
 
@@ -300,9 +300,6 @@ def writeStringArray(myArr,strFileName, faces):
             outputFile.write(' ')
         outputFile.write('\n')
 
-
-
-
 #def load_image(path,filename=""):
 #    if filename == "":
 #        f=path
@@ -311,10 +308,11 @@ def writeStringArray(myArr,strFileName, faces):
 #    return skimage.data.imread(f)
 
 def load_image(strFileName):
+    #print("Loading "+strFileName)
     pic = Image.open(strFileName) #load image
     pic = np.array(pic)             #convert image to numpy array
     RGBpic = pic[:,:,0:3] #recover only RGB values
-    ALPHApic = pic[:,:,3] #alpha channel in another array
+    #ALPHApic = pic[:,:,3] #alpha channel in another array
     return RGBpic #,ALPHApic #return both if needed
 
 def read_calib_file(strFileName):
@@ -324,8 +322,14 @@ def read_calib_file(strFileName):
         for value in line.split('\n')[0].split(' '):
             values.append(float(value))
         calib.append(values)
+
+    if np.shape(calib)[1] == 12: # Single line calib file (Row major)
+        calib =    [[ calib[0][0],calib[0][1], calib[0][2], calib[0][3] ],
+                    [ calib[0][4], calib[0][5], calib[0][6],calib[0][7] ],
+                    [ calib[0][8], calib[0][9], calib[0][10],calib[0][11] ] ]
+    #print(strFileName+" Calib shape:"+str(np.shape(calib)))
     if np.shape(calib)[0] != 3 and np.shape(calib)[0] != 4:
-        print("ReadCalibFile Error: Wrong Dimensions")
+        print(strFileName+" ReadCalibFile Error: Wrong Dimensions: "+str(np.shape(calib)))
         exit()
     return calib
 
@@ -764,7 +768,7 @@ def getTrianglesBarycenter(vl,fl):
 
     diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
 
-    #vl = vl/diag # Remove normalization
+    #vl = vl/diag # Removed normalization
 
     for f in range(fnum):
         v0 = vl[fl[f,0],:]
@@ -788,7 +792,7 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
     K = fAdjIn.shape[1]
     fOut = np.empty((faceNum+K,3),dtype=int)
     fAdjOut = np.zeros((faceNum+K,K),dtype=int)
-    vOut = np.empty((int(faceNum*0.6)+K,3),dtype=np.float32)  # Arbitrary vertex size
+    vOut = np.empty((int(faceNum*0.7)+K,3),dtype=np.float32)  # Arbitrary vertex size
 
     vNewInd = np.zeros(vIn.shape[0],dtype=int)     # Array of correspondence between old vertex indices and new ones
     vNewInd -= 1

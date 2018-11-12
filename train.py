@@ -250,9 +250,9 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
     train_samp=0
 
     with tf.device(DEVICE):
-        lossArray = np.zeros([int(NUM_ITERATIONS/50),2])
+        lossArray = np.zeros([int(NUM_ITERATIONS/100),2])
         last_loss = 0
-        first=True
+
         for iter in range(NUM_ITERATIONS):
 
             # Get random sample from training dictionary
@@ -277,7 +277,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
             train_loss += local_train_loss
             train_samp+=1
             # Show smoothed training loss
-            if (iter%50 == 0):
+            if (iter%100 == 0):
                 train_loss = train_loss/train_samp
                 # sess.run(customLoss2,feed_dict=my_feed_dict)
                 # train_loss2 = customLoss2.eval(feed_dict=my_feed_dict)
@@ -288,12 +288,12 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
                 # print("Iteration %d, training loss2 %g"%(iter, train_loss2))
                 # print("Iteration %d, training loss3 %g"%(iter, train_loss3))
 
-                lossArray[int(iter/50),0]=train_loss
+                lossArray[int(iter/100),0]=train_loss
                 train_loss = 0
                 train_samp = 0
 
             # Compute validation loss
-            if (iter%100 == 0):
+            if (iter%200 == 0):
                 valid_loss = 0
                 valid_samp = len(valid_f_normals_list)
                 valid_random_ind = np.random.randint(num_p,size=10000)
@@ -310,20 +310,18 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, images_lists, calibs_lists, 
                     #print("Local Valid Loss: "+str(local_valid_loss))
                     if local_valid_loss != local_valid_loss:
                         print("Found NaN Loss!")
-                        print(valid_GTfn_list[vbm][0][0:50][:])
+                        print(valid_GTfn_list[vbm][0][0:100][:])
                     valid_loss += local_valid_loss
 
 
                 valid_loss/=valid_samp
                 print("Iteration %d, validation loss %g"%(iter, valid_loss))
-                lossArray[int(iter/50),1]=valid_loss
+                lossArray[int(iter/100),1]=valid_loss
                 if iter>0:
-                    if first:
-                        lossArray[int(iter/50)-1,1] = valid_loss
-                        first=False
-                    else:
-                        lossArray[int(iter/50)-1,1] = (valid_loss+last_loss)/2
-                        last_loss=valid_loss
+                    lossArray[int(iter/100)-1,1] = (valid_loss+last_loss)/2
+                if iter == 0:
+                    lossArray[int(iter/100)-1,1] = valid_loss
+                last_loss=valid_loss
 
             sess.run(train_step,feed_dict=train_fd)
             # sess.run(train_step2,feed_dict=my_feed_dict)
@@ -947,17 +945,21 @@ def mainFunction():
 
                     faceCheck[fOldInd]+=1
 
+
                     #patchFNormals = f_normals0[fOldInd]
                     patchFNormals = f_normals_pos[fOldInd]
                     patchGTFNormals = GTf_normals0[fOldInd]
 
+                    old_N = patchFNormals.shape[0]
+                    if old_N<100 :
+                        continue
                     # Convert to sparse matrix and coarsen graph
                     coo_adj = listToSparse(testPatchAdj, patchFNormals[:,3:])
                     adjs, newToOld = coarsen(coo_adj,4)
 
                     # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
                     new_N = len(newToOld)
-                    old_N = patchFNormals.shape[0]
+
 
                     padding6 =np.zeros((new_N-old_N,6))
                     padding3 =np.zeros((new_N-old_N,3))
@@ -1030,7 +1032,7 @@ def mainFunction():
                 ##### Save number of triangles and patch new_to_old permutation #####
                 num_faces.append(old_N) # Keep track of fake nodes
                 patch_indices.append([])
-                new_to_old_permutations_list.append([newToOld]) # Nothing to append here, faces are already correctly ordered
+                new_to_old_permutations_list.append(newToOld) # Nothing to append here, faces are already correctly ordered
                 #####################################################################
 
                 # Reorder nodes
@@ -1082,38 +1084,46 @@ def mainFunction():
         valid_images_lists = []
         valid_calibs_lists = []
 
-
-
-        inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/images"
-        #validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images"
-        validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/valid/images"
-
         training_meshes_num = [0]
         valid_meshes_num = [0]
+
+        if DATA == 0: # Synthetic
+            inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/train/images"
+            #validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images"
+            validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/valid/images"
+        if DATA == 1: # Kinect v1
+            inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v1/train/images"
+            validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v1/valid/images"
+        if DATA == 2: # Kinect v2
+            inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v2/train/images"
+            validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v2/valid/images"
+        if DATA == 3: # Kinect Fusion
+            inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_Fusion/train/images"
+            validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v1/valid/images"
 
         #print("training_meshes_num 0 " + str(training_meshes_num))
         if pickleLoad:
             # Training
-            with open(binDumpPath+'f_normals_list', 'rb') as fp:
+            with open(binDumpPath+'f_normals_list_'+str(DATA), 'rb') as fp:
                 f_normals_list = pickle.load(fp)
-            with open(binDumpPath+'GTfn_list', 'rb') as fp:
+            with open(binDumpPath+'GTfn_list_'+str(DATA), 'rb') as fp:
                 GTfn_list = pickle.load(fp)
-            with open(binDumpPath+'f_adj_list', 'rb') as fp:
+            with open(binDumpPath+'f_adj_list_'+str(DATA), 'rb') as fp:
                     f_adj_list = pickle.load(fp)
-            with open(binDumpPath+'images_lists', 'rb') as fp:
+            with open(binDumpPath+'images_lists_'+str(DATA), 'rb') as fp:
                     images_lists = pickle.load(fp)
-            with open(binDumpPath+'calibs_lists', 'rb') as fp:
+            with open(binDumpPath+'calibs_lists_'+str(DATA), 'rb') as fp:
                     calibs_lists = pickle.load(fp)
             # Validation
-            with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
+            with open(binDumpPath+'valid_f_normals_list_'+str(DATA), 'rb') as fp:
                 valid_f_normals_list = pickle.load(fp)
-            with open(binDumpPath+'valid_GTfn_list', 'rb') as fp:
+            with open(binDumpPath+'valid_GTfn_list_'+str(DATA), 'rb') as fp:
                 valid_GTfn_list = pickle.load(fp)
-            with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
+            with open(binDumpPath+'valid_f_adj_list_'+str(DATA), 'rb') as fp:
                 valid_f_adj_list = pickle.load(fp)
-            with open(binDumpPath+'valid_images_lists', 'rb') as fp:
+            with open(binDumpPath+'valid_images_lists_'+str(DATA), 'rb') as fp:
                     valid_images_lists = pickle.load(fp)
-            with open(binDumpPath+'valid_calibs_lists', 'rb') as fp:
+            with open(binDumpPath+'valid_calibs_lists_'+str(DATA), 'rb') as fp:
                     valid_calibs_lists = pickle.load(fp)
 
         else:
@@ -1130,26 +1140,26 @@ def mainFunction():
 
             if pickleSave:
                 # Training
-                with open(binDumpPath+'f_normals_list', 'wb') as fp:
+                with open(binDumpPath+'f_normals_list_'+str(DATA), 'wb') as fp:
                     pickle.dump(f_normals_list, fp)
-                with open(binDumpPath+'GTfn_list', 'wb') as fp:
+                with open(binDumpPath+'GTfn_list_'+str(DATA), 'wb') as fp:
                     pickle.dump(GTfn_list, fp)
-                with open(binDumpPath+'f_adj_list', 'wb') as fp:
+                with open(binDumpPath+'f_adj_list_'+str(DATA), 'wb') as fp:
                     pickle.dump(f_adj_list, fp)
-                with open(binDumpPath+'images_lists', 'wb') as fp:
+                with open(binDumpPath+'images_lists_'+str(DATA), 'wb') as fp:
                         pickle.dump(images_lists, fp)
-                with open(binDumpPath+'calibs_lists', 'wb') as fp:
+                with open(binDumpPath+'calibs_lists_'+str(DATA), 'wb') as fp:
                         pickle.dump(calibs_lists, fp)
                 # Validation
-                with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
+                with open(binDumpPath+'valid_f_normals_list_'+str(DATA), 'wb') as fp:
                     pickle.dump(valid_f_normals_list, fp)
-                with open(binDumpPath+'valid_GTfn_list', 'wb') as fp:
+                with open(binDumpPath+'valid_GTfn_list_'+str(DATA), 'wb') as fp:
                     pickle.dump(valid_GTfn_list, fp)
-                with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
+                with open(binDumpPath+'valid_f_adj_list_'+str(DATA), 'wb') as fp:
                     pickle.dump(valid_f_adj_list, fp)
-                with open(binDumpPath+'valid_images_lists', 'wb') as fp:
+                with open(binDumpPath+'valid_images_lists_'+str(DATA), 'wb') as fp:
                         pickle.dump(valid_images_lists, fp)
-                with open(binDumpPath+'valid_calibs_lists', 'wb') as fp:
+                with open(binDumpPath+'valid_calibs_lists_'+str(DATA), 'wb') as fp:
                         pickle.dump(valid_calibs_lists, fp)
 
         ## DEV: cut only 5 first samples of first entry #############################################################
@@ -1277,8 +1287,17 @@ def mainFunction():
         # Generate array of metrics on reconstructions
         nameArray = []      # String array, to now which row is what
         resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
-                    # [Max distance, Mean distance, Mean angle, std angle, face num]
-        DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images/"
+        # [Max distance, Mean distance, Mean angle, std angle, face num]
+
+        if DATA == 0: # Synthetic
+            DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/images/"
+        if DATA == 1: # Kinect v1
+            DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v1/test/images/"
+        if DATA == 2: # Kinect v2
+            DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v2/test/images/"
+        if DATA == 3: # Kinect Fusion
+            DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_Fusion/test/images/"
+
         #DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/dummy/images/"
 
 
@@ -1320,14 +1339,14 @@ def mainFunction():
             write_mesh(upV, faces_noisy, RESULTS_PATH+denoizedFile0)
 
             # GT mesh
-            GTV,_,_, faces_gt, _ = load_mesh(noisyFolder, noisyFile0, 0, False)
+            GTV,_,_, faces_gt, _ = load_mesh(gtFolder, noisyFile0, 0, False)
             # Compute Normals
             GTf_normals = computeFacesNormals(GTV, faces_noisy)
             #sum = np.sum(np.absolute(gt_normals - upN0))
             #print("Sum : "+str(sum))
 
             print("computing Hausdorff 1...")
-            haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
+            haus_dist0, avg_dist0 = oneSidedHausdorff(upV, GTV)
             angDist0, angStd0 = angularDiff(upN0, GTf_normals)
             #write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)
 
@@ -1354,14 +1373,63 @@ def mainFunction():
 
         outputFile.close()
 
+    elif running_mode == 3:
+
+        # Training patch size
+        maxSize = 10100
+        patchSize = 10000
+
+        DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinovis/eval/"
+
+        mesh_count = [0]
+
+        # Get GT mesh
+        for filename in os.listdir(DataFolder):
+
+            f_normals_list = []
+            GTfn_list = []
+            f_adj_list = []
+            images_lists = []
+            calibs_lists = []
+
+            gtFolder=DataFolder+filename+"/Ground_Truth/"
+            noisyFolder=DataFolder+filename+"/Noisy/"
+            gtFileName ="000.obj"
+            # Get smooth meshes
+            noisyFile0 = "000.obj"
+            denoizedFile0 = filename+"_denoized.obj"
+
+            # Load GT and Noisy Meshes
+            gtfilename = filename+"/Ground_Truth/000.obj"
+            faces_num, patch_indices, permutations = addBigMesh(DataFolder, filename, DataFolder, gtfilename, f_normals_list, GTfn_list, f_adj_list, mesh_count,images_lists,calibs_lists)
+
+            # Now recover vertices positions and create Edge maps
+            V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile0, 0, False)
+
+            _, edge_map_noisy , v_e_map_noisy  = getFacesAdj2(faces_noisy)
+
+            edge_map_noisy = np.expand_dims(edge_map_noisy, axis=0)
+            v_e_map_noisy = np.expand_dims(v_e_map_noisy, axis=0)
+
+            print("running ...")
+            upV, upN0 = inferNet(V0, f_normals_list, f_adj_list, edge_map_noisy, v_e_map_noisy,images_lists,calibs_lists,faces_num, patch_indices, permutations,faces_noisy.shape[0])
+            write_mesh(upV, faces_noisy, RESULTS_PATH+denoizedFile0)
+
     elif running_mode == 8:
         # Take the opportunity to generate array of metrics on reconstructions
         nameArray = []      # String array, to now which row is what
         resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
-                            # [Max distance, Mean distance, Mean angle, std angle, face num]
+        # [Max distance, Mean distance, Mean angle, std angle, face num]
+        if DATA == 0: # Synthetic
+            gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
+        if DATA == 1: # Kinect v1
+            gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v1/rescaled_GT/"
+        if DATA == 2: # Kinect v2
+            gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v2/rescaled_GT/"
+        if DATA == 3: # Kinect Fusion
+            gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_Fusion/rescaled_GT/"
 
-        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
-        #gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/test/test/"
+
 
         # results file name
         csv_filename = RESULTS_PATH+"results_heat.csv"
@@ -1946,6 +2014,7 @@ if __name__ == "__main__":
     parser.add_argument('--net_name', type=str, default='unnamed_net')
     parser.add_argument('--pretrained', type=bool, default=False)
     parser.add_argument('--mode',type=int,default=0)
+    parser.add_argument('--data',type=int,default=0)
 
     FLAGS = parser.parse_args()
 
@@ -1955,6 +2024,7 @@ if __name__ == "__main__":
     NETWORK_PATH = FLAGS.network_path
     NUM_ITERATIONS = FLAGS.num_iterations
     DEVICE = FLAGS.device
+    DATA = FLAGS.data
 
     running_mode = FLAGS.mode
     NET_NAME = FLAGS.net_name

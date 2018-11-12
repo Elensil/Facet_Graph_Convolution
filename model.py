@@ -2913,7 +2913,7 @@ def get_appearance_model_reg(x, adj, architecture, keep_prob, images_, calibs_):
     y_conv = custom_lin(h_fc1, out_channels_reg)
     return y_conv
 
-def getAverageProjFeat(x,images_,calibs_):
+def getAverageProjFeat(x,images_,calibs_,architecture):
     #First Normalize images
     normalized_images_ = normalize_images(images_)
     num_cameras = calibs_.get_shape().as_list()[1]
@@ -3035,7 +3035,12 @@ def getAverageProjFeat(x,images_,calibs_):
         # Discard invalid normal_z_coords
         #subtract normal's depths to barycenter's
         subtraction = tf.subtract(normal_z_coords,z_coords,name='visibility_subtraction')
-        visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask') ## tf.less() or greater?
+        ## tf.less() or greater?
+        if architecture == 0: # Less
+            visibility_mask = tf.less(subtraction,tf.zeros_like(subtraction),name='visibility_mask')
+        else :
+            visibility_mask = tf.greater(subtraction,tf.zeros_like(subtraction),name='visibility_mask')
+
         mask = tf.logical_and(mask,visibility_mask) #
 
         print("Mask Shape: ",mask.get_shape().as_list())
@@ -3268,7 +3273,7 @@ def getAverageProjFeat(x,images_,calibs_):
 def get_model_reg_multi_scale_appearance(x, adjs, architecture, keep_prob, images_, calibs_): # x:[normals,pos]
 
     #Compute Average Projected Features on every barycenter
-    x = getAverageProjFeat(x,images_,calibs_)
+    x = getAverageProjFeat(x,images_,calibs_,architecture)
 
     print("Input Feature:",x.get_shape().as_list())
 
