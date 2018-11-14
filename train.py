@@ -54,8 +54,6 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,pat
         e_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_EDGES,4], name='e_map_')
         ve_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_POINTS,MAX_EDGES], name='ve_map_')
         keep_prob = tf.placeholder(tf.float32)
-
-        # batch = tf.Variable(0, trainable=False)
         
         fadjs = [fadj0,fadj1,fadj2]
         
@@ -149,6 +147,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
     keep_prob = tf.placeholder(tf.float32)
     
+    rot_mat = tf.placeholder(tf.float32, shape=(BATCH_SIZE,None,3,3),name='rot_mat')    #Random rotation matrix, used for data augmentation. Generated anew for each training iteration. None correspond to the tiling for each face.
     
     batch = tf.Variable(0, trainable=False)
 
@@ -157,11 +156,23 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
     #rotTens = getRotationToAxis(fn_)
 
+    #Add random rotation
+    fn_rot = tf.reshape(fn_,[BATCH_SIZE,-1,2,3])    # 2 because of normal + position
+    fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # switch dimensions
+    tfn_rot = tf.reshape(tfn_,[BATCH_SIZE,-1,3,1])
+    
+    fn_rot = tf.matmul(rot_mat,fn_rot)
+    tfn_rot = tf.matmul(rot_mat,tfn_rot)
+
+    fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # Put it back
+    fn_rot = tf.reshape(fn_rot,[BATCH_SIZE,-1,6])
+    tfn_rot = tf.reshape(tfn_rot,[BATCH_SIZE,-1,3])
+
     fadjs = [fadj0,fadj1,fadj2]
 
     with tf.variable_scope("model"):
         # n_conv = get_model_reg(fn_, fadj0, ARCHITECTURE, keep_prob)
-        n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+        n_conv = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
 
 
     # n_conv = normalizeTensor(n_conv)
@@ -171,9 +182,10 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     # n_conv = tf.slice(fn_,[0,0,0],[-1,-1,3])+n_conv
     n_conv = normalizeTensor(n_conv)
 
-    
+    isNanNConv = tf.reduce_any(tf.is_nan(n_conv), name="isNanNConv")
+    isFullNanNConv = tf.reduce_all(tf.is_nan(n_conv), name="isNanNConv")
     with tf.device(DEVICE):
-        customLoss = faceNormalsLoss(n_conv, tfn_)
+        customLoss = faceNormalsLoss(n_conv, tfn_rot)
         # customLoss2 = faceNormalsLoss(n_conv2, tfn_)
         # customLoss3 = faceNormalsLoss(n_conv3, tfn_)
         train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
@@ -219,15 +231,28 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     train_loss=0
     train_samp=0
 
+    hasNan = False
+    # forbidden_examples = [62, 61, 45, 65, 23, 57] # For kinect_v2
+    # forbidden_examples = [10,15] # For kinect_fusion
+    forbidden_examples = []
+
     with tf.device(DEVICE):
         lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
         last_loss = 0
         for iter in range(NUM_ITERATIONS):
 
+
             # Get random sample from training dictionary
             batch_num = random.randint(0,len(f_normals_list)-1)
+
+            while batch_num in forbidden_examples:
+                batch_num = random.randint(0,len(f_normals_list)-1)
             num_p = f_normals_list[batch_num].shape[1]
             random_ind = np.random.randint(num_p,size=10000)
+
+            random_R = rand_rotation_matrix()
+            tens_random_R = np.reshape(random_R,(1,1,3,3))
+            tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
 
             # train_fd = {fn_: f_normals_list[batch_num], fadj: f_adj_list[batch_num], tfn_: GTfn_list[batch_num],
             #               sample_ind: random_ind, keep_prob:1}
@@ -236,8 +261,14 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
             #               sample_ind: random_ind, keep_prob:1}
 
             train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
-                            fadj2: f_adj_list[batch_num][2], tfn_: GTfn_list[batch_num],
+                            fadj2: f_adj_list[batch_num][2], tfn_: GTfn_list[batch_num], rot_mat:tens_random_R2,
                             sample_ind: random_ind, keep_prob:1}
+            # if sess.run(isNanNConv,feed_dict=train_fd):
+            #     print("WARNING! Nan found before training step! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
+                
+            #     print("Black-listing example")
+            #     forbidden_examples.append(batch_num)
+            #     continue
 
             #i = train_shuffle[iter%(len(train_data))]
             #in_points = train_data[i]
@@ -272,9 +303,10 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
                     # valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm],
                     #       sample_ind: valid_random_ind, keep_prob:1}
-
+                    num_p = valid_f_normals_list[vbm].shape[1]
+                    tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
                     valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], fadj1: valid_f_adj_list[vbm][1],
-                            fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm],
+                            fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
                             sample_ind: valid_random_ind, keep_prob:1}
 
                     valid_loss += customLoss.eval(feed_dict=valid_fd)
@@ -288,9 +320,14 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
             sess.run(train_step,feed_dict=train_fd)
             # sess.run(train_step2,feed_dict=my_feed_dict)
             # sess.run(train_step3,feed_dict=my_feed_dict)
-
+            if sess.run(isNanNConv,feed_dict=train_fd):
+                hasNan = True
+                print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
+                print("patch size: "+str(f_normals_list[batch_num].shape))
             if (iter%2000 == 0):
                 saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+iter)
+                if sess.run(isFullNanNConv, feed_dict=train_fd):
+                    break
     
     saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
 
@@ -298,6 +335,9 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     csv_filename = RESULTS_PATH+NET_NAME+".csv"
     f = open(csv_filename,'ab')
     np.savetxt(f,lossArray, delimiter=",")
+
+
+
 
 
 def faceNormalsLoss(fn,gt_fn):
@@ -323,6 +363,33 @@ def faceNormalsLoss(fn,gt_fn):
     #loss = tf.reduce_mean(loss)
     return loss
 
+
+
+# Loss defined as the average distance from points of P0 to point set P1
+def PrecisionLoss(P0,P1):
+    with tf.variable_scope('precisionLoss'):
+    # P0 shape: [batch, numP0, 3]
+    # P1 shape: [batch, numP1, 3]
+        numP0 = P0.shape[1]
+        numP1 = P1.shape[1]
+
+        eP0 = tf.expand_dims(P0,axis=2)
+        eP1 = tf.expand_dims(P1,axis=1)
+        eP0 = tf.tile(eP0,(1,1,numP1,1))
+        eP1 = tf.tile(eP1,(1,numP0,1,1))
+
+        diff = eP0 - eP1
+        # [batch, numP0, numP1, 3]
+
+        dist = tf.norm(diff, axis=-1, name = 'norm')
+        # [batch ,numP0, numP1]
+
+        precision = tf.reduce_min(dist,axis=2, name = 'min_point_set')
+        # [batch, numP0]
+
+        avg_precision = tf.reduce_mean(precision,name='avg_precision')
+
+    return avg_precision
 
 
 # Original update algorithm from Taubin (Linear anisotropic mesh filtering)
@@ -456,14 +523,14 @@ def mainFunction():
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/smallAdj/"
     # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/bigAdj/"
-    # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
+    binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/coarsening4/"
 
 
     empiricMax = 30.0
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v1/coarsening4/"
 
-    binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v2/coarsening4/"
+    # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v2/coarsening4/"
 
     # binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_fusion/coarsening4/"
 
@@ -796,14 +863,14 @@ def mainFunction():
         resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
                             # [Max distance, Mean distance, Mean angle, std angle, face num]
 
-        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
-        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
+        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
+        # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
 
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/noisy/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/original/"
 
-        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
-        # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/original/"
+        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
+        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/original/"
 
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
@@ -818,28 +885,28 @@ def mainFunction():
 
             nameArray = []
             resultsArray = []
-            if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("aaMerlion")) or (gtFileName.startswith("armadillo")):
+            if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("armadillo")):
                 continue
             mesh_count = [0]
 
             # Get all 3 noisy meshes
-            # noisyFile0 = gtFileName[:-4]+"_noisy.obj"
-
+            noisyFile0 = gtFileName[:-4]+"_noisy.obj"
+            denoizedFile0 = gtFileName[:-4]+"_denoized.obj"
             # noisyFile0 = gtFileName[:-4]+"_noisy_1.obj"
             # noisyFile1 = gtFileName[:-4]+"_noisy_2.obj"
             # noisyFile2 = gtFileName[:-4]+"_noisy_3.obj"
             
 
-            noisyFile0 = gtFileName[:-4]+"_n1.obj"
-            noisyFile1 = gtFileName[:-4]+"_n2.obj"
-            noisyFile2 = gtFileName[:-4]+"_n3.obj"
+            # noisyFile0 = gtFileName[:-4]+"_n1.obj"
+            # noisyFile1 = gtFileName[:-4]+"_n2.obj"
+            # noisyFile2 = gtFileName[:-4]+"_n3.obj"
 
-            denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
-            denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
-            denoizedFile2 = gtFileName[:-4]+"_denoized_gray_3.obj"
+            # denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
+            # denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
+            # denoizedFile2 = gtFileName[:-4]+"_denoized_gray_3.obj"
 
-            if (os.path.isfile(RESULTS_PATH+denoizedFile0)) and (os.path.isfile(RESULTS_PATH+denoizedFile1)) and (os.path.isfile(RESULTS_PATH+denoizedFile2)):
-                continue
+            # if (os.path.isfile(RESULTS_PATH+denoizedFile0)) and (os.path.isfile(RESULTS_PATH+denoizedFile1)) and (os.path.isfile(RESULTS_PATH+denoizedFile2)):
+            #     continue
 
             # Load GT mesh
             GT,_,_,faces_gt,_ = load_mesh(gtFolder, gtFileName, 0, False)
@@ -862,15 +929,16 @@ def mainFunction():
 
             
 
-            # noisyFilesList = [noisyFile0]
-            # denoizedFilesList = [denoizedFile0]
+            noisyFilesList = [noisyFile0]
+            denoizedFilesList = [denoizedFile0]
 
-            noisyFilesList = [noisyFile0,noisyFile1,noisyFile2]
-            denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
+            # noisyFilesList = [noisyFile0,noisyFile1,noisyFile2]
+            # denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
 
             for fileNum in range(len(denoizedFilesList)):
                 
                 denoizedFile = denoizedFilesList[fileNum]
+                denoizedHeatmap = denoizedFile[:-4]+"_H.obj"
                 noisyFile = noisyFilesList[fileNum]
                 
                 if not os.path.isfile(RESULTS_PATH+denoizedFile):
@@ -895,59 +963,107 @@ def mainFunction():
                     print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
 
 
-                    # print("computing Hausdorff "+str(fileNum+1)+"...")
-                    # t0 = time.clock()
-                    # haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
-                    # print("Hausdorff complete ("+str(1000*(time.clock()-t0))+"ms)")
-                    # print("computing Angular diff "+str(fileNum+1)+"...")
-                    # t0 = time.clock()
-                    # angDistVec = angularDiffVec(upN0, GTf_normals)
-                    # angDist0, angStd0 = angularDiff(upN0, GTf_normals)
-                    # print("Angular diff complete ("+str(1000*(time.clock()-t0))+"ms)")
-                    # print("max angle: "+str(np.amax(angDistVec)))
+                    print("computing Hausdorff "+str(fileNum+1)+"...")
+                    t0 = time.clock()
+                    haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
+                    print("Hausdorff complete ("+str(1000*(time.clock()-t0))+"ms)")
+                    print("computing Angular diff "+str(fileNum+1)+"...")
+                    t0 = time.clock()
+                    angDistVec = angularDiffVec(upN0, GTf_normals)
+                    angDist0, angStd0 = angularDiff(upN0, GTf_normals)
+                    print("Angular diff complete ("+str(1000*(time.clock()-t0))+"ms)")
+                    print("max angle: "+str(np.amax(angDistVec)))
 
-                    #angDistVec = angDistVec[oldToNew]
-                    # --- Test heatmap ---
-                    # angColor = angDistVec / empiricMax
 
-                    # angColor = 1 - angColor
-                    # angColor = np.maximum(angColor, np.zeros_like(angColor))
+                     # --- heatmap ---
+                    angColor = angDistVec / empiricMax
 
-                    # print("getting colormap "+str(fileNum+1)+"...")
-                    # t0 = time.clock()
-                    # colormap = getHeatMapColor(1-angColor)
-                    # print("colormap shape: "+str(colormap.shape))
-                    # newV, newF = getColoredMesh(upV0, faces_gt, colormap)
-                    # print("colormap complete ("+str(1000*(time.clock()-t0))+"ms)")
-                    # #newV, newF = getHeatMapMesh(upV0, faces_gt, angColor)
-                    # print("writing mesh...")
-                    # t0 = time.clock()
-                    # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                    # print("mesh written ("+str(1000*(time.clock()-t0))+"ms)")
+                    angColor = 1 - angColor
+                    angColor = np.maximum(angColor, np.zeros_like(angColor))
+
+                    print("getting colormap "+str(fileNum+1)+"...")
+                    t0 = time.clock()
+                    colormap = getHeatMapColor(1-angColor)
+                    print("colormap shape: "+str(colormap.shape))
+                    newV, newF = getColoredMesh(upV0, faces_gt, colormap)
+                    print("colormap complete ("+str(1000*(time.clock()-t0))+"ms)")
+                    #newV, newF = getHeatMapMesh(upV0, faces_gt, angColor)
+                    print("writing mesh...")
+                    t0 = time.clock()
+                    write_mesh(newV, newF, RESULTS_PATH+denoizedHeatmap)
+                    print("mesh written ("+str(1000*(time.clock()-t0))+"ms)")
                     write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
 
                     # Fill arrays
-                    # nameArray.append(denoizedFile)
-                    # resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
+                    nameArray.append(denoizedFile)
+                    resultsArray.append([haus_dist0, avg_dist0, angDist0, angStd0, facesNum])
 
-            # outputFile = open(csv_filename,'a')
-            # nameArray = np.array(nameArray)
-            # resultsArray = np.array(resultsArray,dtype=np.float32)
+            outputFile = open(csv_filename,'a')
+            nameArray = np.array(nameArray)
+            resultsArray = np.array(resultsArray,dtype=np.float32)
 
-            # tempArray = resultsArray.flatten()
-            # resStr = ["%.7f" % number for number in tempArray]
-            # resStr = np.reshape(resStr,resultsArray.shape)
+            tempArray = resultsArray.flatten()
+            resStr = ["%.7f" % number for number in tempArray]
+            resStr = np.reshape(resStr,resultsArray.shape)
 
-            # nameArray = np.expand_dims(nameArray, axis=-1)
+            nameArray = np.expand_dims(nameArray, axis=-1)
 
-            # finalArray = np.concatenate((nameArray,resStr),axis=1)
-            # for row in range(finalArray.shape[0]):
-            #     for col in range(finalArray.shape[1]):
-            #         outputFile.write(finalArray[row,col])
-            #         outputFile.write(' ')
-            #     outputFile.write('\n')
+            finalArray = np.concatenate((nameArray,resStr),axis=1)
+            for row in range(finalArray.shape[0]):
+                for col in range(finalArray.shape[1]):
+                    outputFile.write(finalArray[row,col])
+                    outputFile.write(' ')
+                outputFile.write('\n')
 
-            # outputFile.close()
+            outputFile.close()
+
+    elif running_mode == 3:
+        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
+        gtFileName = "block.obj"
+
+        GT,_,_,faces_gt,_ = load_mesh(gtFolder, gtFileName, 0, False)
+        GTf_normals = computeFacesNormals(GT, faces_gt)
+        facesNum = faces_gt.shape[0]
+        vertNum = GT.shape[0]
+        GT_pos = getTrianglesBarycenter(GT,faces_gt)
+
+        normal_pos = np.concatenate((GTf_normals,GT_pos),axis=-1)
+
+        myRot = rand_rotation_matrix()
+        tensMyRot = np.reshape(myRot,(1,3,3))
+        tensMyRot2 = np.tile(tensMyRot,(facesNum,1,1))
+
+        normal_pos = np.reshape(normal_pos,(-1,2,3))
+        normal_pos = np.transpose(normal_pos,(0,2,1))
+
+        rot_normal_pos = np.matmul(tensMyRot2,normal_pos)
+
+        rot_normal_pos = np.transpose(rot_normal_pos,(0,2,1))
+        rot_normal_pos = np.reshape(rot_normal_pos,(-1,6))
+
+        newN = rot_normal_pos[:,:3]
+        # newN = np.slice(rot_normal_pos,(0,0),(-1,3))
+
+        tensMyRotV = np.tile(tensMyRot,(vertNum,1,1))
+
+        rot_vert = np.expand_dims(GT,axis=-1)
+        rot_vert = np.matmul(tensMyRotV,rot_vert)
+
+        rot_vert = np.reshape(rot_vert,(-1,3))
+
+        angColor = (newN+1)/2
+
+        angColorO = (GTf_normals+1)/2
+
+        newV, newF = getColoredMesh(rot_vert, faces_gt, angColor)
+
+        VO, FO = getColoredMesh(GT,faces_gt,angColorO)
+
+        write_mesh(newV,newF,'/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/rotated_colored.obj')
+        write_mesh(VO,FO,'/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/ori_colored.obj')
+
+
+
 
     elif running_mode == 5:
 
@@ -1186,8 +1302,9 @@ def mainFunction():
                             # [Max distance, Mean distance, Mean angle, std angle, face num]
 
         #gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
-        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
+        # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/original/"
+        gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/original/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 
         # results file name
@@ -1199,28 +1316,31 @@ def mainFunction():
 
             nameArray = []
             resultsArray = []
-            if (not gtFileName.endswith(".obj")) or (gtFileName.startswith("aMerlion")) or (gtFileName.startswith("aarmadillo")) or (gtFileName.startswith("agargoyle")) or \
-            (gtFileName.startswith("adragon")):
+            if (not gtFileName.endswith(".obj")):
                 continue
 
             # denoizedFile0 = gtFileName[:-4]+"_n1-dtree3.obj"
             # denoizedFile1 = gtFileName[:-4]+"_n2-dtree3.obj"
             # denoizedFile2 = gtFileName[:-4]+"_n3-dtree3.obj"
 
-            denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
-            denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
-            denoizedFile2 = gtFileName[:-4]+"_denoized_gray_3.obj"
+            denoizedFile0 = gtFileName[:-4]+"_noisy-dtree3.obj"
+            # denoizedFile0 = gtFileName[:-4]+"_denoized.obj"
+            heatFile0 = gtFileName[:-4]+"_heatmap.obj"
+
+            # denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
+            # denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
+            # denoizedFile2 = gtFileName[:-4]+"_denoized_gray_3.obj"
 
             # heatFile0 = gtFileName[:-4]+"_dtree3_heatmap_1.obj"
             # heatFile1 = gtFileName[:-4]+"_dtree3_heatmap_2.obj"
             # heatFile2 = gtFileName[:-4]+"_dtree3_heatmap_3.obj"
 
-            heatFile0 = gtFileName[:-4]+"_heatmap_1.obj"
-            heatFile1 = gtFileName[:-4]+"_heatmap_2.obj"
-            heatFile2 = gtFileName[:-4]+"_heatmap_3.obj"
+            # heatFile0 = gtFileName[:-4]+"_heatmap_1.obj"
+            # heatFile1 = gtFileName[:-4]+"_heatmap_2.obj"
+            # heatFile2 = gtFileName[:-4]+"_heatmap_3.obj"
 
-            if (os.path.isfile(RESULTS_PATH+heatFile0)) and (os.path.isfile(RESULTS_PATH+heatFile1)) and (os.path.isfile(RESULTS_PATH+heatFile2)):
-                continue
+            # if (os.path.isfile(RESULTS_PATH+heatFile0)) and (os.path.isfile(RESULTS_PATH+heatFile1)) and (os.path.isfile(RESULTS_PATH+heatFile2)):
+            #     continue
 
             # Load GT mesh
             GT,_,_,faces_gt,_ = load_mesh(gtFolder, gtFileName, 0, False)
@@ -1243,8 +1363,11 @@ def mainFunction():
             #edge_map = np.expand_dims(edge_map, axis=0)
             v_e_map = np.expand_dims(v_e_map, axis=0)
 
-            denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
-            heatMapFilesList = [heatFile0,heatFile1,heatFile2]
+            # denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
+            # heatMapFilesList = [heatFile0,heatFile1,heatFile2]
+
+            denoizedFilesList = [denoizedFile0]
+            heatMapFilesList = [heatFile0]
 
             for fileNum in range(len(denoizedFilesList)):
                 

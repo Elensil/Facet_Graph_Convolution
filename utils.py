@@ -1077,32 +1077,6 @@ def getHeatMapMesh(V, F, heatmap):
 
     return newV, newF
 
-# def getColoredMesh(V, F, faceColors):
-
-#     facesNum = F.shape[0]
-#     newV = np.array([])
-
-#     for f in range(facesNum):
-#         vCol = np.tile(np.expand_dims(faceColors[f,:],axis=0),(3,1))
-#         #vCol = np.full((3,3),heatmap[f])
-#         myF = F[f,:]
-#         v0 = np.expand_dims(V[myF[0]],axis=0)
-#         v1 = np.expand_dims(V[myF[1]],axis=0)
-#         v2 = np.expand_dims(V[myF[2]],axis=0)
-        
-#         #print("vCol shape: "+str(vCol.shape))
-#         vArr = np.concatenate((v0,v1,v2),axis=0)
-#         #print("vArr shape: "+str(vArr.shape))
-#         vArr = np.concatenate((vArr,vCol),axis=1)
-#         #print("vArr shape: "+str(vArr.shape))
-#         if f==0:
-#             newV = vArr
-#         else:
-#             newV = np.append(newV,vArr,axis=0)
-
-#     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
-
-#     return newV, newF
 
 def getColoredMesh(V, F, faceColors):
 
@@ -1154,3 +1128,48 @@ def getHeatMapColor(myVec):
             heatmap[myInd,:] = coef4 * c4 + (1-coef4) * c3
 
     return heatmap
+
+
+# The following function is copied from http://blog.lostinmyterminal.com/python/2015/05/12/random-rotation-matrix.html
+# It is supposed to generate random rotation matrices from a uniform distribution
+def rand_rotation_matrix(deflection=1.0, randnums=None):
+    """
+    Creates a random rotation matrix.
+    
+    deflection: the magnitude of the rotation. For 0, no rotation; for 1, competely random
+    rotation. Small deflection => small perturbation.
+    randnums: 3 random numbers in the range [0, 1]. If `None`, they will be auto-generated.
+    """
+    # from http://www.realtimerendering.com/resources/GraphicsGems/gemsiii/rand_rotation.c
+    
+    if randnums is None:
+        randnums = np.random.uniform(size=(3,))
+        
+    theta, phi, z = randnums
+    
+    theta = theta * 2.0*deflection*np.pi  # Rotation about the pole (Z).
+    phi = phi * 2.0*np.pi  # For direction of pole deflection.
+    z = z * 2.0*deflection  # For magnitude of pole deflection.
+    
+    # Compute a vector V used for distributing points over the sphere
+    # via the reflection I - V Transpose(V).  This formulation of V
+    # will guarantee that if x[1] and x[2] are uniformly distributed,
+    # the reflected points will be uniform on the sphere.  Note that V
+    # has length sqrt(2) to eliminate the 2 in the Householder matrix.
+    
+    r = np.sqrt(z)
+    Vx, Vy, Vz = V = (
+        np.sin(phi) * r,
+        np.cos(phi) * r,
+        np.sqrt(2.0 - z)
+        )
+    
+    st = np.sin(theta)
+    ct = np.cos(theta)
+    
+    R = np.array(((ct, st, 0), (-st, ct, 0), (0, 0, 1)))
+    
+    # Construct the rotation matrix  ( V Transpose(V) - I ) R.
+    
+    M = (np.outer(V, V) - np.eye(3)).dot(R)
+    return M
