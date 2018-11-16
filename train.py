@@ -1068,8 +1068,8 @@ def mainFunction():
 
     if running_mode == 0:
         # Training patch size
-        maxSize = 1100
-        patchSize = 1000
+        maxSize = 10100
+        patchSize = 10000
 
         f_normals_list = []
         f_adj_list = []
@@ -1100,6 +1100,9 @@ def mainFunction():
         if DATA == 3: # Kinect Fusion
             inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_Fusion/train/images"
             validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v1/valid/images"
+        if DATA == 4: # All Kinect Data
+            inputFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Merged/train/images"
+            validFilePath = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Merged/valid/images"
 
         #print("training_meshes_num 0 " + str(training_meshes_num))
         if pickleLoad:
@@ -1297,6 +1300,9 @@ def mainFunction():
             DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v2/test/images/"
         if DATA == 3: # Kinect Fusion
             DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_Fusion/test/images/"
+        if DATA == 4: # All Kinect Data
+            DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Merged/test/images/"
+
 
         #DataFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/dummy/images/"
 
@@ -1428,8 +1434,8 @@ def mainFunction():
             gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_v2/rescaled_GT/"
         if DATA == 3: # Kinect Fusion
             gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Kinect_Fusion/rescaled_GT/"
-
-
+        if DATA == 4: # All Kinect Data
+            gtFolder = "/morpheo-nas2/vincent/DeepMeshRefinement/Data/Merged/rescaled_GT/"
 
         # results file name
         csv_filename = RESULTS_PATH+"results_heat.csv"
@@ -1472,7 +1478,7 @@ def mainFunction():
             #edge_map = np.expand_dims(edge_map, axis=0)
             v_e_map = np.expand_dims(v_e_map, axis=0)
 
-            empiricMax = 20.0
+            empiricMax = 30.0
 
             denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
             heatMapFilesList = [heatFile0,heatFile1,heatFile2]
@@ -1498,12 +1504,14 @@ def mainFunction():
                     # print("max color: "+str(np.amax(angColor)))
                     # print("min color: "+str(np.amin(angColor)))
                     # print("mean color: "+str(np.mean(angColor)))
-                    angColor = 1 - angColor
+                    angColor = 1.0 - angColor
                     angColor = np.maximum(angColor, np.zeros_like(angColor))
+                    colormap = getHeatMapColor(1.0-angColor)
                     # print("max color: "+str(np.amax(angColor)))
                     # print("min color: "+str(np.amin(angColor)))
                     # print("mean color: "+str(np.mean(angColor)))
-                    newV, newF = getHeatMapMesh(V0, faces_gt, angColor)
+                    #newV, newF = getHeatMapMesh(V0, faces_gt, angColor)
+                    newV, newF = getColoredMesh(V0, faces_gt, colormap)
 
                     write_mesh(newV, newF, RESULTS_PATH+heatFile)
                     #write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile0)

@@ -1091,3 +1091,54 @@ def getHeatMapMesh(V, F, heatmap):
     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
 
     return newV, newF
+
+def getColoredMesh(V, F, faceColors):
+
+    facesNum = F.shape[0]
+    newV = np.array([])
+
+    Vl = V[F];
+    # Shape (facesNum,3,3)
+
+    faceColors = np.expand_dims(faceColors,axis=1)
+    # Shape (facesNum,3,1)
+    faceColors = np.tile(faceColors,(1,3,1))
+    # Shape (facesNum,3,3)
+
+    vArr = np.concatenate((Vl,faceColors),axis=-1)
+    # Shape (facesNum,3,6)
+    newV = np.reshape(vArr,(3*facesNum,6))
+
+    newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
+
+    return newV, newF
+
+
+def getHeatMapColor(myVec):
+
+    heatmap = np.empty((myVec.shape[0],3))
+    c0 = np.array([0.0,0.0,1.0])
+    c1 = np.array([0.0,1.0,1.0])
+    c2 = np.array([0.0,1.0,0.0])
+    c3 = np.array([1.0,1.0,0.0])
+    c4 = np.array([1.0,0.0,0.0])
+
+    #coef0 = 4*np.maximum(0.25-myVec,np.zeros_like(myVec))
+
+    for myInd in range(myVec.shape[0]):
+        entry = myVec[myInd]
+
+        if entry<0.25:
+            coef1 = 4*entry
+            heatmap[myInd,:] = coef1 * c1 + (1-coef1) * c0
+        elif entry<0.5:
+            coef2 = 4*entry-1
+            heatmap[myInd,:] = coef2 * c2 + (1-coef2) * c1
+        elif entry<0.75:
+            coef3 = 4*entry-2
+            heatmap[myInd,:] = coef3 * c3 + (1-coef3) * c2
+        else:
+            coef4 = 4*entry-3
+            heatmap[myInd,:] = coef4 * c4 + (1-coef4) * c3
+
+    return heatmap
