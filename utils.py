@@ -275,6 +275,55 @@ def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge
 
     return fadj
 
+
+def getVerticesAdj(points, faces, K):
+
+    vnum = points.shape[0]
+    fnum = faces.shape[0]
+    vadj = np.zeros([vnum,K], dtype=np.int32)
+    vind = np.ones([vnum], dtype=np.int8)
+    unregistered_connections = 0
+
+    for i in range(vnum):
+        vadj[i,0] = i+1             # indexed from 1
+
+    for f in range(fnum):
+        v1 = faces[f,0]
+        v2 = faces[f,1]
+        v3 = faces[f,2]
+
+        # Each connection is added twice...
+        # But it is removed when transforming adjacency graph. (I think. Right?)
+        if(vind([v1])==K):
+            unregistered_connections+=1
+        else:
+            vadj[v1,vind[v1]] = v2+1
+            vind[v1]+=1
+            vadj[v1,vind[v1]] = v3+1
+            vind[v1]+=1
+
+        if(vind([v2])==K):
+            unregistered_connections+=1
+        else:
+            vadj[v2,vind[v2]] = v3+1
+            vind[v2]+=1
+            vadj[v2,vind[v2]] = v1+1
+            vind[v2]+=1
+
+        if(vind([v3])==K):
+            unregistered_connections+=1
+        else:
+            vadj[v3,vind[v3]] = v1+1
+            vind[v3]+=1
+            vadj[v3,vind[v3]] = v2+1
+            vind[v3]+=1
+
+    if unregistered_connections>0:
+        print("unregistered connections (vertices): "+str(unregistered_connections/4))
+
+    return vadj
+
+
 def writeStringArray(myArr,strFileName, faces):
 
     outputFile = open(strFileName,"w")
@@ -836,7 +885,6 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
         fAdjOut[newFInd,0] = newFInd+1  #Add itself first. Adj array is one-indexed!!
 
 
-        #print("fAdj line: "+str(fAdjIn[curF,:]))
         # Process neighbours
         for neigh in range(1,K):    # Skip first entry, its the current face
             
@@ -1173,3 +1221,66 @@ def rand_rotation_matrix(deflection=1.0, randnums=None):
     
     M = (np.outer(V, V) - np.eye(3)).dot(R)
     return M
+
+
+def normalizePointSets(vl1, vl2):
+    xmin = np.amin(vl1[:,0])
+    ymin = np.amin(vl1[:,1])
+    zmin = np.amin(vl1[:,2])
+    xmax = np.amax(vl1[:,0])
+    ymax = np.amax(vl1[:,1])
+    zmax = np.amax(vl1[:,2])
+
+    xmin2 = np.amin(vl2[:,0])
+    ymin2 = np.amin(vl2[:,1])
+    zmin2 = np.amin(vl2[:,2])
+    xmax2 = np.amax(vl2[:,0])
+    ymax2 = np.amax(vl2[:,1])
+    zmax2 = np.amax(vl2[:,2])
+
+    xmin = min(xmin, xmin2)
+    ymin = min(ymin, ymin2)
+    zmin = min(zmin, zmin2)
+    xmax = max(xmax, xmax2)
+    ymax = max(ymax, ymax2)
+    zmax = max(zmax, zmax2)
+
+    diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
+
+    vl1 = vl1/diag
+    vl2 = vl2/diag
+
+    return vl1, vl2
+
+
+# Returns a point set, with all points of 'points' that lie in 'boundBox'
+# boundBox is a (3,2) array of [[xmin,xmax],[ymin,ymax],[zmin,zmax]]
+def takePointSetSlice(points, boundBox):
+    xm = points[:,0]>=boundBox[0,0]
+    xM = points[:,0]<=boundBox[0,1]
+    ym = points[:,1]>=boundBox[1,0]
+    yM = points[:,1]<=boundBox[1,1]
+    zm = points[:,2]>=boundBox[2,0]
+    zM = points[:,2]<=boundBox[2,1]
+    xm = np.expand_dims(xm,axis=-1)
+    xM = np.expand_dims(xM,axis=-1)
+    ym = np.expand_dims(ym,axis=-1)
+    yM = np.expand_dims(yM,axis=-1)
+    zm = np.expand_dims(zm,axis=-1)
+    zM = np.expand_dims(zM,axis=-1)
+    # print("zm: "+str(zm))
+    inPoints = np.concatenate((xm,xM,ym,yM,zm,zM),axis=1)
+    inPoints = np.all(inPoints,axis=1)
+    return points[inPoints]
+
+
+# Takes a point set and returns the bounding box
+# as a (3,2) array of [[xmin,xmax],[ymin,ymax],[zmin,zmax]]
+def getBoundingBox(points):
+    xmin = np.amin(points[:,0])
+    ymin = np.amin(points[:,1])
+    zmin = np.amin(points[:,2])
+    xmax = np.amax(points[:,0])
+    ymax = np.amax(points[:,1])
+    zmax = np.amax(points[:,2])
+    return np.array([[xmin,xmax],[ymin,ymax],[zmin,zmax]])
