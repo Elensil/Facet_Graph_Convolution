@@ -53,6 +53,7 @@ def metis(W, levels, rid=None):
 
     N, N = W.shape
     if rid is None:
+        # rid= range(N)
         rid = np.random.permutation(range(N))
     parents = []
     degree = W.sum(axis=0) - W.diagonal()
@@ -63,7 +64,7 @@ def metis(W, levels, rid=None):
     #count = 0
 
     #while N > maxsize:
-    for _ in range(levels):
+    for level in range(levels):
 
         #count += 1
 
@@ -79,6 +80,8 @@ def metis(W, levels, rid=None):
         rr = idx_row[perm]
         cc = idx_col[perm]
         vv = val[perm]
+
+
         cluster_id = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
         parents.append(cluster_id)
 
@@ -97,13 +100,14 @@ def metis(W, levels, rid=None):
         # CSR is more appropriate: row,val pairs appear multiple times
         W = scipy.sparse.csr_matrix((nvv,(nrr,ncc)), shape=(Nnew,Nnew))
         W.eliminate_zeros()
+
         # Add new graph to the list of all coarsened graphs
         graphs.append(W)
         N, N = W.shape
 
         # COMPUTE THE DEGREE (OMIT OR NOT SELF LOOPS)
         degree = W.sum(axis=0)
-        #degree = W.sum(axis=0) - W.diagonal()
+        # degree = W.sum(axis=0) - W.diagonal()
 
         # CHOOSE THE ORDER IN WHICH VERTICES WILL BE VISTED AT THE NEXT PASS
         #[~, rid]=sort(ss);     # arthur strategy
@@ -122,46 +126,48 @@ def metis_one_level(rr,cc,vv,rid,weights):
     N = rr[nnz-1] + 1
 
     marked = np.zeros(N, np.bool)
-    rowstart = np.zeros(N, np.int32)
-    rowlength = np.zeros(N, np.int32)
-    cluster_id = np.zeros(N, np.int32)
+    rowstart = np.zeros(N, np.int32)        # index of 1st entry in the row
+    rowlength = np.zeros(N, np.int32)       # Number of entries in the row
+    cluster_id = np.zeros(N, np.int32)      # Cluster id (no way...)
 
     oldval = rr[0]
     count = 0
     clustercount = 0
 
+    # Counts number of entries per (represented) row?
     for ii in range(nnz):
-        rowlength[count] = rowlength[count] + 1
         if rr[ii] > oldval:
             oldval = rr[ii]
-            rowstart[count+1] = ii
+            rowstart[count+1] = ii      # Save index of 1st entry in the row
             count = count + 1
+        rowlength[count] = rowlength[count] + 1
 
+
+    # For each row
     for ii in range(N):
-        tid = rid[ii]
+        tid = rid[ii]   # Random order
         if not marked[tid]:
             wmax = 0.0
-            rs = rowstart[tid]
+            rs = rowstart[tid]      # Get index of 1st entry
             marked[tid] = True
             bestneighbor = -1
-            for jj in range(rowlength[tid]):
+            for jj in range(rowlength[tid]):    # For each entry in the row
                 nid = cc[rs+jj]
-                if marked[nid]:
+                if marked[nid]:                 # Skip nodes already paired
                     tval = 0.0
                 else:
-                    tval = vv[rs+jj] * (1.0/weights[tid] + 1.0/weights[nid])
-                if tval > wmax:
+                    tval = vv[rs+jj] * (1.0/weights[tid] + 1.0/weights[nid])    # Value of edge * (sum of inverse of degree of both nodes)
+                if tval > wmax:             # Keep best neighbour
                     wmax = tval
                     bestneighbor = nid
 
             cluster_id[tid] = clustercount
-
+            # If neighbour found, mark it and add both nodes to the same cluster
             if bestneighbor > -1:
                 cluster_id[bestneighbor] = clustercount
                 marked[bestneighbor] = True
 
             clustercount += 1
-
     return cluster_id
 
 def compute_perm(parents):
