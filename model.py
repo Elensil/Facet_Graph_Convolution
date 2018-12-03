@@ -2759,5 +2759,110 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
             y_conv = custom_lin(h_fc1, out_channels_reg)
             return y_conv
 
+        if architecture == 15:      # Like 14, but multi-scale estimation
+            alpha = 0.1
+            coarsening_steps = 3
+            out_channels_reg = 3
+
+            _, _,in_channels = x.get_shape().as_list()
+            pos0 = tf.slice(x,[0,0,in_channels-3],[-1,-1,-1])
+            pos1 = custom_binary_tree_pooling(pos0, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+            pos2 = custom_binary_tree_pooling(pos1, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+
+            # Conv1
+            M_conv1 = 9
+            out_channels_conv1 = 32
+            #h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
+            h_conv1, _ = custom_conv2d_pos_for_assignment(x, adjs[0], out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = lrelu(h_conv1,alpha)
+            # [batch, N, 64]
+
+            # Pooling 1
+            pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps) # TODO: deal with fake nodes??
+            # [batch, N/4, 64]
+
+            # Conv2
+            M_conv2 = 9
+            out_channels_conv2 = 64
+            # Add position:
+            pool1 = tf.concat([pool1,pos1],axis=-1)
+            h_conv2, _ = custom_conv2d_pos_for_assignment(pool1, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv2_act = lrelu(h_conv2,alpha)
+            # [batch, N/4, 128]
+
+            # Pooling 2
+            pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
+            # [batch, N/16, 128]
+
+            # Conv3
+            M_conv3 = 9
+            out_channels_conv3 = 128
+            # Add position:
+            pool2 = tf.concat([pool2,pos2],axis=-1)
+            h_conv3, _ = custom_conv2d_pos_for_assignment(pool2, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv3_act = lrelu(h_conv3,alpha)
+            # [batch, N/16, 256]
+
+            # --- Central features ---
+
+            #DeConv3
+            # Add position:
+            h_conv3_act = tf.concat([h_conv3_act,pos2],axis=-1)
+            dconv3, _ = custom_conv2d_pos_for_assignment(h_conv3_act, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv3_act = lrelu(dconv3,alpha)
+            # [batch, N/16, 256]
+
+            # Lin(1024)
+            out_channels_fc2 = 1024
+            h_fc2 = lrelu(custom_lin(dconv3_act, out_channels_fc2),alpha)
+            # Lin(3)
+            y_conv2 = custom_lin(h_fc2, out_channels_reg)
+
+            #Upsampling2
+            upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
+            # [batch, N/4, 256]
+
+            upsamp2 = tf.concat([upsamp2,pos1],axis=-1)
+            upconv2, _ = custom_conv2d_pos_for_assignment(upsamp2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            # [batch, N/4, 128]
+
+            #DeConv2
+            concat2 = tf.concat([upconv2, h_conv2_act], axis=-1)
+            # [batch, N/4, 256]
+            # Add position:
+            concat2 = tf.concat([concat2,pos1],axis=-1)
+            dconv2, _ = custom_conv2d_pos_for_assignment(concat2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv2_act = lrelu(dconv2,alpha)
+            # [batch, N/4, 128]
+
+
+            # Lin(1024)
+            out_channels_fc1 = 1024
+            h_fc1 = lrelu(custom_lin(dconv2_act, out_channels_fc1),alpha)
+            # Lin(3)
+            y_conv1 = custom_lin(h_fc1, out_channels_reg)
+
+            #Upsampling1
+            upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
+            # [batch, N, 128]
+            upsamp1 = tf.concat([upsamp1,pos0],axis=-1)
+            upconv1, _ = custom_conv2d_pos_for_assignment(upsamp1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            # [batch, N, 64]
+
+            concat1 = tf.concat([upconv1, h_conv1_act], axis=-1)
+            # [batch, N, 128]
+
+            concat1 = tf.concat([concat1,pos0],axis=-1)
+            dconv1, _ = custom_conv2d_pos_for_assignment(concat1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv1_act = lrelu(dconv1,alpha)
+            # [batch, N, 64]
+
+            # Lin(1024)
+            out_channels_fc0 = 1024
+            h_fc0 = lrelu(custom_lin(dconv1_act, out_channels_fc0),alpha)
+            # Lin(3)
+            y_conv0 = custom_lin(h_fc0, out_channels_reg)
+
+            return y_conv0, y_conv1, y_conv2
 
 # End

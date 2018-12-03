@@ -348,6 +348,32 @@ def writeStringArray(myArr,strFileName, faces):
         outputFile.write('\n')
 
 
+def getVerticesFaces(faces, k_v, vnum=0):
+
+    if vnum==0:
+        vnum = np.amax(faces)+1
+
+    faces = faces.astype(np.int32)
+    v_f = np.zeros((vnum,k_v),dtype=np.int32)
+    v_f = v_f-1
+    v_fnum = np.zeros(vnum,dtype=np.int32)
+
+    for f in range(faces.shape[0]):
+        v0 = faces[f,0]
+        if v0==-1:
+            continue
+        v_f[v0,v_fnum[v0]] = f
+        v_fnum[v0] += 1
+
+        v1 = faces[f,1]
+        v_f[v1,v_fnum[v1]] = f
+        v_fnum[v1] += 1
+
+        v2 = faces[f,2]
+        v_f[v2,v_fnum[v2]] = f
+        v_fnum[v2] += 1
+
+    return v_f
 
 
 def load_image(path,filename):
@@ -934,6 +960,19 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
     return vOut, fOut, fAdjOut, vOldInd , fOldInd    # return vOldInd (and fOldInd) as well, so we can run this once for GT/noisy mesh
 
 
+def normalizeTensor(x):
+    with tf.variable_scope("normalization"):
+        #norm = tf.norm(x,axis=-1)
+        epsilon = tf.constant(1e-5,name="epsilon")
+        square = tf.square(x,name="square")
+        square_sum = tf.reduce_sum(square,axis=-1,name="square_sum")
+        norm = tf.sqrt(epsilon+square_sum,name="sqrt")
+
+        norm_non_zeros = tf.greater(norm,epsilon)
+        inv_norm = tf.where(norm_non_zeros,tf.reciprocal(norm+epsilon,name="norm_division"),tf.zeros_like(norm,name="zeros"))
+        newX = tf.multiply(x, tf.expand_dims(inv_norm,axis=-1),name="result")
+    return newX
+
 # Convert an adjacency matrix from Nitika style to scipy sparse matrix
 def listToSparse(Adj, nodes_pos):
 
@@ -1130,6 +1169,10 @@ def getColoredMesh(V, F, faceColors):
 
     facesNum = F.shape[0]
     newV = np.array([])
+
+    #switch to one-indexing for fake faces
+    F = F+1
+    V = np.concatenate((np.array([[0,0,0]],dtype=np.float32),V),axis=0)
 
     Vl = V[F];
     # Shape (facesNum,3,3)
