@@ -72,7 +72,6 @@ def computeFacesNormals(verts, faces):
 
     return Nn
 
-
 def getFacesAdj(faces):
     fnum = faces.shape[0]
     fadj = np.zeros([fnum,4], dtype=np.int32)     # triangular faces only
@@ -246,14 +245,14 @@ def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge
         v_ind[v2]+=1
         v_ind[v3]+=1
 
-
     for i in range(fnum):
         fadj[i,0] = i+1             # indexed from 1
 
 
     for v in range(vnum):           # Now, fill faces pairs
         if v_ind[v]==0:
-            break                   # We've reach the last vertex
+            # break                   # We've reach the last vertex
+            continue
         for vf1 in range(v_ind[v]):
             for vf2 in range(vf1+1,v_ind[v]):
                 f1 = v_adj[v,vf1]
@@ -690,6 +689,8 @@ def oneSidedHausdorffNew(V0, V1, F):
     N1 = V1.shape[0]
     Fnum = F.shape[0]
 
+
+    fNormals = computeFacesNormals(V1,F)
     # Compute distance between every pair of points
 
     distM = 0
