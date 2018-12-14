@@ -1043,7 +1043,7 @@ def custom_upsampling(x, steps=1):
 
 
 def lrelu(x, alpha):
-  return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
+    return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
 
 def get_model(x, adj, num_classes, architecture):
         """ 
@@ -2300,7 +2300,7 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
             # Lin(3)
             out_channels_reg = 3
             y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+            return y_conv, dconv1_act
 
         if architecture == 10:      # Like 9, without the position for assignment
             alpha = 0.1

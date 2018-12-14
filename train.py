@@ -60,9 +60,11 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,pat
         # --- Starting iterative process ---
         #rotTens = getRotationToAxis(fn_)
         with tf.variable_scope("model"):
-            n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+            n_conv, features = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 
         n_conv = normalizeTensor(n_conv)
+        # visuTest = normalizeTensor(tf.slice(features,[0,0,0],[-1,-1,3]))
+        visuTest = features
 
         saver = tf.train.Saver()
         sess.run(tf.global_variables_initializer())
@@ -76,6 +78,7 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,pat
 
         # points shape should now be [NUM_POINTS, 3]
         predicted_normals = np.zeros([num_faces,3])
+        out_features = np.zeros([num_faces,32])
         for i in range(len(f_normals)):
             print("Patch "+str(i+1)+" / "+str(len(f_normals)))
             my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2],
@@ -83,16 +86,23 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,pat
             outN = sess.run(tf.squeeze(n_conv),feed_dict=my_feed_dict)
             #outN = f_normals[i][0]
 
+            testVisu = sess.run(tf.squeeze(visuTest),feed_dict=my_feed_dict)
+
             # Permute back patch
             temp_perm = np.array(inv_perm(old_to_new_permutations[i]))
             outN = outN[temp_perm]
             outN = outN[0:num_wofake_nodes[i]]
+
+            testVisu = testVisu[temp_perm]
+            testVisu = testVisu[0:num_wofake_nodes[i]]
             # remove fake nodes from prediction
             if len(patch_indices[i]) == 0:
                 predicted_normals = outN
+                out_features = testVisu
             else:
                 for count in range(len(patch_indices[i])):
                     predicted_normals[patch_indices[i][count]] = outN[count]
+                    out_features[patch_indices[i][count]] = testVisu[count]
         #Update vertices position
         new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
         #refined_x = update_position(xp_,fadj, n_conv)
@@ -101,9 +111,10 @@ def inferNet(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,pat
 
         update_feed_dict = {xp_:in_points, new_normals: [predicted_normals], e_map_: edge_map, ve_map_: v_e_map}
         outPoints = sess.run(points,feed_dict=update_feed_dict)
+        # testVisu = sess.run(visuTest,feed_dict=update_feed_dict)
         sess.close()
 
-        return outPoints, predicted_normals
+        return outPoints, testVisu
 
 
 
@@ -773,7 +784,7 @@ def mainFunction():
 
     # Coarsening parameters
     coarseningLvlNum = 3
-    coarseningStepNum = 3
+    coarseningStepNum = 2
 
 
     #binDumpPath = "/morpheo-nas/marmando/DeepMeshRefinement/TrainingBase/BinaryDump/kinect_v1/coarsening4/"
@@ -1224,7 +1235,7 @@ def mainFunction():
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/test_bits/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/test/"
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
-
+        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
 
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
@@ -1233,7 +1244,8 @@ def mainFunction():
             if (not noisyFile.endswith(".obj")):
                 continue
             mesh_count = [0]
-
+            if not noisyFile.startswith("chinese_lion_n1"):
+                continue
 
             denoizedFile = noisyFile[:-4]+"_denoised_gray.obj"
 
@@ -1287,19 +1299,39 @@ def mainFunction():
                     upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                     print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
 
-                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
+                    # write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
 
-                    angColor = (upN0+1)/2
+                    features = upN0
 
-                    angColorNoisy = (f_normals0+1)/2
+                    features_dim = features.shape[1]
+
+                    for f in range(features_dim):
+                        cur_f = features[:,f]
+                        feature_max = np.amax(cur_f)
+                        print("feature "+str(f)+" max: "+str(feature_max))
+                        fColor = cur_f / feature_max
+                        # fColor = 1 - fColor
+                        # fColor = np.maximum(fColor, np.zeros_like(fColor))
+
+                        colormap = getHeatMapColor(fColor)
+                        newV, newF = getColoredMesh(np.squeeze(V0), faces_noisy, colormap)
+
+                        write_mesh(newV,newF,RESULTS_PATH+noisyFile[:-4]+"_l6_f"+str(f)+".obj")
+
+
+
+
+                    # angColor = (upN0+1)/2
+
+                    # angColorNoisy = (f_normals0+1)/2
                     
-                    # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
-                    newVn, newFn = getColoredMesh(np.squeeze(V0), faces_noisy, angColor)
-                    newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
+                    # # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
+                    # newVn, newFn = getColoredMesh(np.squeeze(V0), faces_noisy, angColor)
+                    # newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
 
-                    # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                    write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
-                    write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+                    # # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+                    # write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
+                    # write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
 
 
 
