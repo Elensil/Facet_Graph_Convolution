@@ -98,7 +98,9 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
         upN2 = custom_upsampling(new_normals2,COARSENING_STEPS*2)
         new_normals = [new_normals0, new_normals1, new_normals2]
         
-        refined_x = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        refined_x, dx_list = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+
+        refined_x = refined_x + dx_list[1] #+ dx_list[2]
 
         finalOutPoints = np.zeros((num_points,3),dtype=np.float32)
         pointsWeights = np.zeros((num_points,3),dtype=np.float32)
@@ -887,6 +889,7 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
     lmbd = tf.reshape(lmbd, [-1,1])
     lmbd = tf.tile(lmbd,[1,3])
 
+    dx_list = []
     for s in range(scale_num):
     # for cur_scale in range(1):
         cur_scale = scale_num-1-s
@@ -916,9 +919,9 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
 
         v_fn = tf.gather(face_n, v_faces)
         # [vnum, v_faces_num, 3]
-
+        x_init = x
         if cur_scale==2:
-            iter_num=300
+            iter_num=60
         else:
             iter_num=15
 
@@ -957,9 +960,9 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
             x = tf.add(x,x_update)
 
         # iter_num*=2
-    
+        dx_list.append(x-x_init)
     x = tf.expand_dims(x,axis=0)
-    return x
+    return x, dx_list
 
 def update_position_MS_damp(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=360):
 
@@ -1169,18 +1172,18 @@ def mainFunction():
 
     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/newTest/"
 
-    if COARSENING_STEPS==3:
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/msVertices/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/tola/c8/"
-    elif COARSENING_STEPS==2:
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/msVertices_c4/"
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/furu/cleaned_c4/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/tola/c4/"
-
     # if COARSENING_STEPS==3:
-    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c8/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/msVertices/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/tola/c8/"
     # elif COARSENING_STEPS==2:
-    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/msVertices_c4/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/furu/cleaned_c4/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/tola/c4/"
+
+    if COARSENING_STEPS==3:
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c8/"
+    elif COARSENING_STEPS==2:
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
 
     empiricMax = 30.0
 
@@ -1645,6 +1648,7 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/test/"
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
         noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
+        # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/test_bits/"
 
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
@@ -1653,8 +1657,8 @@ def mainFunction():
             if (not noisyFile.endswith(".obj")):
                 continue
 
-            # if (not noisyFile.startswith("furu003")):
-            #     continue
+            if (not noisyFile.startswith("chinese")):
+                continue
             mesh_count = [0]
 
 
