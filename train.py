@@ -100,7 +100,7 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
         
         refined_x, dx_list = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
 
-        refined_x = refined_x + dx_list[1] #+ dx_list[2]
+        refined_x = refined_x #+ dx_list[1] #+ dx_list[2]
 
         finalOutPoints = np.zeros((num_points,3),dtype=np.float32)
         pointsWeights = np.zeros((num_points,3),dtype=np.float32)
@@ -298,8 +298,6 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     train_samp=0
 
     hasNan = False
-    # forbidden_examples = [62, 61, 45, 65, 23, 57] # For kinect_v2
-    # forbidden_examples = [10,15] # For kinect_fusion
     forbidden_examples = []
 
     with tf.device(DEVICE):
@@ -426,7 +424,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                                               K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
     """
     
-    dropout_prob = 0.5
+    dropout_prob = 0.8
     BATCH_SIZE=f_normals_list[0].shape[0]
     BATCH_SIZE=1
     K_faces = f_adj_list[0][0].shape[2]
@@ -496,7 +494,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     # isNanNConv = tf.reduce_any(tf.is_nan(n_conv), name="isNanNConv")
     # isFullNanNConv = tf.reduce_all(tf.is_nan(n_conv), name="isNanNConv")
 
-    refined_x = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+    refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
     # refined_x = update_position2(vp_rot, n_conv, e_map_, ve_map_, iter_num=2000)
     
 
@@ -530,13 +528,11 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     train_samp=0
 
     hasNan = False
-    # forbidden_examples = [62, 61, 45, 65, 23, 57] # For kinect_v2
-    # forbidden_examples = [10,15] # For kinect_fusion
     forbidden_examples = []
 
     # with tf.device(DEVICE):
     # lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
-    lossArray = np.zeros([int(51),2])                  # 200 = 2000/10: save csv file every 2000 iter
+    lossArray = np.zeros([int(50),2])                  # 200 = 2000/10: save csv file every 2000 iter
     last_loss = 0
     lossArrayIter = 0
     for iter in range(NUM_ITERATIONS):
@@ -600,18 +596,18 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         train_loss += train_loss_cur
         train_samp+=1
         # Show smoothed training loss
-        if (iter%10 == 0):
+        if (iter%10 == 0)and(iter>0):
             train_loss = train_loss/train_samp
 
 
             print("Iteration %d, training loss %g"%(iter, train_loss))
 
-            lossArray[int(lossArrayIter/10),0]=train_loss
+            lossArray[int(lossArrayIter/10)-1,0]=train_loss
             train_loss=0
             train_samp=0
 
         # Compute validation loss
-        if (iter%20 ==0):
+        if ((iter%20 ==0)and(iter>0)):
             valid_loss = 0
             valid_samp = len(valid_f_normals_list)
             for vbm in range(valid_samp):
@@ -643,7 +639,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                 valid_loss += valid_loss_cur
             valid_loss/=valid_samp
             print("Iteration %d, validation loss %g"%(iter, valid_loss))
-            lossArray[int(lossArrayIter/10),1]=valid_loss
+            lossArray[int(lossArrayIter/10)-1,1]=valid_loss
             if iter>0:
                 lossArray[int(lossArrayIter/10)-1,1] = (valid_loss+last_loss)/2
                 last_loss=valid_loss
@@ -661,7 +657,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
             f = open(csv_filename,'ab')
             np.savetxt(f,lossArray, delimiter=",")
             f.close()
-            lossArray = np.zeros([int(51),2]) 
+            lossArray = np.zeros([int(50),2]) 
             lossArrayIter=0
 
         lossArrayIter+=1
@@ -894,8 +890,13 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
     # for cur_scale in range(1):
         cur_scale = scale_num-1-s
 
-        # if cur_scale>0:
+        # print("WARNING! Hard-coded mid-and-fine scale vertex update")
+        # if cur_scale>1:
         #     continue
+        print("WARNING! Hard-coded fine scale vertex update")
+        if cur_scale>0:
+            continue
+
         face_n = face_normals_list[cur_scale]
         
         # Get rid of batch dim
@@ -1158,8 +1159,8 @@ def mainFunction():
 
     K_faces = 25
 
-    maxSize = 13000
-    patchSize = 13000
+    maxSize = 15000
+    patchSize = 15000
 
     training_meshes_num = [0]
     valid_meshes_num = [0]
@@ -1170,7 +1171,7 @@ def mainFunction():
 
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/coarsening8/patches5/"
 
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/newTest/"
+    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/newTest/"
 
     # if COARSENING_STEPS==3:
     #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/msVertices/"
@@ -1180,10 +1181,15 @@ def mainFunction():
     #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/furu/cleaned_c4/"
     #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/tola/c4/"
 
+    # if COARSENING_STEPS==3:
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c8/"
+    # elif COARSENING_STEPS==2:
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
+
     if COARSENING_STEPS==3:
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c8/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8/"
     elif COARSENING_STEPS==2:
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4/"
 
     empiricMax = 30.0
 
@@ -1452,7 +1458,7 @@ def mainFunction():
                         # f_adj = np.expand_dims(testPatchAdj, axis=0)
                         # fAdjs.append(f_adj)
 
-                v_faces = getVerticesFaces(testPatchF,15,testPatchV.shape[0])
+                v_faces = getVerticesFaces(testPatchF,25,testPatchV.shape[0])
 
                 # Expand dimensions
                 f_normals = np.expand_dims(patchFNormals, axis=0)
@@ -1521,7 +1527,7 @@ def mainFunction():
             # fadj = np.expand_dims(fadj, axis=0)
             # fAdjs.append(fadj)
 
-            v_faces = getVerticesFaces(faces0,15,V0.shape[0])
+            v_faces = getVerticesFaces(faces0,25,V0.shape[0])
 
             # Expand dimensions
             f_normals = np.expand_dims(f_normals_pos, axis=0)
@@ -1649,16 +1655,17 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
         noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/test_bits/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
 
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
-
+            print("noisyFile: "+noisyFile)
             if (not noisyFile.endswith(".obj")):
                 continue
 
-            if (not noisyFile.startswith("chinese")):
-                continue
+            # if (not noisyFile.startswith("chinese")):
+            #     continue
             mesh_count = [0]
 
 
@@ -1998,9 +2005,13 @@ def mainFunction():
         # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
 
 
-        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/train/"
-        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/valid/"
-        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
+        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/train/"
+        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/valid/"
+        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
+
+        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/train/"
+        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
+        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
 
         # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
         # validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
@@ -2076,12 +2087,16 @@ def mainFunction():
                         continue
                     print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
 
-                    # For DTU
-                    fileNumStr = filename[4:7]
-                    gtfilename = 'stl'+fileNumStr+'_total.obj'
+                    # # For DTU
+                    # fileNumStr = filename[4:7]
+                    # gtfilename = 'stl'+fileNumStr+'_total.obj'
 
                     # # For CNR dataset
                     # gtfilename = filename[:-gtnameoffset]+".obj"
+
+                    #For FAUST
+                    fileNumStr = filename[5:8]
+                    gtfilename = 'gt'+fileNumStr+'.obj'
 
                     addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
 
@@ -2160,12 +2175,16 @@ def mainFunction():
                 if (filename.endswith(".obj")):
                     if valid_meshes_num[0]>200:
                         break
-                    # For DTU
-                    fileNumStr = filename[4:7]
-                    gtfilename = 'stl'+fileNumStr+'_total.obj'
+                    # # For DTU
+                    # fileNumStr = filename[4:7]
+                    # gtfilename = 'stl'+fileNumStr+'_total.obj'
 
                     # # For CNR dataset
                     # gtfilename = filename[:-gtnameoffset]+".obj"
+
+                    #For FAUST
+                    fileNumStr = filename[5:8]
+                    gtfilename = 'gt'+fileNumStr+'.obj'
 
                     addMeshWithVertices(validFilePath, filename, gtFilePath, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list, valid_meshes_num)
                     
