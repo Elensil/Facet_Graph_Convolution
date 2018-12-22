@@ -1244,7 +1244,7 @@ def updateFacesCenterAndNormals(vertices, faces, coarsening_steps):
 def mainFunction():
 
 
-    pickleLoad = False
+    pickleLoad = True
     pickleSave = True
 
     K_faces = 30
@@ -2265,100 +2265,100 @@ def mainFunction():
         else:
 
             pickleNum=0
-            # # Training set
-            # for filename in os.listdir(inputFilePath):
-            #     #print("training_meshes_num start_iter " + str(training_meshes_num))
-            #     if training_meshes_num[0]>1000:
-            #         break
-            #     #if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
-            #     #if (filename.endswith(".obj") and not(filename.startswith("buste"))):
-            #     if (filename.endswith(".obj")):
-            #         if filename.startswith("a") or filename.startswith("b"):
-            #             continue
-            #         print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
+            # Training set
+            for filename in os.listdir(inputFilePath):
+                #print("training_meshes_num start_iter " + str(training_meshes_num))
+                if training_meshes_num[0]>1000:
+                    break
+                #if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
+                #if (filename.endswith(".obj") and not(filename.startswith("buste"))):
+                if (filename.endswith(".obj")):
+                    if filename.startswith("a") or filename.startswith("b"):
+                        continue
+                    print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
 
-            #         # # For DTU
-            #         # fileNumStr = filename[4:7]
-            #         # gtfilename = 'stl'+fileNumStr+'_total.obj'
+                    # # For DTU
+                    # fileNumStr = filename[4:7]
+                    # gtfilename = 'stl'+fileNumStr+'_total.obj'
 
-            #         # # For CNR dataset
-            #         # gtfilename = filename[:-gtnameoffset]+".obj"
+                    # # For CNR dataset
+                    # gtfilename = filename[:-gtnameoffset]+".obj"
 
-            #         #For FAUST
-            #         fileNumStr = filename[5:8]
-            #         gtfilename = 'gt'+fileNumStr+'.obj'
+                    #For FAUST
+                    fileNumStr = filename[5:8]
+                    gtfilename = 'gt'+fileNumStr+'.obj'
 
-            #         addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
+                    addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
 
-            #         # Save batches of meshes/patches (for training only)
-            #         if training_meshes_num[0]>30:
-            #             if pickleSave:
-            #                 # Training
-            #                 with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
-            #                     pickle.dump(f_normals_list_temp, fp)
-            #                 with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
-            #                     pickle.dump(f_adj_list_temp, fp)
-            #                 with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
-            #                     pickle.dump(v_pos_list_temp, fp)
-            #                 with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
-            #                     pickle.dump(gtv_pos_list_temp, fp)
-            #                 with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
-            #                     pickle.dump(faces_list_temp, fp)
-            #                 with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
-            #                     pickle.dump(v_faces_list_temp, fp)
-            #             if pickleNum==0:
-            #                 f_normals_list = f_normals_list_temp
-            #                 f_adj_list = f_adj_list_temp
-            #                 v_pos_list = v_pos_list_temp
-            #                 gtv_pos_list = gtv_pos_list_temp
-            #                 faces_list = faces_list_temp
-            #                 v_faces_list = v_faces_list_temp
-            #             else:
-            #                 f_normals_list+=f_normals_list_temp
-            #                 f_adj_list+=f_adj_list_temp
-            #                 v_pos_list+=v_pos_list_temp
-            #                 gtv_pos_list+=gtv_pos_list_temp
-            #                 faces_list+=faces_list_temp
-            #                 v_faces_list+=v_faces_list_temp
+                    # Save batches of meshes/patches (for training only)
+                    if training_meshes_num[0]>30:
+                        if pickleSave:
+                            # Training
+                            with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
+                                pickle.dump(f_normals_list_temp, fp)
+                            with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
+                                pickle.dump(f_adj_list_temp, fp)
+                            with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
+                                pickle.dump(v_pos_list_temp, fp)
+                            with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
+                                pickle.dump(gtv_pos_list_temp, fp)
+                            with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
+                                pickle.dump(faces_list_temp, fp)
+                            with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
+                                pickle.dump(v_faces_list_temp, fp)
+                        if pickleNum==0:
+                            f_normals_list = f_normals_list_temp
+                            f_adj_list = f_adj_list_temp
+                            v_pos_list = v_pos_list_temp
+                            gtv_pos_list = gtv_pos_list_temp
+                            faces_list = faces_list_temp
+                            v_faces_list = v_faces_list_temp
+                        else:
+                            f_normals_list+=f_normals_list_temp
+                            f_adj_list+=f_adj_list_temp
+                            v_pos_list+=v_pos_list_temp
+                            gtv_pos_list+=gtv_pos_list_temp
+                            faces_list+=faces_list_temp
+                            v_faces_list+=v_faces_list_temp
 
-            #             pickleNum+=1
-            #             f_normals_list_temp = []
-            #             f_adj_list_temp = []
-            #             v_pos_list_temp = []
-            #             gtv_pos_list_temp = []
-            #             faces_list_temp = []
-            #             v_faces_list_temp = []
-            #             training_meshes_num[0] = 0
+                        pickleNum+=1
+                        f_normals_list_temp = []
+                        f_adj_list_temp = []
+                        v_pos_list_temp = []
+                        gtv_pos_list_temp = []
+                        faces_list_temp = []
+                        v_faces_list_temp = []
+                        training_meshes_num[0] = 0
 
-            # if (pickleSave) and training_meshes_num[0]>0:
-            #     # Training
-            #     with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
-            #         pickle.dump(f_normals_list_temp, fp)
-            #     with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
-            #         pickle.dump(f_adj_list_temp, fp)
-            #     with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
-            #         pickle.dump(v_pos_list_temp, fp)
-            #     with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
-            #         pickle.dump(gtv_pos_list_temp, fp)
-            #     with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
-            #         pickle.dump(faces_list_temp, fp)
-            #     with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
-            #         pickle.dump(v_faces_list_temp, fp)
+            if (pickleSave) and training_meshes_num[0]>0:
+                # Training
+                with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
+                    pickle.dump(f_normals_list_temp, fp)
+                with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
+                    pickle.dump(f_adj_list_temp, fp)
+                with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
+                    pickle.dump(v_pos_list_temp, fp)
+                with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
+                    pickle.dump(gtv_pos_list_temp, fp)
+                with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
+                    pickle.dump(faces_list_temp, fp)
+                with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
+                    pickle.dump(v_faces_list_temp, fp)
 
-            # if pickleNum==0:
-            #     f_normals_list = f_normals_list_temp
-            #     f_adj_list = f_adj_list_temp
-            #     v_pos_list = v_pos_list_temp
-            #     gtv_pos_list = gtv_pos_list_temp
-            #     faces_list = faces_list_temp
-            #     v_faces_list = v_faces_list_temp
-            # else:
-            #     f_normals_list+=f_normals_list_temp
-            #     f_adj_list+=f_adj_list_temp
-            #     v_pos_list+=v_pos_list_temp
-            #     gtv_pos_list+=gtv_pos_list_temp
-            #     faces_list+=faces_list_temp
-            #     v_faces_list+=v_faces_list_temp
+            if pickleNum==0:
+                f_normals_list = f_normals_list_temp
+                f_adj_list = f_adj_list_temp
+                v_pos_list = v_pos_list_temp
+                gtv_pos_list = gtv_pos_list_temp
+                faces_list = faces_list_temp
+                v_faces_list = v_faces_list_temp
+            else:
+                f_normals_list+=f_normals_list_temp
+                f_adj_list+=f_adj_list_temp
+                v_pos_list+=v_pos_list_temp
+                gtv_pos_list+=gtv_pos_list_temp
+                faces_list+=faces_list_temp
+                v_faces_list+=v_faces_list_temp
 
             # Validation set
             for filename in os.listdir(validFilePath):
