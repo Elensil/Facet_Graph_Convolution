@@ -15,6 +15,97 @@ from lib.coarsening import *
 
 
 
+def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations,num_faces):
+
+    with tf.Graph().as_default():
+        random_seed = 0
+        np.random.seed(random_seed)
+
+        sess = tf.InteractiveSession()
+        if(FLAGS.debug):    #launches debugger at every sess.run() call
+            sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+            sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
+
+        if not os.path.exists(RESULTS_PATH):
+                os.makedirs(RESULTS_PATH)
+
+        """
+        Load dataset
+        x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
+        adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices of neigbors of each vertex. (Index starting with 1)
+                                                  K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
+        """
+
+        BATCH_SIZE=f_normals[0].shape[0]
+        NUM_POINTS=in_points.shape[1]
+        MAX_EDGES = v_e_map.shape[2]
+        NUM_EDGES = edge_map.shape[1]
+        K_faces = f_adj[0][0].shape[2]
+        NUM_IN_CHANNELS = f_normals[0].shape[2]
+
+        xp_ = tf.placeholder('float32', shape=(BATCH_SIZE, NUM_POINTS,3),name='xp_')
+
+        fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
+
+        fadj0 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj0')
+        fadj1 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj1')
+        fadj2 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj2')
+
+        e_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_EDGES,4], name='e_map_')
+        ve_map_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE,NUM_POINTS,MAX_EDGES], name='ve_map_')
+        keep_prob = tf.placeholder(tf.float32)
+        
+        fadjs = [fadj0,fadj1,fadj2]
+        
+        # --- Starting iterative process ---
+        #rotTens = getRotationToAxis(fn_)
+        with tf.variable_scope("model"):
+            n_conv, _, _ = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+
+        n_conv = normalizeTensor(n_conv)
+
+        saver = tf.train.Saver()
+        sess.run(tf.global_variables_initializer())
+
+        ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
+        if ckpt and ckpt.model_checkpoint_path:
+            saver.restore(sess, ckpt.model_checkpoint_path)
+        else:
+            print("ERROR! Neural network not found! Aborting mission.")
+            return
+
+        # points shape should now be [NUM_POINTS, 3]
+        predicted_normals = np.zeros([num_faces,3])
+        for i in range(len(f_normals)):
+            print("Patch "+str(i+1)+" / "+str(len(f_normals)))
+            my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2],
+                            keep_prob:1.0}
+            outN = sess.run(tf.squeeze(n_conv),feed_dict=my_feed_dict)
+            #outN = f_normals[i][0]
+
+            # Permute back patch
+            temp_perm = np.array(inv_perm(old_to_new_permutations[i]))
+            outN = outN[temp_perm]
+            outN = outN[0:num_wofake_nodes[i]]
+            # remove fake nodes from prediction
+            if len(patch_indices[i]) == 0:
+                predicted_normals = outN
+            else:
+                for count in range(len(patch_indices[i])):
+                    predicted_normals[patch_indices[i][count]] = outN[count]
+        #Update vertices position
+        new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
+        #refined_x = update_position(xp_,fadj, n_conv)
+        refined_x = update_position2(xp_, new_normals, e_map_, ve_map_, iter_num=60)
+        points = tf.squeeze(refined_x)
+
+        update_feed_dict = {xp_:in_points, new_normals: [predicted_normals], e_map_: edge_map, ve_map_: v_e_map}
+        outPoints = sess.run(points,feed_dict=update_feed_dict)
+        sess.close()
+
+        return outPoints, predicted_normals
+
+
 def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new_to_old_f_list, num_points, num_faces, adjPerm_list, real_nodes_num_list):
 
     with tf.Graph().as_default():
@@ -173,7 +264,6 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
         finalOutPoints = np.true_divide(finalOutPoints,pointsWeights)
 
         return finalOutPoints, finalFineNormals, finalMidNormals, finalCoarseNormals
-
 
 
 def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
@@ -868,7 +958,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
     return x
 
 
-def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=360):
+def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=80):
 
     batch_size, num_points, space_dims = x.get_shape().as_list()
     x = tf.reshape(x,[-1,3])
@@ -922,9 +1012,9 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
         # [vnum, v_faces_num, 3]
         x_init = x
         if cur_scale==2:
-            iter_num=60
+            iter_num=iter_num
         else:
-            iter_num=15
+            iter_num=iter_num
 
         for it in range(iter_num):
             print("Scale "+str(cur_scale)+", iter "+str(it))
@@ -1154,10 +1244,10 @@ def updateFacesCenterAndNormals(vertices, faces, coarsening_steps):
 def mainFunction():
 
 
-    pickleLoad = True
+    pickleLoad = False
     pickleSave = True
 
-    K_faces = 25
+    K_faces = 30
 
     maxSize = 15000
     patchSize = 15000
@@ -1187,9 +1277,9 @@ def mainFunction():
     #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
 
     if COARSENING_STEPS==3:
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8_clean/"
     elif COARSENING_STEPS==2:
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4_clean/"
 
     empiricMax = 30.0
 
@@ -1224,6 +1314,7 @@ def mainFunction():
 
         # --- Load mesh ---
         V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
+        print("faces0 shape: "+str(faces0.shape))
         # Compute normals
         f_normals0 = computeFacesNormals(V0, faces0)
         # Get adjacency
@@ -1307,6 +1398,8 @@ def mainFunction():
         else:       #Small mesh case
 
             # Convert to sparse matrix and coarsen graph
+            print("f_adj0 shape: "+str(f_adj0.shape))
+            print("f_pos0 shape: "+str(f_pos0.shape))
             coo_adj = listToSparse(f_adj0, f_pos0)
             adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
 
@@ -1656,6 +1749,7 @@ def mainFunction():
         noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/test_bits/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
+        noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
 
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
@@ -1761,6 +1855,102 @@ def mainFunction():
                     print("angColorNoisy shape: "+str(angColorNoisy.shape))
                     newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
                     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+
+    
+
+
+    # master branch inference (old school, w/o multi-scale vertex update)
+    elif running_mode == 12:
+        
+        maxSize = 100000
+        patchSize = 100000
+
+        # noisyFolder = "/morpheo-nas2/vincent/DTU_Robot_Image_Dataset/Surface/furu/"
+
+
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/test_bits/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/test/"
+        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
+        noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
+
+
+        # Get GT mesh
+        for noisyFile in os.listdir(noisyFolder):
+
+
+            if (not noisyFile.endswith(".obj")):
+                continue
+            mesh_count = [0]
+
+
+            denoizedFile = noisyFile[:-4]+"_denoised_gray.obj"
+
+
+            noisyFilesList = [noisyFile]
+            denoizedFilesList = [denoizedFile]
+
+            for fileNum in range(len(denoizedFilesList)):
+                
+                denoizedFile = denoizedFilesList[fileNum]
+                noisyFile = noisyFilesList[fileNum]
+                noisyFileWInferredColor = noisyFile[:-4]+"_inferred_normals.obj"
+                noisyFileWColor = noisyFile[:-4]+"_original_normals.obj"
+                denoizedFileWColor = noisyFile[:-4]+"_denoised_color.obj"
+
+                if not os.path.isfile(RESULTS_PATH+denoizedFile):
+                    
+
+                    f_normals_list = []
+                    GTfn_list = []
+                    f_adj_list = []
+
+                    V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
+                    f_normals0 = computeFacesNormals(V0, faces_noisy)
+
+                    print("Adding mesh "+noisyFile+"...")
+                    t0 = time.clock()
+                    faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, GTfn_list, f_adj_list, mesh_count)
+                    print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                    # Now recover vertices positions and create Edge maps
+
+                    
+
+                    facesNum = faces_noisy.shape[0]
+                    V0 = np.expand_dims(V0, axis=0)
+
+                    _, edge_map, v_e_map = getFacesAdj2(faces_noisy)
+                    f_adj = getFacesLargeAdj(faces_noisy,K_faces)
+                    # print("WARNING!!!!! Hardcoded a change in faces adjacency")
+                    # f_adj, edge_map, v_e_map = getFacesAdj2(faces_gt)
+                    
+
+                    faces_noisy = np.array(faces_noisy).astype(np.int32)
+                    faces = np.expand_dims(faces_noisy,axis=0)
+                    edge_map = np.expand_dims(edge_map, axis=0)
+                    v_e_map = np.expand_dims(v_e_map, axis=0)
+
+                    print("Inference ...")
+                    t0 = time.clock()
+                    #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                    upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                    print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
+
+                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
+
+                    angColor = (upN0+1)/2
+
+                    angColorNoisy = (f_normals0+1)/2
+                    
+                    # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
+                    newVn, newFn = getColoredMesh(np.squeeze(V0), faces_noisy, angColor)
+                    newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
+
+                    # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+                    write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
+                    write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+
+
 
     # Inference: Denoise set, save meshes (colored with heatmap), compute metrics
     elif running_mode == 2:
@@ -2009,8 +2199,8 @@ def mainFunction():
         # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/valid/"
         # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
 
-        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/train/"
-        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
+        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/train_cleaned/"
+        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid_cleaned/"
         gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
 
         # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"

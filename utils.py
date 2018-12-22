@@ -419,7 +419,7 @@ def load_mesh(path,filename,K,bGetAdj):
 
     
     vertices = np.array(vertices).astype(np.float32)
-
+    print("vertices shape: "+str(vertices.shape))
     nb_vert = vertices.shape[0]
 
     # If 16 bits are not enough to write vertex indices, use 32 bits 
