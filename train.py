@@ -497,6 +497,8 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     random_seed = 0
     np.random.seed(random_seed)
 
+    keep_rot_inv=False
+
     # sess = tf.InteractiveSession()
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     if(FLAGS.debug):    #launches debugger at every sess.run() call
@@ -559,9 +561,12 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     vp_rot = tf.reshape(vp_,[BATCH_SIZE,-1,3,1])
     gtvp_rot = tf.reshape(gtvp_,[BATCH_SIZE,-1,3,1])
     
-    fn_rot = tf.matmul(rot_mat,fn_rot)
-    vp_rot = tf.matmul(rot_mat_vert,vp_rot)
-    gtvp_rot = tf.matmul(rot_mat_gt,gtvp_rot)
+    if keep_rot_inv:
+        fn_rot = tf.matmul(rot_mat,fn_rot)
+        vp_rot = tf.matmul(rot_mat_vert,vp_rot)
+        gtvp_rot = tf.matmul(rot_mat_gt,gtvp_rot)
+    else:
+        print("WARNING: hard-coded rot inv removal")
 
     fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # Put it back
     fn_rot = tf.reshape(fn_rot,[BATCH_SIZE,-1,6])
@@ -576,15 +581,17 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         # n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 
 
-    n_conv0 = normalizeTensor(n_conv0)
-    n_conv1 = normalizeTensor(n_conv1)
-    n_conv2 = normalizeTensor(n_conv2)
+    # n_conv0 = normalizeTensor(n_conv0)
+    # n_conv1 = normalizeTensor(n_conv1)
+    # n_conv2 = normalizeTensor(n_conv2)
 
     n_conv_list = [n_conv0, n_conv1, n_conv2]
     # isNanNConv = tf.reduce_any(tf.is_nan(n_conv), name="isNanNConv")
     # isFullNanNConv = tf.reduce_all(tf.is_nan(n_conv), name="isNanNConv")
 
-    refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+    # refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+
+    refined_x, _ = update_position_disp(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
     # refined_x = update_position2(vp_rot, n_conv, e_map_, ve_map_, iter_num=2000)
     
 
@@ -731,7 +738,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
             print("Iteration %d, validation loss %g"%(iter, valid_loss))
             lossArray[int(lossArrayIter/10)-1,1]=valid_loss
             if iter>0:
-                lossArray[int(lossArrayIter/10)-1,1] = (valid_loss+last_loss)/2
+                lossArray[int(lossArrayIter/10)-2,1] = (valid_loss+last_loss)/2
                 last_loss=valid_loss
 
         sess.run(train_step,feed_dict=train_fd)
@@ -980,12 +987,12 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
     # for cur_scale in range(1):
         cur_scale = scale_num-1-s
 
-        # print("WARNING! Hard-coded mid-and-fine scale vertex update")
-        # if cur_scale>1:
-        #     continue
-        print("WARNING! Hard-coded fine scale vertex update")
-        if cur_scale>0:
+        print("WARNING! Hard-coded mid-and-fine scale vertex update")
+        if cur_scale>1:
             continue
+        # print("WARNING! Hard-coded fine scale vertex update")
+        # if cur_scale>0:
+        #     continue
 
         face_n = face_normals_list[cur_scale]
         
@@ -1054,6 +1061,104 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
         dx_list.append(x-x_init)
     x = tf.expand_dims(x,axis=0)
     return x, dx_list
+
+def update_position_disp(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=80):
+
+    batch_size, num_points, space_dims = x.get_shape().as_list()
+    x = tf.reshape(x,[-1,3])
+    _, _, K = v_faces0.get_shape().as_list()
+
+    scale_num = len(face_normals_list)   # Always 3 so far
+
+    minus1Tens = tf.zeros_like(v_faces0,dtype=tf.int32)
+    minus1Tens = minus1Tens - 1
+    real_v_faces = tf.not_equal(v_faces0,minus1Tens)
+    v_numf = tf.reduce_sum(tf.where(real_v_faces, tf.ones_like(v_faces0,dtype=tf.float32),tf.zeros_like(v_faces0,dtype=tf.float32)),axis=-1)
+    # v_numf = v_numf_list[cur_scale]
+    lmbd = tf.reciprocal(v_numf)
+    lmbd = tf.reshape(lmbd, [-1,1])
+    lmbd = tf.tile(lmbd,[1,3])
+
+    dx_list = []
+    for s in range(scale_num):
+    # for cur_scale in range(1):
+        cur_scale = scale_num-1-s
+
+        print("WARNING! Hard-coded mid-and-fine scale vertex update")
+        if cur_scale>1:
+            continue
+        # print("WARNING! Hard-coded fine scale vertex update")
+        # if cur_scale>0:
+        #     continue
+
+        face_n = face_normals_list[cur_scale]
+        
+        # Get rid of batch dim
+        face_n = tf.reshape(face_n,[-1,3])
+
+        # v_faces0 gives the indices of adjacent faces at the finest level of the graph.
+        # To get adjacent nodes at the next coarser level, we divide by 2^coarsening_steps
+        # Note that nodes will appear several times, meaning the contribution of nodes to each vertex will be weighted depending on how 'close' they are to the vertex
+        
+        coarsening_tens = tf.zeros_like(v_faces0, dtype=tf.int32) + int(math.pow(math.pow(2,coarsening_steps),cur_scale))
+
+        v_faces = tf.div(v_faces0,coarsening_tens)
+
+        # get rid of batch dim
+        v_faces = tf.squeeze(v_faces)
+
+        
+        # Add fake face with null normal and switch to 1-indexing for v_faces
+        v_faces = v_faces+1
+        face_n = tf.concat((tf.constant([[0,0,0]], dtype=tf.float32),face_n),axis=0)
+
+        v_fn = tf.gather(face_n, v_faces)
+        # [vnum, v_faces_num, 3]
+        x_init = x
+        if cur_scale==2:
+            iter_num=iter_num
+        else:
+            iter_num=iter_num
+
+        for it in range(iter_num):
+            print("Scale "+str(cur_scale)+", iter "+str(it))
+            
+            new_fpos = updateFacesCenter(x,faces,coarsening_steps)
+            face_pos = new_fpos[cur_scale]
+            face_pos = tf.reshape(face_pos,[-1,3])
+
+            face_pos = tf.concat((tf.constant([[0,0,0]], dtype=tf.float32),face_pos),axis=0)
+            v_c = tf.gather(face_pos,v_faces)
+            # [vnum, v_faces_num, 3]
+
+            # xm = tf.reshape(x,[-1,1,3])
+            xm = tf.expand_dims(x,axis=1)
+            xm = tf.tile(xm,[1,K,1])
+
+            e = v_c - xm
+
+            n_w = tensorDotProduct(v_fn, e)
+            # [vnum, v_faces_num]
+            # Since face_n should be null for 'non-faces' in v_faces, dot product should be null, so there is no need to deal with this explicitly
+
+            n_w = tf.tile(tf.expand_dims(n_w,axis=-1),[1,1,3])
+            # [vnum, v_faces_num, 3]
+
+            update = tf.multiply(n_w,v_fn)
+            # [vnum, v_faces_num, 3]
+            update = tf.reduce_sum(update, axis=1)
+            # [vnum, 3]        
+
+            x_update = tf.multiply(lmbd,update)
+            # x_update = (1/18)* update
+
+            x = tf.add(x,x_update)
+
+        # iter_num*=2
+        dx_list.append(x-x_init)
+    x = tf.expand_dims(x,axis=0)
+    return x, dx_list
+
 
 def update_position_MS_damp(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=360):
 
@@ -1279,7 +1384,7 @@ def mainFunction():
     if COARSENING_STEPS==3:
         binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8_clean/"
     elif COARSENING_STEPS==2:
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4_clean/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4/"
 
     empiricMax = 30.0
 
@@ -1749,7 +1854,7 @@ def mainFunction():
         noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/test_bits/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
-        noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
+        # noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
 
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
@@ -2286,6 +2391,8 @@ def mainFunction():
 
                     #For FAUST
                     fileNumStr = filename[5:8]
+                    if int(fileNumStr)==73:
+                        continue
                     gtfilename = 'gt'+fileNumStr+'.obj'
 
                     addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
