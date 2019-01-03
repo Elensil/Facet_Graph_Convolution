@@ -154,9 +154,9 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
             # n_conv0 = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
             # n_conv1 = n_conv0
             # n_conv2 = n_conv0
-        n_conv0 = normalizeTensor(n_conv0)
-        n_conv1 = normalizeTensor(n_conv1)
-        n_conv2 = normalizeTensor(n_conv2)
+        # n_conv0 = normalizeTensor(n_conv0)
+        # n_conv1 = normalizeTensor(n_conv1)
+        # n_conv2 = normalizeTensor(n_conv2)
         n_conv_list = [n_conv0, n_conv1, n_conv2]
 
         # refined_x = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=3)
@@ -189,7 +189,7 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
         upN2 = custom_upsampling(new_normals2,COARSENING_STEPS*2)
         new_normals = [new_normals0, new_normals1, new_normals2]
         
-        refined_x, dx_list = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        refined_x, dx_list = update_position_disp(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
 
         refined_x = refined_x #+ dx_list[1] #+ dx_list[2]
 
@@ -227,7 +227,14 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
             #                     faces_: faces[i], v_faces_: v_faces[i]}
 
             print("Running points...")
-            outPoints, fineNormals, midNormals, coarseNormals = sess.run([points, new_normals0, upN1, upN2],feed_dict=update_feed_dict)
+
+            normalised_disp_fine = normalizeTensor(new_normals0)
+            normalised_disp_mid = normalizeTensor(upN1)
+            normalised_disp_coarse = normalizeTensor(upN2)
+
+            # outPoints, fineNormals, midNormals, coarseNormals = sess.run([points, new_normals0, upN1, upN2],feed_dict=update_feed_dict)
+            outPoints, fineNormals, midNormals, coarseNormals = sess.run([points, normalised_disp_fine, normalised_disp_mid, normalised_disp_coarse],feed_dict=update_feed_dict)
+
             print("Points: check")
             print("Updating mesh...")
             if len(f_normals)>1:
@@ -497,7 +504,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     random_seed = 0
     np.random.seed(random_seed)
 
-    keep_rot_inv=False
+    keep_rot_inv=True
 
     # sess = tf.InteractiveSession()
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -541,7 +548,9 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
     v_faces_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_vertices], name='v_faces_')
 
-    sample_ind = tf.placeholder(tf.int32, shape=[500], name='sample_ind')
+    sample_ind0 = tf.placeholder(tf.int32, shape=[1000], name='sample_ind0')
+    sample_ind1 = tf.placeholder(tf.int32, shape=[1000], name='sample_ind1')
+
 
     keep_prob = tf.placeholder(tf.float32)
     
@@ -595,13 +604,15 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     # refined_x = update_position2(vp_rot, n_conv, e_map_, ve_map_, iter_num=2000)
     
 
-    samp_x = tf.transpose(refined_x,[1,0,2])
-    samp_x = tf.gather(samp_x,sample_ind)
-    samp_x = tf.transpose(samp_x,[1,0,2])
+    # samp_x = tf.transpose(refined_x,[1,0,2])
+    # samp_x = tf.gather(samp_x,sample_ind)
+    # samp_x = tf.transpose(samp_x,[1,0,2])
+    samp_x = refined_x
     
     with tf.device(DEVICE):
         # customLoss = accuracyLoss(refined_x, gtvp_rot, sample_ind)
-        customLoss = sampledAccuracyLoss(samp_x, gtvp_rot)
+        customLoss = fullLoss(refined_x, gtvp_rot, sample_ind0, sample_ind1)
+        # customLoss = sampledAccuracyLoss(samp_x, gtvp_rot)
         train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
 
     saver = tf.train.Saver()
@@ -663,7 +674,9 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         num_p = f_normals_list[batch_num].shape[1]
         num_v = in_points_list[batch_num].shape[1]
         num_vgt = GT_points_list[batch_num].shape[1]
-        random_ind = np.random.randint(num_v,size=500)
+        random_ind0 = np.random.randint(num_v,size=1000)
+        random_ind1 = np.random.randint(num_vgt,size=1000)
+
 
         random_R = rand_rotation_matrix()
         tens_random_R = np.reshape(random_R,(1,1,3,3))
@@ -679,7 +692,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                         fadj2: f_adj_list[batch_num][2], vp_: in_points_list[batch_num], gtvp_: GT_points_list[batch_num],
                         faces_: faces_list[batch_num], v_faces_: v_faces_list[batch_num], 
                         rot_mat:tens_random_R2, rot_mat_vert:tens_random_Rv, rot_mat_gt: tens_random_Rgt,
-                        sample_ind: random_ind, keep_prob:dropout_prob}
+                        sample_ind0: random_ind0, sample_ind1: random_ind1, keep_prob:dropout_prob}
         # train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
         #                 fadj2: f_adj_list[batch_num][2], vp_: batch_in_points, gtvp_: GT_points_list[batch_num],
         #                 faces_: faces_list[batch_num], v_faces_: v_faces_list[batch_num], 
@@ -711,7 +724,8 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                 num_p = valid_f_normals_list[vbm].shape[1]
                 num_v = valid_in_points_list[vbm].shape[1]
                 num_vgt = valid_GT_points_list[vbm].shape[1]
-                valid_random_ind = np.random.randint(num_v,size=500)
+                valid_random_ind0 = np.random.randint(num_v,size=1000)
+                valid_random_ind1 = np.random.randint(num_vgt,size=1000)
                 tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
                 tens_random_Rv = np.tile(tens_random_R,(BATCH_SIZE,num_v,1,1))
                 tens_random_Rgt = np.tile(tens_random_R,(BATCH_SIZE,num_vgt,1,1))
@@ -724,7 +738,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                         fadj2: valid_f_adj_list[vbm][2], vp_: valid_in_points_list[vbm], gtvp_: valid_GT_points_list[vbm],
                         faces_:valid_faces_list[vbm], v_faces_:valid_v_faces_list[vbm],
                         rot_mat:tens_random_R2, rot_mat_vert:tens_random_Rv, rot_mat_gt: tens_random_Rgt,
-                        sample_ind: valid_random_ind, keep_prob:1.0}
+                        sample_ind0: valid_random_ind0, sample_ind1: valid_random_ind1, keep_prob:1.0}
                 # valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], fadj1: valid_f_adj_list[vbm][1],
                 #         fadj2: valid_f_adj_list[vbm][2], vp_: batch_in_points, gtvp_: valid_GT_points_list[vbm],
                 #         faces_:valid_faces_list[vbm], v_faces_:valid_v_faces_list[vbm],
@@ -821,6 +835,8 @@ def accuracyLoss(P0, P1, sample_ind):
 
         precision = tf.reduce_min(dist,axis=2, name = 'min_point_set')
         # [batch, numP0]
+        completeness = tf.reduce_min(dist,axis=1, name = 'completeness')
+        # [batch, numP1]
 
         keptPoints = tf.less_equal(precision,accuracyThreshold)
 
@@ -828,7 +844,59 @@ def accuracyLoss(P0, P1, sample_ind):
 
         precision = tf.where(keptPoints,precision,zeroVec)
 
-        avg_precision = 1000*tf.reduce_mean(precision,name='avg_precision')
+        avg_precision = 1000*(tf.reduce_mean(precision,name='avg_precision')+tf.reduce_mean(completeness, name='avg_completeness'))
+
+    return avg_precision
+
+
+# Loss defined as the average distance from points of P0 to point set P1
+def fullLoss(P0, P1, sample_ind0, sample_ind1):
+
+    accuracyThreshold = 5      # Completely empirical
+    with tf.variable_scope('accuracyLoss'):
+    # P0 shape: [batch, numP0, 3]
+    # P1 shape: [batch, numP1, 3]
+
+        # Take only a few selected points
+        sP0 = tf.transpose(P0,[1,0,2])
+        sP0 = tf.gather(sP0,sample_ind0)
+        sP0 = tf.transpose(sP0,[1,0,2])
+
+        sP1 = tf.transpose(P1,[1,0,2])
+        sP1 = tf.gather(sP1,sample_ind1)
+        sP1 = tf.transpose(sP1,[1,0,2])
+
+        numsP0 = sP0.shape[1]
+        numP0 = P0.shape[1]
+        numP1 = P1.shape[1]
+        numsP1 = sP1.shape[1]
+
+        eP0 = tf.expand_dims(P0,axis=2)
+        eP1 = tf.expand_dims(P1,axis=1)
+        esP0 = tf.expand_dims(sP0,axis=2)
+        esP1 = tf.expand_dims(sP1,axis=1)
+
+        diff0 = esP0 - eP1
+        diff1 = eP0 - esP1
+        # [batch, numP0, numP1, 3]
+
+        dist0 = tf.norm(diff0, axis=-1, name = 'norm')
+        # [batch ,numsP0, numP1]
+        dist1 = tf.norm(diff1, axis=-1, name = 'norm')
+        # [batch ,numP0, numsP1]
+
+        precision = tf.reduce_min(dist0,axis=2, name = 'min_point_set')
+        # [batch, numP0]
+        completeness = tf.reduce_min(dist1,axis=1, name = 'completeness')
+        # [batch, numP1]
+
+        # keptPoints = tf.less_equal(precision,accuracyThreshold)
+
+        # zeroVec = tf.zeros_like(precision)
+
+        # precision = tf.where(keptPoints,precision,zeroVec)
+
+        avg_precision = 1000*(tf.reduce_mean(precision,name='avg_precision')+tf.reduce_mean(completeness, name='avg_completeness'))
 
     return avg_precision
 
@@ -855,16 +923,17 @@ def sampledAccuracyLoss(P0, P1):
         dist = tf.norm(diff, axis=-1, name = 'norm')
         # [batch ,numP0, numP1]
 
-        precision = tf.reduce_min(dist,axis=2, name = 'min_point_set')
+        accu = tf.reduce_min(dist,axis=2, name = 'min_point_set')
         # [batch, numP0]
+        completeness = tf.reduce_min(dist,axis=1, name = 'completeness')
 
-        keptPoints = tf.less_equal(precision,accuracyThreshold)
+        keptPoints = tf.less_equal(accu,accuracyThreshold)
 
-        zeroVec = tf.zeros_like(precision)
+        zeroVec = tf.zeros_like(accu)
 
-        precision = tf.where(keptPoints,precision,zeroVec)
+        accu = tf.where(keptPoints,accu,zeroVec)
 
-        avg_precision = 1000*tf.reduce_mean(precision,name='avg_precision')
+        avg_precision = 1000 * (tf.reduce_mean(accu,name='avg_precision')+tf.reduce_mean(completeness, name='avg_completeness'))
 
     return avg_precision
 
@@ -1084,12 +1153,12 @@ def update_position_disp(x, face_normals_list, faces, v_faces0, coarsening_steps
     # for cur_scale in range(1):
         cur_scale = scale_num-1-s
 
-        print("WARNING! Hard-coded mid-and-fine scale vertex update")
-        if cur_scale>1:
-            continue
-        # print("WARNING! Hard-coded fine scale vertex update")
-        # if cur_scale>0:
+        # print("WARNING! Hard-coded mid-and-fine scale vertex update")
+        # if cur_scale>1:
         #     continue
+        print("WARNING! Hard-coded fine scale vertex update")
+        if cur_scale>0:
+            continue
 
         face_n = face_normals_list[cur_scale]
         
@@ -1114,48 +1183,14 @@ def update_position_disp(x, face_normals_list, faces, v_faces0, coarsening_steps
 
         v_fn = tf.gather(face_n, v_faces)
         # [vnum, v_faces_num, 3]
-        x_init = x
-        if cur_scale==2:
-            iter_num=iter_num
-        else:
-            iter_num=iter_num
 
-        for it in range(iter_num):
-            print("Scale "+str(cur_scale)+", iter "+str(it))
-            
-            new_fpos = updateFacesCenter(x,faces,coarsening_steps)
-            face_pos = new_fpos[cur_scale]
-            face_pos = tf.reshape(face_pos,[-1,3])
+        v_disp = tf.reduce_sum(v_fn,axis=1)
+        v_disp = tf.multiply(lmbd,v_disp)
+        x = tf.add(x,v_disp)
+        
+    
 
-            face_pos = tf.concat((tf.constant([[0,0,0]], dtype=tf.float32),face_pos),axis=0)
-            v_c = tf.gather(face_pos,v_faces)
-            # [vnum, v_faces_num, 3]
-
-            # xm = tf.reshape(x,[-1,1,3])
-            xm = tf.expand_dims(x,axis=1)
-            xm = tf.tile(xm,[1,K,1])
-
-            e = v_c - xm
-
-            n_w = tensorDotProduct(v_fn, e)
-            # [vnum, v_faces_num]
-            # Since face_n should be null for 'non-faces' in v_faces, dot product should be null, so there is no need to deal with this explicitly
-
-            n_w = tf.tile(tf.expand_dims(n_w,axis=-1),[1,1,3])
-            # [vnum, v_faces_num, 3]
-
-            update = tf.multiply(n_w,v_fn)
-            # [vnum, v_faces_num, 3]
-            update = tf.reduce_sum(update, axis=1)
-            # [vnum, 3]        
-
-            x_update = tf.multiply(lmbd,update)
-            # x_update = (1/18)* update
-
-            x = tf.add(x,x_update)
-
-        # iter_num*=2
-        dx_list.append(x-x_init)
+        dx_list.append(v_disp)
     x = tf.expand_dims(x,axis=0)
     return x, dx_list
 
@@ -1354,8 +1389,8 @@ def mainFunction():
 
     K_faces = 30
 
-    maxSize = 15000
-    patchSize = 15000
+    maxSize = 1000
+    patchSize = 1000
 
     training_meshes_num = [0]
     valid_meshes_num = [0]
@@ -1586,8 +1621,8 @@ def mainFunction():
         faceRange = np.arange(facesNum)
         if facesNum>maxSize:
             patchNum = 0
-            # while((np.any(faceCheck==0))and(patchNum<5)):
-            while(np.any(faceCheck==0)):
+            while((np.any(faceCheck==0))and(patchNum<8)):
+            # while(np.any(faceCheck==0)):
                 toBeProcessed = faceRange[faceCheck==0]
                 faceSeed = np.random.randint(toBeProcessed.shape[0])
                 faceSeed = toBeProcessed[faceSeed]

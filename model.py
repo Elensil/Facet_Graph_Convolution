@@ -7,7 +7,8 @@ from utils import *
 #import h5py
 
 random_seed=0
-std_dev=0.05
+std_dev= 0.1 #0.05
+
 
 # Levi-Civita tensor of dimension 3
 LC_tensor = tf.constant([[[0,0,0],[0,0,1],[0,-1,0]],[[0,0,-1],[0,0,0],[1,0,0]],[[0,1,0],[-1,0,0],[0,0,0]]],dtype=tf.float32)
@@ -3079,6 +3080,135 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
 
             # Lin(1024)
             out_channels_fc0 = 1024
+            h_fc0 = lrelu(tf.nn.dropout(custom_lin(dconv1_act, out_channels_fc0),keep_prob),alpha)
+            # Lin(3)
+            y_conv0 = custom_lin(h_fc0, out_channels_reg)
+
+            return y_conv0, y_conv1, y_conv2
+
+        if architecture == 18:      # Like 17, w/ 2 extra convolutions at coarsest level
+            alpha = 0.1
+            coarsening_steps = 2
+            out_channels_reg = 3
+
+            _, _,in_channels = x.get_shape().as_list()
+            pos0 = tf.slice(x,[0,0,in_channels-3],[-1,-1,-1])
+            pos1 = custom_binary_tree_pooling(pos0, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+            pos2 = custom_binary_tree_pooling(pos1, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+
+            # Conv1
+            M_conv1 = 9
+            out_channels_conv1 = 16
+            h_conv1, _ = custom_conv2d_pos_for_assignment(x, adjs[0], out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            dropout0 = tf.nn.dropout(h_conv1,keep_prob)
+            h_conv1_act = lrelu(dropout0,alpha)
+            # [batch, N, 16]
+
+            # Pooling 1
+            pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps) # TODO: deal with fake nodes??
+            # [batch, N/4, 16]
+
+            # Conv2
+            M_conv2 = 9
+            out_channels_conv2 = 32
+            # Add position:
+            pool1 = tf.concat([pool1,pos1],axis=-1)
+            h_conv2, _ = custom_conv2d_pos_for_assignment(pool1, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout1 = tf.nn.dropout(h_conv2,keep_prob)
+            h_conv2_act = lrelu(dropout1,alpha)
+            # [batch, N/4, 32]
+
+            # Pooling 2
+            pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
+            # [batch, N/16, 32]
+
+            # Conv3
+            M_conv3 = 9
+            out_channels_conv3 = 64
+            # Add position:
+            pool2 = tf.concat([pool2,pos2],axis=-1)
+            h_conv3, _ = custom_conv2d_pos_for_assignment(pool2, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout2 = tf.nn.dropout(h_conv3,keep_prob)
+            h_conv3_act = lrelu(dropout2,alpha)
+            # [batch, N/16, 64]
+
+            # Conv3_2
+            # Add position:
+            pool2_2 = tf.concat([h_conv3_act,pos2],axis=-1)
+            h_conv3_2, _ = custom_conv2d_pos_for_assignment(pool2_2, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout2_2 = tf.nn.dropout(h_conv3_2,keep_prob)
+            h_conv3_2_act = lrelu(dropout2_2,alpha)
+            # [batch, N/16, 64]
+
+            # --- Central features ---
+
+            #DeConv3
+            # Add position:
+            h_conv3_2_act = tf.concat([h_conv3_2_act,pos2],axis=-1)
+            dconv3, _ = custom_conv2d_pos_for_assignment(h_conv3_2_act, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout3 = tf.nn.dropout(dconv3,keep_prob)
+            dconv3_act = lrelu(dropout3,alpha)
+            # [batch, N/16, 64]
+
+            #DeConv3_2
+            # Add position:
+            dconv3_act = tf.concat([dconv3_act,pos2],axis=-1)
+            dconv3_2, _ = custom_conv2d_pos_for_assignment(dconv3_act, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout3_2 = tf.nn.dropout(dconv3_2,keep_prob)
+            dconv3_2_act = lrelu(dropout3_2,alpha)
+            # [batch, N/16, 64]
+
+            # Lin(1024)
+            out_channels_fc2 = 256
+            h_fc2 = lrelu(tf.nn.dropout(custom_lin(dconv3_2_act, out_channels_fc2),keep_prob),alpha)
+            # Lin(3)
+            y_conv2 = custom_lin(h_fc2, out_channels_reg)
+
+            #Upsampling2
+            upsamp2 = custom_upsampling(dconv3_2_act, steps=coarsening_steps)
+            # [batch, N/4, 64]
+
+            upsamp2 = tf.concat([upsamp2,pos1],axis=-1)
+            upconv2, _ = custom_conv2d_pos_for_assignment(upsamp2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout5 = tf.nn.dropout(upconv2,keep_prob)
+            # [batch, N/4, 32]
+
+            #DeConv2
+            concat2 = tf.concat([dropout5, h_conv2_act], axis=-1)
+            # [batch, N/4, 64]
+            # Add position:
+            concat2 = tf.concat([concat2,pos1],axis=-1)
+            dconv2, _ = custom_conv2d_pos_for_assignment(concat2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout6 = tf.nn.dropout(dconv2,keep_prob)
+            dconv2_act = lrelu(dropout6,alpha)
+            # [batch, N/4, 32]
+
+
+            # Lin(1024)
+            out_channels_fc1 = 256
+            h_fc1 = lrelu(tf.nn.dropout(custom_lin(dconv2_act, out_channels_fc1),keep_prob),alpha)
+            # Lin(3)
+            y_conv1 = custom_lin(h_fc1, out_channels_reg)
+
+            #Upsampling1
+            upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
+            # [batch, N, 32]
+            upsamp1 = tf.concat([upsamp1,pos0],axis=-1)
+            upconv1, _ = custom_conv2d_pos_for_assignment(upsamp1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout8 = tf.nn.dropout(upconv1,keep_prob)
+            # [batch, N, 16]
+
+            concat1 = tf.concat([dropout8, h_conv1_act], axis=-1)
+            # [batch, N, 32]
+
+            concat1 = tf.concat([concat1,pos0],axis=-1)
+            dconv1, _ = custom_conv2d_pos_for_assignment(concat1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dropout9 = tf.nn.dropout(dconv1,keep_prob)
+            dconv1_act = lrelu(dropout9,alpha)
+            # [batch, N, 16]
+
+            # Lin(1024)
+            out_channels_fc0 = 256
             h_fc0 = lrelu(tf.nn.dropout(custom_lin(dconv1_act, out_channels_fc0),keep_prob),alpha)
             # Lin(3)
             y_conv0 = custom_lin(h_fc0, out_channels_reg)
