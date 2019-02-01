@@ -65,12 +65,30 @@ def computeNormals(verts,faces):    # Returns per vertex normal (right?)
     normals = normalize(normals)
     return normals
 
+
+
 def computeFacesNormals(verts, faces):
     T = verts[faces]
     N = np.cross(T[::,1 ]-T[::,0], T[::,2]-T[::,0])
     Nn=normalize(N)
 
     return Nn
+
+# There must be no batch dimension
+def tfComputeNormals(points, faces):
+    points = tf.squeeze(points)
+    faces = tf.squeeze(faces)
+    T = tf.gather(points,faces,axis=0)
+
+    v0 = tf.slice(T,(0,0,0),(-1,1,-1))
+    v1 = tf.slice(T,(0,1,0),(-1,1,-1))
+    v2 = tf.slice(T,(0,2,0),(-1,1,-1))
+
+    N = tf.cross(v1-v0,v2-v1)
+    Nn = normalizeTensor(N)
+
+    return Nn
+
 
 def getFacesAdj(faces):
     fnum = faces.shape[0]
@@ -598,6 +616,8 @@ def write_mesh(vl,fl,strFileName):
     for row in range(faces.shape[0]):
         if((faces[row,0]=='1')and(faces[row,1]=='1')):
             break
+        if((faces[row,0]=='0.0')and(faces[row,1]=='0.0')):
+            continue
         outputFile.write('f ')
         for col in range(faces.shape[1]):
             outputFile.write(faces[row,col])
@@ -717,6 +737,348 @@ def oneSidedHausdorffNew(V0, V1, F):
     distAvg/=N0
     return distM, distAvg
 
+
+
+
+
+def hausdorffOverSampled(V0,V1,sV0,sV1):
+    
+    #First, normalize
+    xmin = min(np.amin(V0[:,0]),np.amin(V1[:,0]))
+    ymin = min(np.amin(V0[:,1]),np.amin(V1[:,1]))
+    zmin = min(np.amin(V0[:,2]),np.amin(V1[:,2]))
+    xmax = max(np.amax(V0[:,0]),np.amax(V1[:,0]))
+    ymax = max(np.amax(V0[:,1]),np.amax(V1[:,1]))
+    zmax = max(np.amax(V0[:,2]),np.amax(V1[:,2]))
+
+    diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
+
+    # Put origin in corner
+    transVec = np.array(([[xmin,ymin,zmin]]),dtype=np.float32)
+    V0 = V0 - transVec
+    V1 = V1 - transVec
+    sV1 = sV1 - transVec
+    sV0 = sV0 - transVec
+
+    V0 = V0/diag
+    V1 = V1/diag
+    sV0 = sV0/diag
+    sV1 = sV1/diag
+
+    N0 = V0.shape[0]
+    N1 = V1.shape[0]
+    Ns0 = sV0.shape[0]
+    Ns1 = sV1.shape[0]
+    print("N0 = "+str(N0))
+    print("N1 = "+str(N1))
+    print("Ns0 = "+str(Ns0))
+    print("Ns1 = "+str(Ns1))
+
+    v0_list = []
+    v1_list = []
+    sV0_list = []
+    sV1_list = []
+
+    xmax = max(np.amax(V0[:,0]),np.amax(V1[:,0]))
+    ymax = max(np.amax(V0[:,1]),np.amax(V1[:,1]))
+    zmax = max(np.amax(V0[:,2]),np.amax(V1[:,2]))
+
+    slices = 8
+    sSlices = slices+1
+
+
+    print("partitioning space...")
+    for i in range(sSlices):
+        cim = i*xmax/sSlices
+        ciM = (i+1)*xmax/sSlices
+        sv0CondI = (sV0[:,0]>cim)&(sV0[:,0]<ciM)
+        sv1CondI = (sV1[:,0]>cim)&(sV1[:,0]<ciM)
+
+        for j in range(sSlices):
+            cjm = j*ymax/sSlices
+            cjM = (j+1)*ymax/sSlices
+            sv0CondJ = (sV0[:,1]>cjm)&(sV0[:,1]<cjM)
+            sv1CondJ = (sV1[:,1]>cjm)&(sV1[:,1]<cjM)
+
+            for k in range(sSlices):
+                ckm = k*zmax/sSlices
+                ckM = (k+1)*zmax/sSlices
+                sv0CondK = (sV0[:,2]>ckm)&(sV0[:,2]<ckM)
+                sv1CondK = (sV1[:,2]>ckm)&(sV1[:,2]<ckM)
+
+                sv0Cond = sv0CondI & sv0CondJ & sv0CondK
+                sv1Cond = sv1CondI & sv1CondJ & sv1CondK
+
+                cursV0 = sV0[sv0Cond]
+                sV0_list.append(cursV0)
+                cursV1 = sV1[sv1Cond]
+                sV1_list.append(cursV1)
+
+                # print("sSlice ("+str(i)+","+str(j)+","+str(k)+")")
+                # print("cursV0 shape = "+str(cursV0.shape))
+                # print("cursV1 shape = "+str(cursV1.shape))
+
+    for i in range(slices):
+        cim = i*xmax/slices
+        ciM = (i+1)*xmax/slices
+        v0CondI = (V0[:,0]>cim)&(V0[:,0]<ciM)
+        v1CondI = (V1[:,0]>cim)&(V1[:,0]<ciM)
+
+        for j in range(slices):
+            cjm = j*ymax/slices
+            cjM = (j+1)*ymax/slices
+            v0CondJ = (V0[:,1]>cjm)&(V0[:,1]<cjM)
+            v1CondJ = (V1[:,1]>cjm)&(V1[:,1]<cjM)
+
+            for k in range(slices):
+                ckm = k*zmax/slices
+                ckM = (k+1)*zmax/slices
+                v0CondK = (V0[:,2]>ckm)&(V0[:,2]<ckM)
+                v1CondK = (V1[:,2]>ckm)&(V1[:,2]<ckM)
+
+                v0Cond = v0CondI & v0CondJ & v0CondK
+                v1Cond = v1CondI & v1CondJ & v1CondK
+
+                curV0 = V0[v0Cond]
+                v0_list.append(curV0)
+                curV1 = V1[v1Cond]
+                v1_list.append(curV1)
+
+                # print("slice ("+str(i)+","+str(j)+","+str(k)+")")
+                # print("curV0 shape = "+str(curV0.shape))
+                # print("curV1 shape = "+str(curV1.shape))
+
+
+    # return v0_list, sV1_list
+
+    print("partition complete")
+    curInd=0
+    # Distance time!
+
+    total_acc = np.empty((0),dtype=np.float32)
+    total_comp = np.empty((0),dtype=np.float32)
+    for i in range(slices):
+
+        for j in range(slices):
+            
+            for k in range(slices):
+                # print("starting slice ("+str(i)+","+str(j)+","+str(k)+")")
+                v0Slice = v0_list[curInd]
+                v1Slice = v1_list[curInd]
+
+                N0 = v0Slice.shape[0]
+                N1 = v1Slice.shape[0]
+                if (N0>0):
+                    sV1Slice = np.concatenate(( sV1_list[i*sSlices*sSlices+j*sSlices+k],
+                                                sV1_list[i*sSlices*sSlices+j*sSlices+k+1],
+                                                sV1_list[i*sSlices*sSlices+(j+1)*sSlices+k],
+                                                sV1_list[i*sSlices*sSlices+(j+1)*sSlices+k+1],
+                                                sV1_list[(i+1)*sSlices*sSlices+j*sSlices+k],
+                                                sV1_list[(i+1)*sSlices*sSlices+j*sSlices+k+1],
+                                                sV1_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k],
+                                                sV1_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k+1]), axis=0)
+                    Ns1 = sV1Slice.shape[0]
+                    # print("N0 = "+str(N0))
+                    # print("Ns1 = "+str(Ns1))
+
+                    bV0 = np.reshape(v0Slice,(N0,1,3))
+                    bsV1 = np.reshape(sV1Slice,(1,Ns1,3))
+                    bV0 = np.tile(bV0,(1,Ns1,1))
+                    bsV1 = np.tile(bsV1,(N0,1,1))
+                    
+                    diff_acc = bV0 - bsV1
+                    dist_acc = np.linalg.norm(diff_acc, axis=2)
+                    vec_acc = np.amin(dist_acc,axis=1)
+                    total_acc = np.concatenate((total_acc,vec_acc),axis=0)
+
+                if (N1>0):
+                    sV0Slice = np.concatenate(( sV0_list[i*sSlices*sSlices+j*sSlices+k],
+                                                sV0_list[i*sSlices*sSlices+j*sSlices+k+1],
+                                                sV0_list[i*sSlices*sSlices+(j+1)*sSlices+k],
+                                                sV0_list[i*sSlices*sSlices+(j+1)*sSlices+k+1],
+                                                sV0_list[(i+1)*sSlices*sSlices+j*sSlices+k],
+                                                sV0_list[(i+1)*sSlices*sSlices+j*sSlices+k+1],
+                                                sV0_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k],
+                                                sV0_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k+1]), axis=0)
+                    Ns0 = sV0Slice.shape[0]
+                    # print("N1 = "+str(N1))
+                    # print("Ns0 = "+str(Ns0))
+                
+                    bV1 = np.reshape(v1Slice,(N1,1,3))
+                    bsV0 = np.reshape(sV0Slice,(1,Ns0,3))
+                    bV1 = np.tile(bV1,(1,Ns0,1))
+                    bsV0 = np.tile(bsV0,(N1,1,1))
+                    
+                    diff_comp = bV1 - bsV0
+                    dist_comp = np.linalg.norm(diff_comp, axis=2)
+                    vec_comp = np.amin(dist_comp, axis=1)
+                    total_comp = np.concatenate((total_comp,vec_comp),axis=0)
+
+                curInd+=1
+
+    min_acc = np.amin(total_acc)
+    min_comp = np.amin(total_comp)
+    avg_acc = np.mean(total_acc)
+    avg_comp = np.mean(total_comp)
+
+    return min_acc, min_comp, avg_acc, avg_comp
+
+
+
+
+def getFaceAssignment(V0, F0, V1, F1, num_assignment):
+
+    C0 = getTrianglesBarycenter(V0,F0, normalize=False)
+    C1 = getTrianglesBarycenter(V1,F1, normalize=False)
+
+    print("C0 shape: "+str(C0.shape))
+    print("C1 shape: "+str(C1.shape))
+    # Copied from Hausdorff distance function above
+
+    #First, normalize
+    xmin = min(np.amin(C0[:,0]),np.amin(C1[:,0]))
+    ymin = min(np.amin(C0[:,1]),np.amin(C1[:,1]))
+    zmin = min(np.amin(C0[:,2]),np.amin(C1[:,2]))
+    xmax = max(np.amax(C0[:,0]),np.amax(C1[:,0]))
+    ymax = max(np.amax(C0[:,1]),np.amax(C1[:,1]))
+    zmax = max(np.amax(C0[:,2]),np.amax(C1[:,2]))
+
+    diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
+
+    # Put origin in corner
+    transVec = np.array(([[xmin,ymin,zmin]]),dtype=np.float32)
+    C0 = C0 - transVec
+    C1 = C1 - transVec
+    
+    C0 = C0/diag
+    C1 = C1/diag
+
+    N0 = C0.shape[0]
+    N1 = C1.shape[0]
+    print("N0 = "+str(N0))
+    c0_list = []
+    c1_list = []
+
+    ind0_list = []
+    ind1_list = []
+
+    xmax = max(np.amax(C0[:,0]),np.amax(C1[:,0]))+0.01
+    ymax = max(np.amax(C0[:,1]),np.amax(C1[:,1]))+0.01
+    zmax = max(np.amax(C0[:,2]),np.amax(C1[:,2]))+0.01
+
+    slices = 5
+    sSlices = slices+1
+
+    range0 = np.arange(N0)
+    range1 = np.arange(N1)
+
+    assignedFaces = np.zeros((N0,num_assignment),dtype=np.int32)
+    assignedFaces = assignedFaces - 1
+    # print("partitioning space...")
+    for i in range(sSlices):
+        cim = i*xmax/sSlices
+        ciM = (i+1)*xmax/sSlices
+        c1CondI = (C1[:,0]>=cim)&(C1[:,0]<ciM)
+
+        for j in range(sSlices):
+            cjm = j*ymax/sSlices
+            cjM = (j+1)*ymax/sSlices
+            c1CondJ = (C1[:,1]>=cjm)&(C1[:,1]<cjM)
+
+            for k in range(sSlices):
+                ckm = k*zmax/sSlices
+                ckM = (k+1)*zmax/sSlices
+                c1CondK = (C1[:,2]>=ckm)&(C1[:,2]<ckM)
+
+                c1Cond = c1CondI & c1CondJ & c1CondK
+
+                curC1 = C1[c1Cond]
+                c1_list.append(curC1)
+
+                curInd1 = range1[c1Cond]
+                ind1_list.append(curInd1)
+
+    totalInd0Size = 0
+    for i in range(slices):
+        cim = i*xmax/slices
+        ciM = (i+1)*xmax/slices
+        c0CondI = (C0[:,0]>=cim)&(C0[:,0]<ciM)
+
+        for j in range(slices):
+            cjm = j*ymax/slices
+            cjM = (j+1)*ymax/slices
+            c0CondJ = (C0[:,1]>=cjm)&(C0[:,1]<cjM)
+
+            for k in range(slices):
+                ckm = k*zmax/slices
+                ckM = (k+1)*zmax/slices
+                c0CondK = (C0[:,2]>=ckm)&(C0[:,2]<ckM)
+
+                c0Cond = c0CondI & c0CondJ & c0CondK
+
+                curC0 = C0[c0Cond]
+                c0_list.append(curC0)
+
+                curInd0 = range0[c0Cond]
+                totalInd0Size += curInd0.shape[0]
+                # print("curInd0 size = "+str(curInd0.shape))
+                ind0_list.append(curInd0)
+
+    # print("partition complete")
+    curInd=0
+    # Distance time!
+    print("totalInd0Size = "+str(totalInd0Size))
+    for i in range(slices):
+
+        for j in range(slices):
+            
+            for k in range(slices):
+                # print("starting slice ("+str(i)+","+str(j)+","+str(k)+")")
+                c0Slice = c0_list[curInd]
+                
+                N0 = c0Slice.shape[0]
+                if (N0>0):
+                    c1Slice = np.concatenate(( c1_list[i*sSlices*sSlices+j*sSlices+k],
+                                                c1_list[i*sSlices*sSlices+j*sSlices+k+1],
+                                                c1_list[i*sSlices*sSlices+(j+1)*sSlices+k],
+                                                c1_list[i*sSlices*sSlices+(j+1)*sSlices+k+1],
+                                                c1_list[(i+1)*sSlices*sSlices+j*sSlices+k],
+                                                c1_list[(i+1)*sSlices*sSlices+j*sSlices+k+1],
+                                                c1_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k],
+                                                c1_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k+1]), axis=0)
+                    N1 = c1Slice.shape[0]
+
+
+                    ind1Slice = np.concatenate(( ind1_list[i*sSlices*sSlices+j*sSlices+k],
+                                                ind1_list[i*sSlices*sSlices+j*sSlices+k+1],
+                                                ind1_list[i*sSlices*sSlices+(j+1)*sSlices+k],
+                                                ind1_list[i*sSlices*sSlices+(j+1)*sSlices+k+1],
+                                                ind1_list[(i+1)*sSlices*sSlices+j*sSlices+k],
+                                                ind1_list[(i+1)*sSlices*sSlices+j*sSlices+k+1],
+                                                ind1_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k],
+                                                ind1_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k+1]), axis=0)
+
+                    bC0 = np.reshape(c0Slice,(N0,1,3))
+                    bC1 = np.reshape(c1Slice,(1,N1,3))
+                    bC0 = np.tile(bC0,(1,N1,1))
+                    bC1 = np.tile(bC1,(N0,1,1))
+                    
+                    diff = bC0 - bC1
+                    dist = np.linalg.norm(diff, axis=2)
+
+                    sorted = np.argsort(dist,axis=1)
+
+                    sorted = sorted[:,:num_assignment]
+
+                    assignedFaces[ind0_list[curInd]] = ind1Slice[sorted]
+
+                    # print("min ind1Slice[sorted] = "+str(np.amin(ind1Slice[sorted])))
+                curInd+=1
+
+    
+    return assignedFaces
+
+
 # Takes two sets of face normals with one-one correspondance
 # Returns a pair of floats: the average angular difference (in degrees) between pairs of normals, and the std
 
@@ -811,7 +1173,7 @@ def getTrianglesArea(vl,fl):
 
     return triArea
 
-def getTrianglesBarycenter(vl,fl):
+def getTrianglesBarycenter(vl,fl, normalize=True):
 
     fnum = fl.shape[0]
     triCenter = np.empty([fnum,3])
@@ -826,8 +1188,8 @@ def getTrianglesBarycenter(vl,fl):
     zmax = np.amax(vl[:,2])
 
     diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
-
-    vl = vl/diag
+    if normalize:
+        vl = vl/diag
 
     for f in range(fnum):
         v0 = vl[fl[f,0],:]
@@ -1328,3 +1690,386 @@ def getBoundingBox(points):
     ymax = np.amax(points[:,1])
     zmax = np.amax(points[:,2])
     return np.array([[xmin,xmax],[ymin,ymax],[zmin,zmax]])
+
+
+def transposeNormals(targetPoints, targetFaces, sourcePoints, sourceFaces, targetAdj, sourceAdj, mode='closest'):
+    fnumT = targetFaces.shape[0]
+    fnumS = sourceFaces.shape[0]
+    sourceNormals = computeFacesNormals(sourcePoints, sourceFaces)
+    sourceArea = getTrianglesArea(sourcePoints, sourceFaces)
+    targetC = getTrianglesBarycenter(targetPoints, targetFaces)
+    sourceC = getTrianglesBarycenter(sourcePoints, sourceFaces)
+
+    targetAdj -= 1
+    sourceAdj -= 1
+    # targetNormals = computeFacesNormals(targetPoints, targetFaces)
+    targetNormals = np.zeros((fnumT,3),dtype=np.float32)
+
+    def getCost(targetF,sourceF, myMap, targetAdj, sourceAdj):
+        curC = targetC[targetF,:]
+        sC = sourceC[sourceF,:]
+        fDiff = curC-sC
+        fDist = np.linalg.norm(fDiff,axis=-1)
+        curCost = fDist
+        gDist = 0
+        for neiInd in range(1,targetAdj.shape[1]):
+            curNei = targetAdj[targetF,neiInd]
+            if curNei>-1:
+                gDist += max(getGraphDist(sourceAdj,sourceF,myMap[curNei])-1,0)
+        curCost += (gDist*dist_coef)
+        return curCost
+
+
+
+    if (mode=='closest' or mode=='varying_gaussian' or mode=='fixed_gaussian'):
+        for f in range(fnumT):
+            curC = np.reshape(targetC[f,:],(1,3))
+            curC = np.tile(curC,(fnumS,1))
+            diff = curC-sourceC
+            dist = np.linalg.norm(diff,axis=1)
+            if mode=='closest':
+                ind = np.argmin(dist)
+                targetNormals[f,:] = sourceNormals[ind,:]
+            if mode=='varying_gaussian':
+
+                # orient = np.sum(np.multiply(np.tile(np.reshape(targetNormals[f,:],(1,3)),(fnumS,1)),diff),axis=1)
+                # orient = np.sum(np.multiply(np.reshape(targetNormals[f,:],(1,3)),diff),axis=1)
+                # testOrient = orient>0
+                # testOrient = np.expand_dims(testOrient,axis=-1)
+                sigma = np.amin(dist)
+                # print("sigma = "+str(sigma))
+                selectedF = dist<3*sigma
+                # selectedF = np.expand_dims(selectedF,axis=-1)
+                # selected=np.concatenate((testOrient,selectedF),axis=1)
+                # selectedF = np.all(selected, axis=1)
+                selectedD = dist[selectedF]
+                selectedN = sourceNormals[selectedF]
+                # print("selectedN shape = "+str(selectedN.shape))
+                weights = np.exp(-np.square(selectedD)/(sigma*sigma))
+                # print("weights shape = "+str(weights.shape))
+                areaW = sourceArea[selectedF]
+                weights = np.multiply(weights, areaW)
+                weights = np.expand_dims(weights,axis=-1)
+                weights = np.tile(weights,(1,3))
+                # print("weights shape = "+str(weights.shape))
+                finalNorm = np.multiply(weights,selectedN)
+                # print("finalNorm shape = "+str(finalNorm.shape))
+                finalNorm = np.sum(finalNorm,axis=0)/np.sum(weights)
+                targetNormals[f,:] = finalNorm
+
+            if mode=='fixed_gaussian':
+
+                # orient = np.sum(np.multiply(np.tile(np.reshape(targetNormals[f,:],(1,3)),(fnumS,1)),diff),axis=1)
+                # orient = np.sum(np.multiply(np.reshape(targetNormals[f,:],(1,3)),diff),axis=1)
+                # testOrient = orient>0
+                # testOrient = np.expand_dims(testOrient,axis=-1)
+                sigma = 0.002
+                # print("sigma = "+str(sigma))
+                selectedF = dist<3*sigma
+                # selectedF = np.expand_dims(selectedF,axis=-1)
+                # selected=np.concatenate((testOrient,selectedF),axis=1)
+                # selectedF = np.all(selected, axis=1)
+                selectedD = dist[selectedF]
+                selectedN = sourceNormals[selectedF]
+                # print("selectedN shape = "+str(selectedN.shape))
+                weights = np.exp(-np.square(selectedD)/(sigma*sigma))
+                # print("weights shape = "+str(weights.shape))
+                areaW = sourceArea[selectedF]
+                weights = np.multiply(weights, areaW)
+                weights = np.expand_dims(weights,axis=-1)
+                weights = np.tile(weights,(1,3))
+                # print("weights shape = "+str(weights.shape))
+                finalNorm = np.multiply(weights,selectedN)
+                # print("finalNorm shape = "+str(finalNorm.shape))
+                if np.sum(weights)==0:
+                    # finalForm = np.array([0,0,0],dtype=np.float32)
+                    targetNormals[f,:]-=1
+                    pass
+                else:
+                    finalNorm = np.sum(finalNorm,axis=0)/np.sum(weights)
+                    targetNormals[f,:] = finalNorm
+
+
+    if mode=='fancy':
+        minDist = 0
+        K = targetAdj.shape[1]
+        curTargetNormals = targetNormals
+
+        for trial in range(40):
+            
+            processedFaces = np.ones((fnumT),dtype=np.int32)    # keep track of processed faces
+            targetSourceF = np.zeros((fnumT), dtype=np.int32)   # for each target face, associated source face
+            sourceTargetF = np.zeros((fnumS), dtype=np.int32)   # For each source face, associated target face
+            targetSourceF -=1
+            sourceTargetF -=1
+            fQueue = queue.Queue()  # queue of target faces to be processed
+            # fQueue.put(seed)
+            sourceQueue = queue.Queue()     # queue of corresponding neighbour source face
+            
+            # while not fQueue.empty():
+            #     curF = fQueue.get()                                 # take 1st face in the queue
+            #     curC = np.reshape(targetC[curF,:],(1,3))            # get barycenter
+            #     diff = curC-sourceC                                 # compute distance with source mesh
+            #     dist = np.linalg.norm(diff,axis=1)
+            #     ind = np.argmin(dist)                               # select closest
+            #     targetSourceF[curF]=ind                             # Pair them
+            #     sourceTargetF[ind]=curF                             # Add curF neighbours to queue
+            totalDist = 0
+            seedNum = 100
+            for seedInd in range(seedNum):
+                seed = np.random.randint(fnumT)     # random starting face
+                while(processedFaces[seed]==0):
+                    seed = np.random.randint(fnumT)     # random starting face
+                seedC = np.reshape(targetC[seed,:],(1,3))            # get barycenter
+                diff = seedC-sourceC                                 # compute distance with source mesh
+                dist = np.linalg.norm(diff,axis=1)
+                sourceInd = np.argmin(dist)                               # select closest
+                totalDist += dist[sourceInd]
+                targetSourceF[seed]=sourceInd                             # Pair them
+                sourceTargetF[sourceInd]=seed                             # Add seed neighbours to queue
+                processedFaces[seed]=0
+                for neiInd in range(1,K):                           # Add curF neighbours to queue
+                    nei = targetAdj[seed,neiInd]
+                    if nei>-1:
+                        if processedFaces[nei]==1:
+                            fQueue.put(nei)
+                            sourceQueue.put(sourceInd)
+                            processedFaces[nei]=0
+                curTargetNormals[seed,:] = sourceNormals[sourceInd,:]
+
+            testBool=False
+            while not fQueue.empty():
+                # print("remaining faces: "+str(np.sum(processedFaces)))
+                # print("queue size: "+str(fQueue.qsize()))
+                # if (fQueue.qsize()==1):
+                #     testBool=True
+                curF = fQueue.get()                                 # take 1st face in the queue
+                if testBool:
+                    print("curF = "+str(curF))
+                curC = np.reshape(targetC[curF,:],(1,3))            # get barycenter
+                if testBool:
+                    print("curC = "+str(curC))
+                nInd = sourceQueue.get()                            # get neighbour constraint
+                if testBool:
+                    print("nInd = "+str(nInd))
+                selectedC = sourceC[sourceAdj[nInd,:]]
+                diff = curC-selectedC                                 # compute distance with local neighbourhood in source mesh
+                dist = np.linalg.norm(diff,axis=1)
+                ind = np.argmin(dist)                               # select closest
+                totalDist += dist[ind]
+                if testBool:
+                    print("ind = "+str(ind))
+                sourceInd = sourceAdj[nInd,ind]
+                if testBool:
+                    print("sourceInd = "+str(sourceInd))
+                targetSourceF[curF]=sourceInd                             # Pair them
+                sourceTargetF[sourceInd]=curF
+                curTargetNormals[curF,:] = sourceNormals[sourceInd,:]
+                
+                for neiInd in range(1,K):                           # Add curF neighbours to queue
+                    nei = targetAdj[curF,neiInd]
+                    if nei>-1:
+                        if processedFaces[nei]==1:
+                            fQueue.put(nei)
+                            sourceQueue.put(sourceInd)
+                            processedFaces[nei]=0
+
+            print("totalDist = "+str(totalDist))
+
+            if (totalDist<minDist) or (minDist == 0):
+                minDist = totalDist
+                targetNormals = curTargetNormals
+                print("select trial "+str(trial))
+
+        print("Finished queue")
+
+
+    if mode=='opti':
+        targetSourceF = np.zeros((fnumT), dtype=np.int32)   # for each target face, associated source face
+        sourceTargetF = np.zeros((fnumS), dtype=np.int32)   # For each source face, associated target face
+        dist_coef = 0.005
+        iter_num=2*fnumT
+        # Initialization
+        for f in range(fnumT):
+            curC = np.reshape(targetC[f,:],(1,3))
+            curC = np.tile(curC,(fnumS,1))
+            diff = curC-sourceC
+            dist = np.linalg.norm(diff,axis=1)
+            ind = np.argmin(dist)
+            targetSourceF[f]=ind
+            sourceTargetF[ind]=f
+
+        totalUpdate=0
+        for it in range(iter_num):
+            print("iter "+str(it))
+            curF = np.random.randint(fnumT)
+            curC = targetC[curF,:]
+            curSourceF = targetSourceF[curF]
+            curCost = getCost(curF,curSourceF,targetSourceF, targetAdj, sourceAdj)
+            curUpdate=0
+            testVec = sourceAdj[curSourceF,1:]
+            for pointInd in range(testVec.shape[0]):
+                testPoint = testVec[pointInd]
+                if testPoint>-1:
+                    testCost = getCost(curF,testPoint,targetSourceF, targetAdj, sourceAdj)
+                    print("test "+str(pointInd)+": cost = "+str(testCost)+" vs. "+str(curCost))
+                    if testCost<curCost:
+                        targetSourceF[curF]=testPoint
+                        curCost=testCost
+                        curUpdate=1
+            totalUpdate+= curUpdate
+        print("total updates: "+str(totalUpdate)+" on "+str(iter_num))
+
+        targetNormals = sourceNormals[targetSourceF]
+        
+
+    targetNormals = normalize(targetNormals)
+    return targetNormals
+
+
+
+def stickMesh(targetPoints, targetFaces, sourcePoints, sourceFaces, iterNum, normalsIterNum):
+    fnumT = targetFaces.shape[0]
+    fnumS = sourceFaces.shape[0]
+    sourceNormals = computeFacesNormals(sourcePoints, sourceFaces)
+
+    sourceArea = getTrianglesArea(sourcePoints, sourceFaces)
+    targetC = getTrianglesBarycenter(targetPoints, targetFaces, normalize=False)
+    sourceC = getTrianglesBarycenter(sourcePoints, sourceFaces, normalize=False)
+
+    targetDiff = np.zeros((fnumT,3),dtype=np.float32)
+    totalDiff = np.zeros((fnumT,3),dtype=np.float32)
+    targetVFaces = getVerticesFaces(targetFaces,25, targetPoints.shape[0])
+
+    targetVFaces = targetVFaces+1
+    vFacesCount = np.sum(targetVFaces>=0,axis=-1,keepdims=True)
+    zeroLine = np.array([[0,0,0]],dtype=np.float32)
+    
+    for it in range(iterNum):
+        print("iter "+str(it))
+        targetC = getTrianglesBarycenter(targetPoints, targetFaces, normalize=False)
+        targetNormals = computeFacesNormals(targetPoints, targetFaces)
+        
+        # Displacement step
+
+        for f in range(fnumT):
+            curC = np.reshape(targetC[f,:],(1,3))
+            curC = np.tile(curC,(fnumS,1))
+            curN = np.reshape(targetNormals[f,:],(1,3))
+            curN = np.tile(curN,(fnumS,1))
+
+            diff = curC-sourceC
+            dist = np.linalg.norm(diff,axis=1)
+            # dp = np.sum(np.multiply(normalize(diff),sourceNormals),axis=-1)
+            # # dp = np.sum(np.multiply(curN,sourceNormals),axis=-1)
+            # nWeight = np.reciprocal(dp+1.01)
+            # dist = np.multiply(dist,nWeight)
+            ind = np.argmin(dist)
+            # project point on source triangle along normal
+            centerDiff = -diff[ind,:]
+            dp = np.sum(np.multiply(centerDiff,sourceNormals[ind,:]),axis=-1)
+            targetDiff[f,:] = dp * sourceNormals[ind,:]
+
+            # if f==0:
+            #     print("ind = "+str(ind))
+            #     print("diff = "+str(centerDiff))
+            #     print("dist = "+str(dist[ind]))
+            #     print("min dist = "+str(np.amin(dist)))
+            #     print("targetC[f] = "+str(targetC[f,:]))
+            #     print("sourceC[ind] = "+str(sourceC[ind,:]))
+            #     print("sourceNormals = "+str(sourceNormals[ind,:]))
+            #     print("dp = "+str(dp))
+            #     print("targetDiff = "+str(targetDiff[f,:]))
+            # targetDiff[f,:] = -diff[ind,:]
+
+        diffNorm = np.linalg.norm(targetDiff,axis=-1, keepdims=True)
+        fdisp = 1*targetDiff - 0*np.multiply(targetNormals,diffNorm)
+        
+        print("targetDiff shape: "+str(targetDiff.shape))
+        print("targetVFaces shape: "+str(targetVFaces.shape))
+        totalDiff = totalDiff + 1*fdisp
+
+
+        fdispOff = np.concatenate((zeroLine,fdisp),axis=0)
+        vDisp = fdispOff[targetVFaces]
+        print("vDisp shape: "+str(vDisp.shape))
+        
+
+        vDisp = np.divide(np.sum(vDisp,axis=1),vFacesCount)
+
+        targetPoints = targetPoints + 1*vDisp
+
+        # if it==100:
+        #     write_mesh(targetPoints, targetFaces, "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Test/Stick/dispStep.obj")
+        
+        # Normals step
+
+        newNormals = transposeNormals(targetPoints,targetFaces,sourcePoints,sourceFaces,0,0,mode='varying_gaussian')
+
+        # if it==100:
+        #     nColor = (newNormals+1)/2
+
+        #     newV, newF = getColoredMesh(targetPoints, targetFaces, nColor)
+        #     write_mesh(newV, newF, "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Test/Stick/tnormals.obj")
+
+        for normIter in range(normalsIterNum):
+            targetC = getTrianglesBarycenter(targetPoints, targetFaces, normalize=False)
+            targetCOff = np.concatenate((zeroLine,targetC),axis=0)
+            vFPos = targetCOff[targetVFaces]
+            e = vFPos - np.expand_dims(targetPoints,axis=1)
+            newNormalsOff = np.concatenate((zeroLine,newNormals),axis=0)
+
+            vFNormals = newNormalsOff[targetVFaces]
+
+            dp = np.sum(np.multiply(e,vFNormals),axis=-1,keepdims=True)
+
+            update = np.multiply(dp,vFNormals)
+
+
+            update = np.sum(update,axis=1)
+
+            update = np.divide(update,vFacesCount)
+
+            targetPoints = targetPoints + update
+
+
+
+    return targetPoints, totalDiff, newNormals
+
+
+def getGraphDist(myAdj,n0,n1):
+
+    K = myAdj.shape[1]
+    # curDist = myAdj.shape[0]
+    # for ind in range(1,K):
+    #     if myAdj[n0,ind] == n1:
+    #         return 1
+    # for ind in range(1,K):
+    #     nTemp = myAdj[n0,ind]
+    #     tempDist = getGraphDist(myAdj,nTemp,n1)+1
+    #     if tempDist<curDist:
+    #         curDist = tempDist
+    # return curDist
+
+
+    nQueue = queue.Queue()
+    nodesDist = np.zeros(myAdj.shape[0],dtype=np.int32)
+    nodesDist -= 1
+    nodesDist[n0]=0
+    nQueue.put(n0)
+
+    while True:
+        curN = nQueue.get()
+        curDist = nodesDist[curN]
+
+        for i in range(1,K):
+            nei = myAdj[curN,i]
+            if nei==n1:
+                return curDist+1
+            if nei > -1:
+                if nodesDist[nei]==-1:
+                    nodesDist[nei]=curDist+1
+                    nQueue.put(nei)
+
+
+

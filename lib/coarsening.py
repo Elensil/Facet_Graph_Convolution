@@ -25,8 +25,8 @@ def coarsen(A, levels, self_connections=False):
         graphs[i] = A
 
         Mnew, Mnew = A.shape
-        print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
-              '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
+        # print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
+        #       '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
 
     return graphs, perms[0] if levels > 0 else None
 
