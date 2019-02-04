@@ -356,9 +356,13 @@ def inferNet6D(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, n
 
 
         
-        refined_x, dx_list = update_position_disp(xp_, [fDisp], faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
-        refined_x2, dx_list = update_position_MS(refined_x, [n_conv0], faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        # refined_x, dx_list = update_position_disp(xp_, [fDisp], faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        facePos = tf.slice(fn_,(0,0,3),(-1,-1,-1))
+        refined_x, dx_list = update_position_disp(xp_, [(fDisp-facePos)], faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        
+        # refined_x2, dx_list = update_position_MS(refined_x, [n_conv0], faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
 
+        refined_x2 = refined_x
         # refined_x = refined_x #+ dx_list[1] #+ dx_list[2]
 
         finalOutPoints = np.zeros((num_points,3),dtype=np.float32)
@@ -1014,10 +1018,15 @@ def train6DNetWGT(f_normals_list, GTfn_list, f_adj_list, gt_disp_list, valid_f_n
         gtfn_abs_sum = tf.reduce_sum(tf.abs(tfn_rot),axis=2)
         fakenodes = tf.less_equal(gtfn_abs_sum,10e-4)
 
-        dispLoss = 100*mseLoss(disp, tdisp_rot, fakenodes)
+        # dispLoss = 100*mseLoss(disp, tdisp_rot, fakenodes)
+        
+        facePos = tf.slice(fn_rot,(0,0,3),(-1,-1,-1))
+        dispLoss = 100*mseLoss(disp,facePos+tdisp_rot, fakenodes)
+
         nLoss = squareFaceNormalsLoss(n_conv,tfn_rot)
         # customLoss = dispLoss + nLoss
-        customLoss = tf.add(dispLoss,nLoss)
+        customLoss = dispLoss
+        # customLoss = tf.add(dispLoss,nLoss)
         train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
 
     saver = tf.train.Saver()
@@ -1987,7 +1996,7 @@ def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
     return x
 
 
-def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=180):
+def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, iter_num=80):
 
     # batch_size, num_points, space_dims = x.get_shape().as_list()
     x = tf.reshape(x,[-1,3])
@@ -3401,7 +3410,7 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/test_bits/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid_cleaned/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train_cleaned/"
+        # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train_cleaned/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/results/1stStep/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
@@ -3430,9 +3439,9 @@ def mainFunction():
 
             for fileNum in range(len(denoizedFilesList)):
                 
-                randToDel = np.random.rand(1)
-                if randToDel>0.1:
-                    continue
+                # randToDel = np.random.rand(1)
+                # if randToDel>0.1:
+                #     continue
                 denoizedFile = denoizedFilesList[fileNum]
                 noisyFile = noisyFilesList[fileNum]
                 # noisyFileWInferredColor = noisyFile[:-4]+"_inferred_normals.obj"
