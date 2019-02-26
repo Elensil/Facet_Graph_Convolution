@@ -25,8 +25,8 @@ def coarsen(A, levels, self_connections=False):
         graphs[i] = A
 
         Mnew, Mnew = A.shape
-        # print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
-        #       '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
+        print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
+              '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
 
     return graphs, perms[0] if levels > 0 else None
 
@@ -69,7 +69,7 @@ def metis(W, levels, rid=None):
         #count += 1
 
         # CHOOSE THE WEIGHTS FOR THE PAIRING
-        # weights = ones(N,1)       # metis weights
+        # weights = np.ones((N,1),dtype=np.float32)       # metis weights
         weights = degree            # graclus weights
         # weights = supernode_size  # other possibility
         weights = np.array(weights).squeeze()
@@ -81,8 +81,17 @@ def metis(W, levels, rid=None):
         cc = idx_col[perm]
         vv = val[perm]
 
+        bestAssoc=0.0
+        for trial in range(1):
+            cur_cluster_id, totalAssoc = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
+            
+            
+            if totalAssoc>bestAssoc:
+                cluster_id=cur_cluster_id
+                bestAssoc=totalAssoc
+                print("trial n."+str(trial)+": assoc = "+str(totalAssoc))
+            rid = np.random.permutation(range(N))
 
-        cluster_id = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
         parents.append(cluster_id)
 
         # TO DO
@@ -142,7 +151,7 @@ def metis_one_level(rr,cc,vv,rid,weights):
             count = count + 1
         rowlength[count] = rowlength[count] + 1
 
-
+    totalAssoc = 0.0
     # For each row
     for ii in range(N):
         tid = rid[ii]   # Random order
@@ -166,9 +175,9 @@ def metis_one_level(rr,cc,vv,rid,weights):
             if bestneighbor > -1:
                 cluster_id[bestneighbor] = clustercount
                 marked[bestneighbor] = True
-
+            totalAssoc+=wmax
             clustercount += 1
-    return cluster_id
+    return cluster_id, totalAssoc
 
 def compute_perm(parents):
     """
