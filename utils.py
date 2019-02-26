@@ -616,7 +616,7 @@ def write_mesh(vl,fl,strFileName):
     for row in range(faces.shape[0]):
         if((faces[row,0]=='1')and(faces[row,1]=='1')):
             break
-        if((faces[row,0]=='0.0')and(faces[row,1]=='0.0')):
+        if((faces[row,0]=='0')and(faces[row,1]=='0')):
             continue
         outputFile.write('f ')
         for col in range(faces.shape[1]):
@@ -1358,7 +1358,47 @@ def listToSparse(Adj, nodes_pos):
             n_pos = nodes_pos[n,:]
             nnode_pos = nodes_pos[nnode,:]
             values[cur_ind] = 1/(1000*np.linalg.norm(nnode_pos-n_pos))
-            #values[cur_ind] = np.linalg.norm(nnode_pos-n_pos)
+            # values[cur_ind] = np.linalg.norm(nnode_pos-n_pos)
+            cur_ind+=1
+
+    row_ind = row_ind[:cur_ind]
+    col_ind = col_ind[:cur_ind]
+    values = values[:cur_ind]
+    #values = np.ones(cur_ind,dtype = np.int8)
+
+    coo = scipy.sparse.coo_matrix((values,(row_ind,col_ind)),shape=(N,N))
+
+    return coo
+
+# Convert an adjacency matrix from Nitika style to scipy sparse matrix
+def listToSparseWNormals(Adj, nodes_pos, nodes_normals):
+
+    N = Adj.shape[0]
+    K = Adj.shape[1]
+
+    row_ind = np.zeros(N*K,dtype = np.int32)
+    col_ind = np.zeros(N*K,dtype = np.int32)
+    values = np.zeros(N*K,dtype = np.float32)
+    cur_ind=0
+    sigma = 0.005
+    ang_sigma = 0.3
+    for n in range(N):  # For each node
+        for neigh in range(1,K):    # Skip first neighbour, it encodes the current node
+            nnode = Adj[n,neigh]-1  # It is one-indexed
+            if nnode < 0:
+                break
+
+            row_ind[cur_ind] = n
+            col_ind[cur_ind] = nnode
+            n_pos = nodes_pos[n,:]
+            nnode_pos = nodes_pos[nnode,:]
+            n_norm = nodes_normals[n,:]
+            nnode_norm = nodes_normals[n,:]
+            dp = np.sum(np.multiply(n_norm,nnode_norm),axis=-1)
+            # values[cur_ind] = np.exp(-pow(dp-1,2)/pow(ang_sigma,2))*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)/(sigma*sigma))
+            values[cur_ind] = np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)/(sigma*sigma))
+            # values[cur_ind] = (dp+1)/(1000*np.linalg.norm(nnode_pos-n_pos))
+            # values[cur_ind] = np.linalg.norm(nnode_pos-n_pos)
             cur_ind+=1
 
     row_ind = row_ind[:cur_ind]
@@ -1403,7 +1443,7 @@ def inv_perm(perm):
     inverse = [0] * len(perm)
     for i, p in enumerate(perm):
         inverse[p] = i
-    return inverse
+    return np.array(inverse)
 
 
 # return max curvature, min curvature, and average. Used to generate clusters for classification
