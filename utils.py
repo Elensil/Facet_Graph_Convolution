@@ -577,6 +577,16 @@ def write_xyz(vec, strFileName):
 
     np.savetxt(strFileName, vec)
 
+def write_coff(vec, strFileName):
+
+    outputFile = open(strFileName,"w")
+    outputFile.write('COFF\n')
+    outputFile.write(str(vec.shape[0])+' 0 0\n')
+    for row in range(vec.shape[0]):
+        outputFile.write("%f %f %f %d %d %d\n"%(vec[row,0], vec[row,1], vec[row,2], vec[row,3], vec[row,4], vec[row,5]))
+    # np.savetxt(outputFile, vec)
+    outputFile.close
+
 def write_mesh(vl,fl,strFileName):
 
     vnum = vl.shape[0]
