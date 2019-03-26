@@ -66,7 +66,8 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
     fadj0 = tf.placeholder(tf.int32, shape=[1,graph_card[0], K_faces[0]], name='fadj0')
     fadj1 = tf.placeholder(tf.int32, shape=[1,graph_card[1], K_faces[1]], name='fadj1')
     fadj2 = tf.placeholder(tf.int32, shape=[1,graph_card[2], K_faces[2]], name='fadj2')
-    fadj3 = tf.placeholder(tf.int32, shape=[1,graph_card[3], K_faces[3]], name='fadj2')
+    if len(graph_adj)>3:
+        fadj3 = tf.placeholder(tf.int32, shape=[1,graph_card[3], K_faces[3]], name='fadj2')
 
     perm_ = tf.placeholder(tf.int32, shape=[graph_card[0]], name='perm')
     gtshapegender_ = tf.placeholder('float32', shape=[BATCH_SIZE,11], name='tfn_')
@@ -95,14 +96,20 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
     fn_centered = 2 * new_fn - 1
 
     fullfn = tf.concat((fn_centered,node_pos_tiled), axis=-1)
+    paddingLength = graph_card[0]-TEMPLATE_CARD
+    padding = tf.zeros([BATCH_SIZE,paddingLength,NUM_IN_CHANNELS+3])
 
-    padding = tf.zeros([BATCH_SIZE,graph_card[0]-TEMPLATE_CARD,NUM_IN_CHANNELS+3])
     padding = padding-3
     ext_fn = tf.concat((fullfn, padding), axis=1)
     perm_fn = tf.gather(ext_fn,perm_, axis=1)
 
     gtgender = gtshapegender_[:,0]
     gtshape = gtshapegender_[:,1:]
+
+
+    with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"+'shape_centroids2.pkl', 'rb') as fp:
+        centroids = pickle.load(fp, encoding='latin1')
+    CENTROIDS_NUM = centroids.shape[0]
 
     # ext_shapegender = tf.concatenate((gtshapegender_, tf.zeros([graph_card[0]-TEMPLATE_CARD,11])), axis=0)
     # perm_shapegender = tf.gather(ext_shapegender,perm_)
@@ -113,7 +120,10 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
     
     batch = tf.Variable(0, trainable=False)
 
-    fadjs = [fadj0,fadj1,fadj2,fadj3]
+    if len(graph_adj)>3:
+        fadjs = [fadj0,fadj1,fadj2,fadj3]
+    else:
+        fadjs = [fadj0, fadj1, fadj2]
 
     if mode=='gender':
         with tf.variable_scope("model_gender_class"):
@@ -128,7 +138,25 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
             train_step = tf.train.AdamOptimizer().minimize(crossEntropyLoss, global_step=batch)
             
             isNanPmale = tf.reduce_any(tf.is_nan(pmale), name="isNanPmale")
+            batch_loss = tf.reduce_mean(crossEntropyLoss)
+    
+    elif mode=='shapeClass':
+        gtclass_ = tf.placeholder('float32', shape=[BATCH_SIZE, CENTROIDS_NUM], name='shapeClass_')
+        with tf.variable_scope("model_gender_class"):
+            proba_shape, _ = get_model_shape_reg(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode='shapeClass')
+
+        with tf.device(DEVICE):
+            print("proba_shape shape = "+str(proba_shape.shape))
+            print("gtclass shape = "+str(gtclass_.shape))
             
+            totalLogl = loglikelihood2(proba_shape,gtclass_)
+            crossEntropyLoss = -totalLogl
+            train_step = tf.train.AdamOptimizer().minimize(crossEntropyLoss, global_step=batch)
+            
+            isNanPmale = tf.reduce_any(tf.is_nan(proba_shape), name="isNanPmale")
+            batch_loss = tf.reduce_mean(crossEntropyLoss)
+
+
     elif mode=='shape':
 
         with tf.variable_scope("model_gender_class"):
@@ -143,12 +171,10 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
             shapeLoss = mseLoss(predicted_shape[:,:1],gtshape[:,:1])
             print("predicted_shape slice shape = "+str((predicted_shape[:,:1]).shape))
             print("shapeLoss shape = "+str(shapeLoss.shape))
-
-            crossEntropyLoss = shapeLoss
-            train_step = tf.train.AdamOptimizer().minimize(crossEntropyLoss, global_step=batch)
+            train_step = tf.train.AdamOptimizer().minimize(shapeLoss, global_step=batch)
             
             isNanPmale = tf.reduce_any(tf.is_nan(predicted_shape), name="isNanPmale")
-
+            batch_loss = tf.reduce_mean(shapeLoss)
     elif mode=='bodyratio':
         tfH0 = tf.constant(H0, shape=[1,1], dtype=tf.float32)
         tfW0 = tf.constant(W0, shape=[1,1], dtype=tf.float32)
@@ -179,12 +205,22 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
             print("WARNING!!!! Hard-coded loss change (homemade param)")
             shapeLoss = mseLoss(predicted_shape,new_param)
             print("shapeLoss shape = "+str(shapeLoss.shape))
-            crossEntropyLoss = shapeLoss
-            train_step = tf.train.AdamOptimizer().minimize(crossEntropyLoss, global_step=batch)
+            train_step = tf.train.AdamOptimizer().minimize(shapeLoss, global_step=batch)
             
             isNanPmale = tf.reduce_any(tf.is_nan(predicted_shape), name="isNanPmale")
+        batch_loss = tf.reduce_mean(shapeLoss)
 
-    batch_loss = tf.reduce_mean(crossEntropyLoss)
+    elif mode=='facedisp':
+        active_nodes_mask = tf.not_equal(perm_fn[:,:,0],-3)
+        with tf.variable_scope("model_facedisp"):
+            predicted_disp, predicted_confidence = get_model_shape_reg(perm_fn, fadjs, ARCHITECTURE, keep_prob)
+        with tf.device(DEVICE):
+            dispLoss, confLoss = faceDispLoss(predicted_disp, predicted_confidence, gtshape, active_nodes_mask, paddingLength, perm_)
+            print("dispLoss shape = "+str(dispLoss.shape))
+            train_step = tf.train.AdamOptimizer().minimize(dispLoss, global_step=batch)
+            isNanPmale = tf.reduce_any(tf.is_nan(predicted_disp), name="isNanPmale")
+        batch_loss = tf.reduce_mean(dispLoss)
+    
 
     saver = tf.train.Saver()
 
@@ -207,15 +243,16 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
     train_loss=0
     train_samp=0
 
-    SAVEITER = 1000
+    SAVEITER = 500
 
-    evalStepNum=20
+    evalStepNum=50
 
     with tf.device(DEVICE):
         # lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
         lossArray = np.zeros([int(SAVEITER/evalStepNum),2])
         last_loss = 0
         lossArrayIter = 0
+        print("Starting training...")
         for iter in range(NUM_ITERATIONS):
 
             # Batch version...
@@ -224,7 +261,7 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
             for b in range(BATCH_SIZE):
                 batch_num = random.randint(0,EXAMPLE_NUM-1)
 
-                if mode=='shape' or mode=='bodyratio':
+                if mode!='gender':
                     # LIMIT TO MALE EXAMPLES
                     while gtshape_list[batch_num][0,0]==0:
                         batch_num = random.randint(0,EXAMPLE_NUM-1)
@@ -236,16 +273,17 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
             in_batch = np.concatenate(inbatchlist, axis=0)
             shape_batch = np.concatenate(gtbatchlist, axis=0)
 
-            # train_fd = {fn_: input_list[batch_num], gtshapegender_: gtshape_list[batch_num], keep_prob:1}
-            train_fd = {fn_: in_batch, gtshapegender_: shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:0.8}
 
+            train_fd = {fn_: in_batch, gtshapegender_: shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:0.8}
+            if len(graph_adj)>3:
+                train_fd[fadj3] = graph_adj[3]
 
-            # One-example version
-                    # # Get random sample from training dictionary
-                    # batch_num = random.randint(0,EXAMPLE_NUM-1)
-
-                    # train_fd = {fn_: input_list[batch_num], fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], gtshapegender_: gtshape_list[batch_num], perm_: perm, node_pos:face_pos, keep_prob:1}
-
+            if mode=='shapeClass':
+                myGTCentroids, _ = closest_centroid(shape_batch[:,1:], centroids)
+                oneHotCentroids = np.zeros([BATCH_SIZE,CENTROIDS_NUM])
+                for bn in range(BATCH_SIZE):
+                    oneHotCentroids[bn,myGTCentroids[bn]]=1
+                train_fd[gtclass_] = oneHotCentroids
             # Show smoothed training loss
             if ((iter%evalStepNum == 0) and (iter>0)):
                 train_loss = train_loss/train_samp
@@ -253,23 +291,19 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
 
                 print("Iteration %d, training loss %g"%(iter, train_loss))
 
-                # if mode=='gender':
-                #     pred_pmale = sess.run(pmale, feed_dict=train_fd)
-                #     print("Predicted male probability = "+str(pred_pmale) + ", Ground truth = " + str(shape_batch[:,0])) 
-
                 lossArray[lossArrayIter,0]=train_loss
                 lossArrayIter+=1
                 train_loss=0
                 train_samp=0
-                # pred_pmale, valGender,valYp, valYgt, valLogYp = sess.run([pmale, gtgender, yp, ygt, testLogYp], feed_dict=train_fd)
-                # print("pred_pmale shape = "+str(pred_pmale.shape))
-                # print("pred_pmale[0] = "+str(pred_pmale[0]))
-                # pred_pmale_val = pred_pmale[0]
-                # print("Predicted male probability = %g, Ground truth = %g"%(pred_pmale_val, gtshape_list[batch_num][0,0]))
-                # print("invalues: (yp = %g, ygt = %g). log(yp) = %g"%(valYp,valYgt, valLogYp))
-
-            
-            # marg_train_loss = crossEntropyLoss.eval(feed_dict=train_fd)
+                if mode=='shapeClass':
+                    print("gt class = \n"+str(oneHotCentroids))
+                    myProba = sess.run(proba_shape, feed_dict=train_fd)
+                    print("predicted proba = \n"+str(myProba))
+            if iter==0:
+                if mode=='shapeClass':
+                    print("gt class = \n"+str(oneHotCentroids))
+                    myProba = sess.run(proba_shape, feed_dict=train_fd)
+                    print("predicted proba = \n"+str(myProba))
 
             marg_train_loss = sess.run(batch_loss, feed_dict=train_fd)
             train_loss += marg_train_loss
@@ -303,26 +337,29 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
                         valid_gtbatchlist = []
                         for b in range(BATCH_SIZE):
                             batch_num = random.randint(0,VALID_EXAMPLE_NUM-1)
-                            if mode=='shape' or mode=='bodyratio':
+                            if mode!='gender':
                                 # LIMIT TO MALE EXAMPLES
                                 while valid_gtshape_list[batch_num][0,0]==0:
                                     batch_num = random.randint(0,VALID_EXAMPLE_NUM-1)
                             valid_inbatchlist.append(valid_input_list[batch_num])
                             valid_gtbatchlist.append(valid_gtshape_list[batch_num])
-                            # valid_inbatchlist.append(valid_input_list[b])
-                            # valid_gtbatchlist.append(valid_gtshape_list[b])
-
-
 
                         valid_in_batch = np.concatenate(valid_inbatchlist, axis=0)
                         valid_shape_batch = np.concatenate(valid_gtbatchlist, axis=0)
-                        
-                        valid_fd = {fn_: valid_in_batch, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
+                        if len(graph_adj)>3:
+                            valid_fd = {fn_: valid_in_batch, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
+                        else:
+                            valid_fd = {fn_: valid_in_batch, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
 
 
-                        # valid_fd = {fn_: valid_input_list[vbm], fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], gtshapegender_: valid_gtshape_list[vbm], perm_: perm, node_pos:face_pos, keep_prob:1}
+                        if mode=='shapeClass':
+                            myGTCentroids, _ = closest_centroid(valid_shape_batch[:,1:], centroids)
+                            oneHotCentroids = np.zeros([BATCH_SIZE,CENTROIDS_NUM])
+                            for bn in range(BATCH_SIZE):
+                                oneHotCentroids[bn,myGTCentroids[bn]]=1
+                            valid_fd[gtclass_] = oneHotCentroids
 
-                        # valid_loss += crossEntropyLoss.eval(feed_dict=valid_fd)
+
                         valid_loss += sess.run(batch_loss,feed_dict=valid_fd)
                     valid_loss/=VALID_EXAMPLE_NUM
                     print("Iteration %d, validation loss %g\n"%(iter, valid_loss))
@@ -355,8 +392,7 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
     f.close()
 
 
-
-def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodeParamDisp, valid_input_list, valid_gtshape_list, mode='gender'):
+def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodeParamDisp, valid_input_list, valid_gtshape_list, mode='encoder'):
 
     random_seed = 0
     np.random.seed(random_seed)
@@ -457,36 +493,84 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
 
 
     with tf.variable_scope("model_gender_class"):
-        encodedMesh, _ = get_mesh_encoder(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode='gender')
+        encodedMesh, code = get_mesh_encoder(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode='gender')
         encodedMesh_centered = encodedMesh * 2 - 1
-    with tf.device(DEVICE):
-        
-        fullGraphLoss = mseLoss(encodedMesh_centered, perm_fn[:,:,:2])
-
-        filteredLoss = tf.multiply(fullGraphLoss, perm_node_mask)
-
-        train_step = tf.train.AdamOptimizer().minimize(filteredLoss, global_step=batch)
-        
-        isNanPmale = tf.reduce_any(tf.is_nan(encodedMesh), name="isNanPmale")
-            
     
+    if mode=='encoder': 
+        with tf.device(DEVICE):
+            fullGraphLoss = mseLoss(encodedMesh_centered, perm_fn[:,:,:2])
+            filteredLoss = tf.multiply(fullGraphLoss, perm_node_mask)
+            train_step = tf.train.AdamOptimizer().minimize(filteredLoss, global_step=batch)
+            isNanPmale = tf.reduce_any(tf.is_nan(encodedMesh), name="isNanPmale")
+            batch_loss = tf.reduce_mean(filteredLoss)
 
-    batch_loss = tf.reduce_mean(filteredLoss)
 
-    saver = tf.train.Saver()
+        saver1 = tf.train.Saver()
 
-    sess.run(tf.global_variables_initializer())
+        sess.run(tf.global_variables_initializer())
 
-    globalStep = 0
+        globalStep = 0
 
-    ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
-    if ckpt and ckpt.model_checkpoint_path:
-        splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
-        if splitCkpt[0] == NET_NAME:
-            saver.restore(sess, ckpt.model_checkpoint_path)
-            #Extract from checkpoint filename
-            globalStep = int(splitCkpt[1])
-    
+        ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
+        if ckpt and ckpt.model_checkpoint_path:
+            splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
+            if splitCkpt[0] == NET_NAME:
+                saver1.restore(sess, ckpt.model_checkpoint_path)
+                #Extract from checkpoint filename
+                globalStep = int(splitCkpt[1])
+
+
+
+    if mode=='bodyratio':
+
+        # code_ = tf.placeholder('float32', shape=[BATCH_SIZE, 1, 512], name='code_')
+
+        tfH0 = tf.constant(H0, shape=[1,1], dtype=tf.float32)
+        tfW0 = tf.constant(W0, shape=[1,1], dtype=tf.float32)
+        tfD0 = tf.constant(D0, shape=[1,1], dtype=tf.float32)
+        tfHMat = tf.constant(HMat, shape=[10,1], dtype=tf.float32)
+        tfWMat = tf.constant(WMat, shape=[10,1], dtype=tf.float32)
+        tfDMat = tf.constant(DMat, shape=[10,1], dtype=tf.float32)
+
+        bH = tf.matmul(gtshape,tfHMat)
+        bW = tf.matmul(gtshape,tfWMat)
+        bD = tf.matmul(gtshape,tfDMat)
+        print("tfHMat shape = "+str(tfHMat.shape))
+        print("bH shape = "+str(bH.shape))
+        # [batch, 1]
+        bH = bH + tfH0
+        bW = bW + tfW0
+        bD = bD + tfD0
+        print("bH shape = "+str(bH.shape))
+
+        new_param = tf.divide(bD,bH)
+        # [batch, 1]
+        print("new_param shape = "+str(new_param.shape))
+        print("code shape = "+str(code.shape))
+        # predicted_br = get_encoded_reg(code_, 1)
+        predicted_br = get_encoded_reg(code, 1)
+
+        with tf.device(DEVICE):
+            shapeLoss = mseLoss(predicted_br,new_param)
+            print("shapeLoss shape = "+str(shapeLoss.shape))
+            train_step = tf.train.AdamOptimizer().minimize(shapeLoss, global_step=batch)
+            batch_loss = tf.reduce_mean(shapeLoss)
+
+        isNanPmale = tf.reduce_any(tf.is_nan(batch_loss), name="isNanPmale")
+        saver1 = tf.train.Saver()
+
+        sess.run(tf.global_variables_initializer())
+
+        # globalStep = 0
+
+        ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
+        if ckpt and ckpt.model_checkpoint_path:
+            splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
+            if splitCkpt[0] == NET_NAME:
+                saver1.restore(sess, ckpt.model_checkpoint_path)
+                #Extract from checkpoint filename
+                globalStep = int(splitCkpt[1])
+
 
     csv_filename = RESULTS_PATH+NET_NAME+".csv"
     # Training
@@ -494,9 +578,14 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
     train_loss=0
     train_samp=0
 
-    SAVEITER = 1000
+    SAVEITER = 500
 
     evalStepNum=20
+
+    # # TEST: TO BE DELETED!!
+    # [lst1, testIn, testOut] = code
+    # [testW, testU, testC] = lst1
+
 
     with tf.device(DEVICE):
         # lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
@@ -511,7 +600,7 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
             for b in range(BATCH_SIZE):
                 batch_num = random.randint(0,EXAMPLE_NUM-1)
 
-                if mode=='shape' or mode=='bodyratio':
+                if mode=='bodyratio':
                     # LIMIT TO MALE EXAMPLES
                     while gtshape_list[batch_num][0,0]==0:
                         batch_num = random.randint(0,EXAMPLE_NUM-1)
@@ -524,15 +613,15 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
             shape_batch = np.concatenate(gtbatchlist, axis=0)
 
             # train_fd = {fn_: input_list[batch_num], gtshapegender_: gtshape_list[batch_num], keep_prob:1}
-            train_fd = {fn_: in_batch, gtshapegender_: shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:0.8}
+            if mode=='bodyratio':
+                code_fd = {fn_: in_batch, gtshapegender_: shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:0.8}
+                # myCode = sess.run(code, feed_dict=code_fd)
+                # train_fd = {fn_: in_batch, code_: myCode, gtshapegender_: shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:0.8}
+                train_fd = code_fd
+            elif mode=='encoder':
+                train_fd = {fn_: in_batch, gtshapegender_: shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:0.8}
 
-
-            # One-example version
-                    # # Get random sample from training dictionary
-                    # batch_num = random.randint(0,EXAMPLE_NUM-1)
-
-                    # train_fd = {fn_: input_list[batch_num], fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], gtshapegender_: gtshape_list[batch_num], perm_: perm, node_pos:face_pos, keep_prob:1}
-
+            
             # Show smoothed training loss
             if ((iter%evalStepNum == 0) and (iter>0)):
                 train_loss = train_loss/train_samp
@@ -540,23 +629,10 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
 
                 print("Iteration %d, training loss %g"%(iter, train_loss))
 
-                # if mode=='gender':
-                #     pred_pmale = sess.run(pmale, feed_dict=train_fd)
-                #     print("Predicted male probability = "+str(pred_pmale) + ", Ground truth = " + str(shape_batch[:,0])) 
-
                 lossArray[lossArrayIter,0]=train_loss
                 lossArrayIter+=1
                 train_loss=0
                 train_samp=0
-                # pred_pmale, valGender,valYp, valYgt, valLogYp = sess.run([pmale, gtgender, yp, ygt, testLogYp], feed_dict=train_fd)
-                # print("pred_pmale shape = "+str(pred_pmale.shape))
-                # print("pred_pmale[0] = "+str(pred_pmale[0]))
-                # pred_pmale_val = pred_pmale[0]
-                # print("Predicted male probability = %g, Ground truth = %g"%(pred_pmale_val, gtshape_list[batch_num][0,0]))
-                # print("invalues: (yp = %g, ygt = %g). log(yp) = %g"%(valYp,valYgt, valLogYp))
-
-            
-            # marg_train_loss = crossEntropyLoss.eval(feed_dict=train_fd)
 
             marg_train_loss = sess.run(batch_loss, feed_dict=train_fd)
             train_loss += marg_train_loss
@@ -564,31 +640,53 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
 
             if iter==0:
                 myinput, myoutput = sess.run([perm_fn, encodedMesh], feed_dict=train_fd)
-                myinputsamp = myinput[1,:,:]
-                myoutputsamp = myoutput[1,:,:]
-                mynodepos = myinputsamp[:,-3:]
-                mynodecolor=myinputsamp[:,:2]
-                mynodecolor=np.tile(mynodecolor,[1,2])
-                mynodecolor=(mynodecolor[:,:3]+1)/2
+                for inslice in range(myinput.shape[0]):
+                    myinputsamp = myinput[inslice,:,:]
+                    myoutputsamp = myoutput[inslice,:,:]
+                    mynodepos = myinputsamp[:,-3:]
+                    mynodecolor=myinputsamp[:,:2]
+                    mynodecolor=np.tile(mynodecolor,[1,2])
+                    mynodecolor=(mynodecolor[:,:3]+1)/2
 
-                # print("node colors min & max: (%f, %f)"%(np.amin(mynodecolor),np.amax(mynodecolor)))
-                mynodecolor = np.where(mynodecolor<0,0,mynodecolor)
-                # print("node colors min & max: (%f, %f)"%(np.amin(mynodecolor),np.amax(mynodecolor)))
-                mynodecolor = mynodecolor * 255
-                # print("node colors min & max: (%f, %f)"%(np.amin(mynodecolor),np.amax(mynodecolor)))
-                mynodecolor = mynodecolor.astype(int)
-                mynodecolor = mynodecolor.astype(float)
-                xyzarray = np.concatenate((mynodepos,mynodecolor),axis=1)
-                write_coff(xyzarray,"/morpheo-nas2/marmando/ShapeRegression/Test/meshEncoder/input_test.off")
+                    # print("node colors min & max: (%f, %f)"%(np.amin(mynodecolor),np.amax(mynodecolor)))
+                    mynodecolor = np.where(mynodecolor<0,0,mynodecolor)
+                    # print("node colors min & max: (%f, %f)"%(np.amin(mynodecolor),np.amax(mynodecolor)))
+                    mynodecolor = mynodecolor * 255
+                    # print("node colors min & max: (%f, %f)"%(np.amin(mynodecolor),np.amax(mynodecolor)))
+                    mynodecolor = mynodecolor.astype(int)
+                    mynodecolor = mynodecolor.astype(float)
+                    xyzarray = np.concatenate((mynodepos,mynodecolor),axis=1)
+                    xyzarray = xyzarray[np.nonzero(xyzarray[:,0]>-3)]
+                    nz = np.any(xyzarray[:,3:]>0,axis=1)
+                    xyzarray = xyzarray[np.nonzero(nz)]
+                    write_coff(xyzarray,"/morpheo-nas2/marmando/ShapeRegression/Test/meshEncoder/input_test_"+str(inslice)+".off")
 
 
-                outcolor = np.tile(myoutputsamp,[1,2])
-                outcolor=(outcolor[:,:3])
-                outcolor = outcolor * 255
-                outcolor = outcolor.astype(int)
-                outcolor = outcolor.astype(float)
-                xyzarray = np.concatenate((mynodepos,outcolor),axis=1)
-                write_coff(xyzarray,"/morpheo-nas2/marmando/ShapeRegression/Test/meshEncoder/output_test.off")
+                    outcolor = np.tile(myoutputsamp,[1,2])
+                    outcolor=(outcolor[:,:3])
+                    outcolor = outcolor * 255
+                    outcolor = outcolor.astype(int)
+                    outcolor = outcolor.astype(float)
+                    xyzarray = np.concatenate((mynodepos,outcolor),axis=1)
+                    xyzarray = xyzarray[np.nonzero(xyzarray[:,0]>-3)]
+                    # nz = (xyzarray[:,3:]==[128,139,128])
+                    # nz = (nz==0)
+                    # xyzarray = xyzarray[np.nonzero(nz)]
+                    write_coff(xyzarray,"/morpheo-nas2/marmando/ShapeRegression/Test/meshEncoder/output_test"+str(inslice)+".off")
+
+                    # myIn, myOut, myW, myU, myC = sess.run([testIn, testOut, testW, testU, testC], feed_dict=train_fd)
+                    # testInd = 0
+                    # while myIn[inslice,testInd,0]==-3:
+                    #     testInd+=1
+                    # if inslice==0:
+                    #     print("myW = \n"+str(myW))
+                    #     print("myU = \n"+str(myU))
+                    #     print("myC = \n"+str(myC))
+                    # print("myIn = \n"+str(myIn[inslice,testInd:testInd+5,:]))
+                    # print("myOut = \n"+str(myOut[inslice,testInd:testInd+5,:]))
+                    
+
+
 
             # Compute validation loss
             if True:
@@ -600,26 +698,26 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
                         valid_gtbatchlist = []
                         for b in range(BATCH_SIZE):
                             batch_num = random.randint(0,VALID_EXAMPLE_NUM-1)
-                            if mode=='shape' or mode=='bodyratio':
+                            if mode=='bodyratio':
                                 # LIMIT TO MALE EXAMPLES
                                 while valid_gtshape_list[batch_num][0,0]==0:
                                     batch_num = random.randint(0,VALID_EXAMPLE_NUM-1)
                             valid_inbatchlist.append(valid_input_list[batch_num])
                             valid_gtbatchlist.append(valid_gtshape_list[batch_num])
-                            # valid_inbatchlist.append(valid_input_list[b])
-                            # valid_gtbatchlist.append(valid_gtshape_list[b])
-
-
 
                         valid_in_batch = np.concatenate(valid_inbatchlist, axis=0)
                         valid_shape_batch = np.concatenate(valid_gtbatchlist, axis=0)
                         
                         valid_fd = {fn_: valid_in_batch, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
 
+                        if mode=='bodyratio':
+                            code_fd = {fn_: valid_in_batch, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
+                            # myCode = sess.run(code, feed_dict=code_fd)
+                            # valid_fd = {fn_: valid_in_batch, code_: myCode, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
+                            valid_fd = code_fd
+                        elif mode=='encoder':
+                            valid_fd = {fn_: valid_in_batch, gtshapegender_: valid_shape_batch, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, nodeRawWeights_:nodeParamDisp, keep_prob:1}
 
-                        # valid_fd = {fn_: valid_input_list[vbm], fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], gtshapegender_: valid_gtshape_list[vbm], perm_: perm, node_pos:face_pos, keep_prob:1}
-
-                        # valid_loss += crossEntropyLoss.eval(feed_dict=valid_fd)
                         valid_loss += sess.run(batch_loss,feed_dict=valid_fd)
                     valid_loss/=VALID_EXAMPLE_NUM
                     print("Iteration %d, validation loss %g\n"%(iter, valid_loss))
@@ -636,23 +734,20 @@ def trainMeshEncoder(input_list, gtshape_list, graph_adj, perm, face_pos, nodePa
                     return
             
             if (iter%SAVEITER == 0) and (iter>0):
-                saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+iter)
+                saver1.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+iter)
                 f = open(csv_filename,'ab')
                 np.savetxt(f,lossArray, delimiter=",")
                 f.close()
                 lossArray = np.zeros([int(SAVEITER/evalStepNum),2]) 
                 lossArrayIter=0
     
-    saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
+    saver1.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
 
     sess.close()
     
     f = open(csv_filename,'ab')
     np.savetxt(f,lossArray, delimiter=",")
     f.close()
-
-
-
 
 
 def trainImageNet(input_list, gtshape_list, valid_input_list, valid_gtshape_list, mode='gender'):
@@ -908,7 +1003,6 @@ def trainImageNet(input_list, gtshape_list, valid_input_list, valid_gtshape_list
     f = open(csv_filename,'ab')
     np.savetxt(f,lossArray, delimiter=",")
     f.close()
-
 
 
 def trainImageEncoder(input_list, valid_input_list, gtshape_list, valid_gtshape_list, mode='encoder'):
@@ -1182,9 +1276,6 @@ def trainImageEncoder(input_list, valid_input_list, gtshape_list, valid_gtshape_
     f.close()
 
 
-
-
-
 def testBodyShapeNet(inGraph, graph_adj, perm, face_pos, mode='shape'):
 
     random_seed = 0
@@ -1195,10 +1286,6 @@ def testBodyShapeNet(inGraph, graph_adj, perm, face_pos, mode='shape'):
     if(FLAGS.debug):    #launches debugger at every sess.run() call
         sess = tf_debug.LocalCLIDebugWrapperSession(sess, dump_root="/disk/marmando/tmp/")
 
-    if not os.path.exists(RESULTS_PATH):
-            os.makedirs(RESULTS_PATH)
-
-    
     NUM_IN_CHANNELS = inGraph.shape[2]
     # NUM_IN_CHANNELS = 29
 
@@ -1218,7 +1305,8 @@ def testBodyShapeNet(inGraph, graph_adj, perm, face_pos, mode='shape'):
     fadj0 = tf.placeholder(tf.int32, shape=[1,graph_card[0], K_faces[0]], name='fadj0')
     fadj1 = tf.placeholder(tf.int32, shape=[1,graph_card[1], K_faces[1]], name='fadj1')
     fadj2 = tf.placeholder(tf.int32, shape=[1,graph_card[2], K_faces[2]], name='fadj2')
-    fadj3 = tf.placeholder(tf.int32, shape=[1,graph_card[3], K_faces[3]], name='fadj2')
+    if len(graph_adj)>3:
+        fadj3 = tf.placeholder(tf.int32, shape=[1,graph_card[3], K_faces[3]], name='fadj2')
 
     perm_ = tf.placeholder(tf.int32, shape=[graph_card[0]], name='perm')
 
@@ -1242,18 +1330,21 @@ def testBodyShapeNet(inGraph, graph_adj, perm, face_pos, mode='shape'):
     
     batch = tf.Variable(0, trainable=False)
 
-    fadjs = [fadj0,fadj1,fadj2,fadj3]
+    if len(graph_adj)>3:
+        fadjs = [fadj0,fadj1,fadj2,fadj3]
+    else:
+        fadjs = [fadj0, fadj1, fadj2]
 
     print("perm_fn shape = "+str(perm_fn.shape))
     with tf.device(DEVICE):
-        with tf.variable_scope("model_gender_class"):
+        # with tf.variable_scope("model_gender_class"):
+        with tf.variable_scope("model_facedisp"):
             predicted_shape, testFeatures = get_model_shape_reg(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode)
             # if mode='gender':
             #     pmale, testFeatures = get_model_shape_reg(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode='gender')
             # elif mode='shape':
             #     predicted_shape, testFeatures = get_model_shape_reg(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode='shape')
         
-
     saver = tf.train.Saver()
 
     sess.run(tf.global_variables_initializer())
@@ -1270,7 +1361,6 @@ def testBodyShapeNet(inGraph, graph_adj, perm, face_pos, mode='shape'):
     #         break
 
     # return
-
     ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
     if ckpt and ckpt.model_checkpoint_path:
         splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
@@ -1279,12 +1369,14 @@ def testBodyShapeNet(inGraph, graph_adj, perm, face_pos, mode='shape'):
             #Extract from checkpoint filename
             globalStep = int(splitCkpt[1])
     
-
     with tf.device(DEVICE):
-        infer_fd = {fn_: inGraph, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, keep_prob:1}
+        if len(graph_adj)>3:
+            infer_fd = {fn_: inGraph, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, keep_prob:1}
+        else:
+            infer_fd = {fn_: inGraph, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], perm_: perm, node_pos:face_pos, keep_prob:1}
 
-        myShape, myFeatures = sess.run([predicted_shape, tf.squeeze(testFeatures)], feed_dict=infer_fd)
-
+        # myShape, myFeatures = sess.run([predicted_shape, tf.squeeze(testFeatures)], feed_dict=infer_fd)
+        myFeatures, myShape = sess.run([predicted_shape, tf.squeeze(testFeatures)], feed_dict=infer_fd)
     
         
 
@@ -1312,9 +1404,6 @@ def testImageNet(inputImage, mode='gender'):
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     if(FLAGS.debug):    #launches debugger at every sess.run() call
         sess = tf_debug.LocalCLIDebugWrapperSession(sess, dump_root="/disk/marmando/tmp/")
-
-    if not os.path.exists(RESULTS_PATH):
-            os.makedirs(RESULTS_PATH)
 
     NUM_IN_CHANNELS = inputImage.shape[3]
     NUM_IN_CHANNELS = 3
@@ -1368,6 +1457,99 @@ def testImageNet(inputImage, mode='gender'):
     sess.close()
     
     return mypmale, myFeatures
+
+
+def testMeshEncoder(inGraph, graph_adj, perm, face_pos, mode='encoder'):
+
+    random_seed = 0
+    np.random.seed(random_seed)
+
+    # sess = tf.InteractiveSession()
+    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+    if(FLAGS.debug):    #launches debugger at every sess.run() call
+        sess = tf_debug.LocalCLIDebugWrapperSession(sess, dump_root="/disk/marmando/tmp/")
+    
+    NUM_IN_CHANNELS = inGraph.shape[2]
+    # NUM_IN_CHANNELS = 29
+
+    BATCH_SIZE = inGraph.shape[0]           # Number of input to process
+
+    graph_card = np.zeros(len(graph_adj), dtype=np.int32)
+    K_faces = np.zeros(len(graph_adj), dtype=np.int32)
+    for g in range(len(graph_adj)):
+        print("graph_adj["+str(g)+"] shape = "+str(graph_adj[g].shape))
+        graph_card[g] = graph_adj[g].shape[1]
+        K_faces[g] = graph_adj[g].shape[2]
+
+    # K_faces = graph_adj[0].shape[2]
+
+    # training data
+    fn_ = tf.placeholder('float32', shape=[BATCH_SIZE,TEMPLATE_CARD, NUM_IN_CHANNELS], name='fn_')
+    node_pos = tf.placeholder(tf.float32, shape=[1, TEMPLATE_CARD, 3], name='node_pos')
+
+    fadj0 = tf.placeholder(tf.int32, shape=[1,graph_card[0], K_faces[0]], name='fadj0')
+    fadj1 = tf.placeholder(tf.int32, shape=[1,graph_card[1], K_faces[1]], name='fadj1')
+    fadj2 = tf.placeholder(tf.int32, shape=[1,graph_card[2], K_faces[2]], name='fadj2')
+    fadj3 = tf.placeholder(tf.int32, shape=[1,graph_card[3], K_faces[3]], name='fadj2')
+
+    perm_ = tf.placeholder(tf.int32, shape=[graph_card[0]], name='perm')
+
+    node_pos_tiled = tf.tile(node_pos,[BATCH_SIZE,1,1])
+
+    print("graph_card = "+str(graph_card))
+    print("TEMPLATE_CARD = "+str(TEMPLATE_CARD))
+
+    new_fn = fn_
+
+    fn_centered = 2 * new_fn - 1
+
+    fullfn = tf.concat((fn_centered,node_pos_tiled), axis=-1)
+
+    padding = tf.zeros([BATCH_SIZE,graph_card[0]-TEMPLATE_CARD,NUM_IN_CHANNELS+3])
+    padding = padding-3
+    ext_fn = tf.concat((fullfn, padding), axis=1)
+    perm_fn = tf.gather(ext_fn,perm_, axis=1)
+
+    keep_prob = tf.placeholder(tf.float32)
+    
+    batch = tf.Variable(0, trainable=False)
+
+    fadjs = [fadj0,fadj1,fadj2,fadj3]
+
+
+    with tf.variable_scope("model_gender_class"):
+        encodedMesh, code = get_mesh_encoder(perm_fn, fadjs, ARCHITECTURE, keep_prob, mode='gender')
+        encodedMesh_centered = encodedMesh * 2 - 1
+
+    if mode=='bodyratio':
+        predicted_br = get_encoded_reg(code, 1)
+
+
+    saver1 = tf.train.Saver()
+
+    sess.run(tf.global_variables_initializer())
+
+    ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
+    if ckpt and ckpt.model_checkpoint_path:
+        splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
+        if splitCkpt[0] == NET_NAME:
+            saver1.restore(sess, ckpt.model_checkpoint_path)
+            #Extract from checkpoint filename
+            globalStep = int(splitCkpt[1])
+
+
+    with tf.device(DEVICE):
+
+        if mode=='bodyratio':
+            code_fd = {fn_: inGraph, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, keep_prob:0.8}
+            # myCode = sess.run(code, feed_dict=code_fd)
+            train_fd = code_fd
+        elif mode=='encoder':
+            train_fd = {fn_: inGraph, fadj0: graph_adj[0], fadj1: graph_adj[1], fadj2: graph_adj[2], fadj3: graph_adj[3], perm_: perm, node_pos:face_pos, keep_prob:0.8}
+
+        myBR, myEncodedMesh = sess.run([predicted_br, encodedMesh], feed_dict=train_fd)
+
+    return myBR, myEncodedMesh
 
 
 def testImageEncoder(inputImage):
@@ -1462,6 +1644,53 @@ def mseLossWeighted(prediction, gt, paramWeights):
     return loss
 
 
+def faceDispLoss(predicted_disp, confidence, gtshape, mask, paddingLength, perm):
+    binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
+    with open(binDumpPath+'male_node_3disp.pkl', 'rb') as fp:
+        node3Disp = pickle.load(fp, encoding='latin1')
+
+    batch_size, _ = gtshape.get_shape().as_list()
+    # gtshape: [batch, 10]
+    # node3Disp: [N, 10, 3]
+    N = node3Disp.shape[0]
+    nodeParamDisp_ = tf.constant(node3Disp, dtype=tf.float32)
+
+    nodeParamDispPad = tf.concat([nodeParamDisp_, tf.zeros([paddingLength, 10, 3])], axis=0)
+    nodeParamDispPerm = tf.gather(nodeParamDispPad, perm, axis=0)
+
+    gtshapeTiled = tf.tile(tf.expand_dims(gtshape,axis=0),[N+paddingLength,1,1])
+
+    print("gtshapeTiled shape = "+str(gtshapeTiled.shape))
+    print("nodeParamDisp_ shape = "+str(nodeParamDisp_.shape))
+    
+    # -- Version 1 --
+    # gtDisp = tf.matmul(gtshapeTiled, nodeParamDispPerm)
+    # # [N, batch, 3]
+    # gtDisp = tf.transpose(gtDisp, [1,0,2])
+    # # [batch, N, 3]
+
+    # -- Version 2 -- (faster?)
+    gtDisp = tf.matmul(gtshape, tf.reshape(tf.transpose(nodeParamDispPerm,[1,0,2]),[10,-1]))
+    # [batch, N*3]
+    gtDisp = tf.reshape(gtDisp, [batch_size, -1, 3])
+    # [batch, N, 3]
+
+
+    # gtDispPad = tf.concat([gtDisp, padding[:,:,:3]], axis=1)
+    # gtDispPerm = tf.gather(gtDispPad, perm, axis=1)
+
+    loss = mseLoss(predicted_disp, gtDisp)
+    # loss = tf.reduce_sum(tf.square(tf.subtract(gtDispPerm,predicted_disp)),axis=-1)
+
+    maskedLoss = tf.where(mask,loss,tf.zeros_like(loss))
+
+    confLoss = tf.square(tf.subtract(loss, tf.squeeze(confidence)))
+
+    maskedConf = tf.where(mask, confLoss, tf.zeros_like(confLoss))
+
+    return maskedLoss, maskedConf
+
+
 
 def loglikelihood(yp,ygt, name='loglikelihood'):
 
@@ -1476,6 +1705,19 @@ def loglikelihood(yp,ygt, name='loglikelihood'):
     print("ygt shape = "+str(ygt.shape))
     print("posC shape = "+str(posC.shape))
     print("negC shape = "+str(negC.shape))
+    print("logl shape = "+str(logl.shape))
+    return logl
+
+def loglikelihood2(yp,ygt, name='loglikelihood'):
+
+    epsilon=10e-9
+    with tf.variable_scope('accuracyLoss'):
+        logl = ygt*tf.log(yp+epsilon)
+
+        logl = tf.reduce_sum(logl,axis=-1,name='logl')
+
+    print("yp shape = "+str(yp.shape))
+    print("ygt shape = "+str(ygt.shape))
     print("logl shape = "+str(logl.shape))
     return logl
 
@@ -1526,7 +1768,7 @@ def pickleImages(inputPath, destPath):
 
 
     print("BB: (%f,%f,%f) to (%f,%f,%f)"%(vxmin,vymin,vzmin,vxmax,vymax,vzmax))
-    for filename in os.listdir(inputPath):
+    for filename in sorted(os.listdir(inputPath)):
 
         # if fileNum>=10:
         #     break
@@ -1613,7 +1855,7 @@ def pickleFolder(inputPath, destPath):
     inputList = []
     gtShapeList = []
     fileNum=0
-    for filename in os.listdir(inputPath):
+    for filename in sorted(os.listdir(inputPath)):
 
         # if fileNum>=10:
         #     break
@@ -2043,6 +2285,38 @@ def countConnectedComponents(im):
     return nr_objects
 
 
+def transferFolder():
+
+    binInPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
+    binOutPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned_2ch/"
+    extInputStr = "_standard_input.pkl"
+    shapeInputStr = "_gt_shape.pkl"
+    for filename in sorted(os.listdir(binInPath)):
+        
+        # Get missing input pickles (after removing extra dims)
+        if filename.endswith(extInputStr):
+            if os.path.exists(binOutPath+filename):
+                continue
+            print("processing "+filename+"...")
+            with open(binInPath+filename, 'rb') as fp:
+                inlist = pickle.load(fp, encoding='latin1')
+            newInlist=[]
+
+            for item in inlist:
+                newInlist.append(item[:,:2])
+
+            with open(binOutPath+filename, 'wb') as fp:
+                pickle.dump(newInlist, fp)
+
+
+        # Get missing GT pickles
+        if filename.endswith(shapeInputStr):
+            if os.path.exists(binOutPath+filename):
+                continue
+            print("copying "+filename+"...")
+            shutil.copyfile(binInPath+filename, binOutPath+filename)
+
+
 def getRandominput(binPath, totalSampNum, mode='mesh'):
 
     in_list = []
@@ -2078,6 +2352,10 @@ def getRandominput(binPath, totalSampNum, mode='mesh'):
         binFolderCardList.append(len(gtshape_list))
 
         # print(binFolder+": "+str(len(gtshape_list))+" examples")
+
+
+
+    new_gtshape_list = []
 
     # Generate array to sample from
     binNumList = []
@@ -2121,24 +2399,77 @@ def getRandominput(binPath, totalSampNum, mode='mesh'):
 
         while (curSampInd<totalSampNum) and (samples[curSampInd,0]==curFolderInd):
             in_list.append(cur_in_list[samples[curSampInd,1]])
-            gtshape_list.append(cur_gtshape_list[samples[curSampInd,1]])
+            new_gtshape_list.append(cur_gtshape_list[samples[curSampInd,1]])
             curSampInd+=1
 
-    return in_list, gtshape_list
+    return in_list, new_gtshape_list
+
+
+
+def getGTDisp(gtshape):
+
+    binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
+    with open(binDumpPath+'male_node_3disp.pkl', 'rb') as fp:
+        node3Disp = pickle.load(fp, encoding='latin1')
+
+    batch_size, _ = gtshape.shape
+    # gtshape: [batch, 10]
+    # node3Disp: [N, 10, 3]
+    N = node3Disp.shape[0]
+    
+    
+    gtshapeTiled = np.tile(np.expand_dims(gtshape,axis=0),[N,1,1])
+
+    print("gtshapeTiled shape = "+str(gtshapeTiled.shape))
+    print("node3Disp shape = "+str(node3Disp.shape))
+    
+    # -- Version 1 --
+    # gtDisp = tf.matmul(gtshapeTiled, nodeParamDispPerm)
+    # # [N, batch, 3]
+    # gtDisp = tf.transpose(gtDisp, [1,0,2])
+    # # [batch, N, 3]
+
+    # -- Version 2 -- (faster?)
+    gtDisp = np.matmul(gtshape, np.reshape(np.transpose(node3Disp,[1,0,2]),[10,-1]))
+    # [batch, N*3]
+    gtDisp = np.reshape(gtDisp, [batch_size, -1, 3])
+    # [batch, N, 3]
+
+    return gtDisp
+
+
 
 
 def mainFunction():
 
-    
+    # transferFolder()
+    # return
+
+    # Useless Test
+    # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned_2ch/"
+    # shapeFileName = "01_01_gt_shape.pkl"
+    # inFileName = "01_01_gt_shape.pkl"
+    # with open(binDumpPath+shapeFileName, 'rb') as fp:
+    #     gtshape_list = pickle.load(fp, encoding='latin1')
+    # with open(binDumpPath+inFileName, 'rb') as fp:
+    #     in_list = pickle.load(fp, encoding='latin1')
+
+    # inmat = np.stack(in_list, axis=0)
+    # shapemat = np.stack(gtshape_list, axis=0)
+
+    # print("inmat shape = "+str(inmat.shape))
+    # print("shapemat shape = "+str(shapemat.shape))
+    # return
+
 
     if not trainMode:
-        # inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/17_07/"
-        # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
-        # pickleFolder(inputPath, binDumpPath)
+        inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/32_07/"
+        binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
+        pickleFolder(inputPath, binDumpPath)
 
-        inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/17_06/"
-        binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
-        pickleImages(inputPath, binDumpPath)
+        # inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/17_06/"
+        # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
+        # pickleImages(inputPath, binDumpPath)
 
         # inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/"
         # folder = "32_18"
@@ -2146,15 +2477,22 @@ def mainFunction():
         # pickleFolder2Images(inputPath, folder, binDumpPath)
     else:
 
-        if RUNNING_MODE==0 or RUNNING_MODE==1 or RUNNING_MODE==10:     # Train network on template (0: shape, 1: gender, 10: bodyratio)
+        if RUNNING_MODE==0 or RUNNING_MODE==1 or RUNNING_MODE==2 or RUNNING_MODE==3 or RUNNING_MODE==4:     # Train network on template (0: shape, 1: gender, 2: bodyratio, 3: facedisp, 4: shape classification)
 
             # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/twoImages/"
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
+            binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned_2ch/"
+            if RUNNING_MODE!=3:
+                with open(binDumpPath+'adj.pkl', 'rb') as fp:
+                    adj_list = pickle.load(fp, encoding='latin1')
+                with open(binDumpPath+'perm.pkl', 'rb') as fp:
+                    perm = pickle.load(fp, encoding='latin1')
+            elif RUNNING_MODE==3:
+                with open(binDumpPath+'adj3lvl.pkl', 'rb') as fp:
+                    adj_list = pickle.load(fp, encoding='latin1')
+                with open(binDumpPath+'perm3lvl.pkl', 'rb') as fp:
+                    perm = pickle.load(fp, encoding='latin1')
 
-            with open(binDumpPath+'adj.pkl', 'rb') as fp:
-                adj_list = pickle.load(fp, encoding='latin1')
-            with open(binDumpPath+'perm.pkl', 'rb') as fp:
-                perm = pickle.load(fp, encoding='latin1')
             with open(binDumpPath+'face_pos.pkl', 'rb') as fp:
                 face_pos = pickle.load(fp, encoding='latin1')
             with open(binDumpPath+'covariance.pkl', 'rb') as fp:
@@ -2167,7 +2505,11 @@ def mainFunction():
             with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
                 valid_gtshape_list = pickle.load(fp, encoding='latin1')
             
-            in_list, gtshape_list = getRandominput(binDumpPath, 3000, mode='mesh')
+            # with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
+            #     in_list = pickle.load(fp, encoding='latin1')
+            # with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
+            #     gtshape_list = pickle.load(fp, encoding='latin1')
+            in_list, gtshape_list = getRandominput(binDumpPath, 100, mode='mesh')
 
 
             face_pos = np.expand_dims(face_pos,axis=0)
@@ -2183,16 +2525,23 @@ def mainFunction():
                 valid_in_list[el] = np.expand_dims(valid_in_list[el],axis=0)
                 valid_gtshape_list[el] = np.expand_dims(valid_gtshape_list[el], axis=0)
             
+            print("Length gtshape_list = "+str(len(gtshape_list)))
+            print("Length in_list = "+str(len(in_list)))
+
             if RUNNING_MODE==0:
                 trainBodyShapeNet(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='shape')
             elif RUNNING_MODE==1:
                 trainBodyShapeNet(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='gender')
-            elif RUNNING_MODE==10:
+            elif RUNNING_MODE==2:
                 trainBodyShapeNet(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='bodyratio')
+            elif RUNNING_MODE==3:
+                trainBodyShapeNet(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='facedisp')
+            elif RUNNING_MODE==4:
+                trainBodyShapeNet(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='shapeClass')
 
             print("Complete: mode = "+str(RUNNING_MODE)+", architecture "+str(ARCHITECTURE)+", net path = "+RESULTS_PATH)
 
-        elif RUNNING_MODE==2 or RUNNING_MODE==3 or RUNNING_MODE==12:      # Train Network on images alone (2: shape, 3: gender, 12: bodyratio)
+        elif RUNNING_MODE==10 or RUNNING_MODE==11 or RUNNING_MODE==12:      # Train Network on images alone (10: shape, 11: gender, 12: bodyratio)
 
             # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/rawImages/"
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
@@ -2213,18 +2562,18 @@ def mainFunction():
                 valid_gtshape_list[el] = np.expand_dims(valid_gtshape_list[el], axis=0)
             
 
-            if RUNNING_MODE==2:
+            if RUNNING_MODE==10:
                 trainImageNet(in_list, gtshape_list, valid_in_list, valid_gtshape_list, mode='shape')
-            elif RUNNING_MODE==3:
+            elif RUNNING_MODE==11:
                 trainImageNet(in_list, gtshape_list, valid_in_list, valid_gtshape_list, mode='gender')
             elif RUNNING_MODE==12:
                 trainImageNet(in_list, gtshape_list, valid_in_list, valid_gtshape_list, mode='bodyratio')
 
             print("Complete: mode = "+str(RUNNING_MODE)+", architecture "+str(ARCHITECTURE)+", net path = "+RESULTS_PATH)
 
-        elif RUNNING_MODE==4:       # Test network
-            # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
-            binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/twoImages/"
+        elif RUNNING_MODE==30:       # Test network
+            binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned_2ch/"
+            # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/twoImages/"
             # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/wololo/"
             # with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
             #     in_list = pickle.load(fp, encoding='latin1')
@@ -2233,31 +2582,77 @@ def mainFunction():
                 in_list = pickle.load(fp, encoding='latin1')
             with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
                 gtshape_list = pickle.load(fp, encoding='latin1')
-            with open(binDumpPath+'perm.pkl', 'rb') as fp:
+            
+            # with open(binDumpPath+'perm.pkl', 'rb') as fp:
+            #     perm = pickle.load(fp, encoding='latin1')
+            # with open(binDumpPath+'adj.pkl', 'rb') as fp:
+            #     adj_list = pickle.load(fp, encoding='latin1')
+
+            with open(binDumpPath+'perm3lvl.pkl', 'rb') as fp:
                 perm = pickle.load(fp, encoding='latin1')
+            with open(binDumpPath+'adj3lvl.pkl', 'rb') as fp:
+                adj_list = pickle.load(fp, encoding='latin1')
+
             with open(binDumpPath+'face_pos.pkl', 'rb') as fp:
                 face_pos = pickle.load(fp, encoding='latin1')
-            with open(binDumpPath+'adj.pkl', 'rb') as fp:
-                adj_list = pickle.load(fp, encoding='latin1')
 
             for el in range(len(in_list)):
                 in_list[el] = np.expand_dims(in_list[el],axis=0)
             face_pos = np.expand_dims(face_pos,axis=0)
 
+            gtshape = np.stack(gtshape_list,axis=0)
             inMat = np.concatenate(in_list,axis=0)
             inMat = inMat[:20,:,:]
+            gtshape = gtshape[:20,:]
+
+            inMask = np.any((inMat!=-1), axis=-1)
             # myIn = getInput("/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/01_03/01_03_c0003_img017.jpg", "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/01_03/01_03_c0003_img017_IUV.png")
             # myFeatures = testBodyShapeNet(myIn, adj_list, perm, face_pos)
 
             # mode='shape'
             mode='bodyratio'
             myShape, myFeatures = testBodyShapeNet(inMat, adj_list, perm, face_pos, mode)
+
+
             print("inMat shape = "+str(inMat.shape))
+            print("inMask shape = "+str(inMask.shape))
             print("myFeatures shape = "+str(myFeatures.shape))
             # print("myShape =  "+str(myShape))
             print("myShape shape =  "+str(myShape.shape))
 
-            gtshape = np.stack(gtshape_list,axis=0)
+
+            # --- 3D disp mode ---
+            face_pos = np.squeeze(face_pos)
+
+            gtDisp = getGTDisp(gtshape[:,1:])
+
+            errorDist = np.sqrt(np.sum(np.square(myFeatures-gtDisp),axis=-1))
+            gtDist = np.sqrt(np.sum(np.square(gtDisp),axis=-1))
+            maskedErrorDist = errorDist[np.nonzero(inMask)]
+            maskedGtDist = gtDist[np.nonzero(inMask)]
+            print("avg erro dist = %f, avg dist = %f"%(np.mean(maskedErrorDist), np.mean(maskedGtDist)))
+            for ind in range(20):
+                myDisp = myFeatures[ind,:]
+                dispNodes = face_pos + myDisp
+                dispColor = myDisp-np.amin(myDisp)
+                dispColor = dispColor/np.amax(dispColor)
+                dispColor = dispColor*255
+                dispColor = dispColor.astype(np.int32)
+                dispNodes = np.concatenate([dispNodes,dispColor],axis=1)
+                write_coff(dispNodes, "/morpheo-nas2/marmando/ShapeRegression/Test/faceDisp/test3Ddisp_"+str(ind)+".off")
+
+                curGTDisp = gtDisp[ind,:]
+                gtDispNodes = face_pos + curGTDisp
+                gtDispColor = curGTDisp-np.amin(curGTDisp)
+                gtDispColor = gtDispColor/np.amax(gtDispColor)
+                gtDispColor = gtDispColor*255
+                gtDispColor = gtDispColor.astype(np.int32)
+                gtDispNodes = np.concatenate([gtDispNodes,gtDispColor],axis=1)
+                write_coff(gtDispNodes, "/morpheo-nas2/marmando/ShapeRegression/Test/faceDisp/testGT_"+str(ind)+".off")
+
+            return
+
+            
             # --- Get body ratio
             tfH0 = np.reshape(H0, [1,1])
             tfW0 = np.reshape(W0, [1,1])
@@ -2326,7 +2721,7 @@ def mainFunction():
             newV, newF = getColoredMesh(V0, faces0, feature_color)
             write_mesh(newV, newF, "/morpheo-nas2/marmando/ShapeRegression/Test/"+"test.obj")
 
-        elif RUNNING_MODE==5:       # Check body shape sampling
+        elif RUNNING_MODE==40:       # Check body shape sampling
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
             gtshape_list = []
             
@@ -2425,6 +2820,18 @@ def mainFunction():
             # uniqueShape covariance:
             uniqueShapeMat = np.stack(uniqueShape,axis=1)
             print("uniqueShapeMat shape = "+str(uniqueShapeMat.shape))
+            # uniqueShapeMat = np.transpose(uniqueShapeMat,[1,0])
+            # genderMat = uniqueShapeMat[:,0]
+            # print("genderMat shape = "+str(genderMat.shape))
+            # uniqueMaleShape = uniqueShapeMat[np.nonzero(genderMat)]
+            # uniqueMaleShape = uniqueMaleShape[:,1:]
+            # kmeansCentroids, _ = customKMeans(uniqueMaleShape, 2)
+            # print("centroids shape = "+str(kmeansCentroids.shape))
+            # print("centroids = \n"+str(kmeansCentroids))
+            # with open(binDumpPath+'shape_centroids2.pkl', 'wb') as fp:
+            #     pickle.dump(kmeansCentroids, fp)
+            # return
+
 
             unCov = np.cov(uniqueShapeMat)
 
@@ -2468,7 +2875,7 @@ def mainFunction():
             # print(prtStr)
 
 
-        elif RUNNING_MODE==6:       # Filter data
+        elif RUNNING_MODE==41:       # Filter data
 
             imagePathRoot = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run2/"
             discPathRoot = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/discarded_train_images/run2/"
@@ -2531,7 +2938,7 @@ def mainFunction():
                     totalFiles+=1
                 print("%g out of %g"%(triggeredFiles,totalFiles))
 
-        elif RUNNING_MODE==7:       # Check adj dim
+        elif RUNNING_MODE==42:       # Check adj dim
 
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
             with open(binDumpPath+'adj.pkl', 'rb') as fp:
@@ -2567,7 +2974,7 @@ def mainFunction():
             with open(binDumpPath+'_adj2.pkl', 'wb') as fp:
                 pickle.dump(new_adj_list, fp)
 
-        elif RUNNING_MODE==8:       # Play with binary data
+        elif RUNNING_MODE==43:       # Play with binary data
 
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
             in_list = []
@@ -2660,7 +3067,7 @@ def mainFunction():
             # with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
             #     valid_gtshape_list = pickle.load(fp, encoding='latin1')
 
-        elif RUNNING_MODE==9:       # Temp: measure loading time: bin dump vs png
+        elif RUNNING_MODE==44:       # Temp: measure loading time: bin dump vs png
 
             startTime = time.time()
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
@@ -2679,7 +3086,7 @@ def mainFunction():
             elapsedTime = time.time() - startTime
             print('[{}] finished in {} ms'.format("png loading", int(elapsedTime * 1000)))
 
-        elif RUNNING_MODE==11:      # Test image network
+        elif RUNNING_MODE==31:      # Test image network
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
             # with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
             #     in_list = pickle.load(fp, encoding='latin1')
@@ -2694,7 +3101,7 @@ def mainFunction():
                 in_list[el] = np.expand_dims(in_list[el],axis=0)
 
             inMat = np.concatenate(in_list,axis=0)
-            inMat = inMat[:10,:]
+            inMat = inMat[:20,:]
             myShape, myFeatures = testImageNet(inMat, mode='bodyratio')
 
             gtshape = np.stack(gtshape_list,axis=0)
@@ -2718,8 +3125,11 @@ def mainFunction():
             gtbodyratio = np.divide(bD,bH)
 
             meanRatio = np.mean(gtbodyratio)
+            varBR = np.var(gtbodyratio)
             print("mean body ratio = %f"%(meanRatio))
+            print("var body ratio = %f"%(varBR))
 
+            totalDiff=0
             for inInd in range(inMat.shape[0]):
                 
                 # print("inInd = "+str(inInd))
@@ -2730,9 +3140,9 @@ def mainFunction():
                 # print("myShape =  "+str(myShape[inInd]))
                 
                 print("predicted BR = %f, GT BR = %f"%(myShape[inInd]/meanRatio, gtbodyratio[inInd]/meanRatio))
-
-                
-
+                totalDiff += abs(myShape[inInd]-gtbodyratio[inInd])
+            totalDiff = totalDiff/meanRatio
+            print("totalDiff = "+str(totalDiff))
                 # print("gt ratio = "+str(gtbodyratio))
 
 
@@ -2770,7 +3180,7 @@ def mainFunction():
             # print("feature_color shape = "+str(feature_color.shape))
             # plt.imsave("/morpheo-nas2/marmando/ShapeRegression/Test/imageNetTest.png",feature_color)
 
-        elif RUNNING_MODE==13 or RUNNING_MODE==15:      # Train image encoder
+        elif RUNNING_MODE==20 or RUNNING_MODE==21:      # Train image encoder
 
             # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/rawImages/"
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
@@ -2790,14 +3200,14 @@ def mainFunction():
                 valid_in_list[el] = np.expand_dims(valid_in_list[el],axis=0)
                 valid_gtshape_list[el] = np.expand_dims(valid_gtshape_list[el], axis=0)
             
-            if RUNNING_MODE==13:
+            if RUNNING_MODE==20:
                 trainImageEncoder(in_list, valid_in_list, gtshape_list, valid_gtshape_list, mode='encoder')
-            elif RUNNING_MODE==15:
+            elif RUNNING_MODE==21:
                 trainImageEncoder(in_list, valid_in_list, gtshape_list, valid_gtshape_list, mode='bodyratio')
 
             print("Complete: mode = "+str(RUNNING_MODE)+", architecture "+str(ARCHITECTURE)+", net path = "+RESULTS_PATH)
 
-        elif RUNNING_MODE==14:      # Test image encoder
+        elif RUNNING_MODE==22:      # Test image encoder
             binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/processed_images/"
             # with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
             #     in_list = pickle.load(fp, encoding='latin1')
@@ -2818,10 +3228,10 @@ def mainFunction():
                 plt.imsave("/morpheo-nas2/marmando/ShapeRegression/Test/encoder/gen_"+str(inInd)+".png",outIm[inInd,:,:,:])
                 # plt.imsave("/morpheo-nas2/marmando/ShapeRegression/Test/encoder/in_"+str(inInd)+".png",inMat[inInd,:,:,:])
                 
-        if RUNNING_MODE==16:     # Train mesh encoder
+        if RUNNING_MODE==23 or RUNNING_MODE==24:     # Train mesh encoder
 
             # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/twoImages/"
-            binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
+            binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned_2ch/"
 
             with open(binDumpPath+'adj.pkl', 'rb') as fp:
                 adj_list = pickle.load(fp, encoding='latin1')
@@ -2839,11 +3249,12 @@ def mainFunction():
             with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
                 valid_gtshape_list = pickle.load(fp, encoding='latin1')
             
-            with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
-                in_list = pickle.load(fp, encoding='latin1')
-            with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
-                gtshape_list = pickle.load(fp, encoding='latin1')
-            # in_list, gtshape_list = getRandominput(binDumpPath, 5000, mode='mesh')
+            # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/wololo/"
+            # with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
+            #     in_list = pickle.load(fp, encoding='latin1')
+            # with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
+            #     gtshape_list = pickle.load(fp, encoding='latin1')
+            in_list, gtshape_list = getRandominput(binDumpPath, 5000, mode='mesh')
 
 
             face_pos = np.expand_dims(face_pos,axis=0)
@@ -2859,12 +3270,121 @@ def mainFunction():
                 valid_in_list[el] = np.expand_dims(valid_in_list[el],axis=0)
                 valid_gtshape_list[el] = np.expand_dims(valid_gtshape_list[el], axis=0)
             
-            if RUNNING_MODE==16:
-                trainMeshEncoder(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='shape')
-            
+            if RUNNING_MODE==23:
+                trainMeshEncoder(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='encoder')
+            elif RUNNING_MODE==24:
+                trainMeshEncoder(in_list, gtshape_list, adj_list, perm, face_pos, nodeParamDisp, valid_in_list, valid_gtshape_list, mode='bodyratio')
 
             print("Complete: mode = "+str(RUNNING_MODE)+", architecture "+str(ARCHITECTURE)+", net path = "+RESULTS_PATH)
 
+        elif RUNNING_MODE==32:       # Test mesh encoder
+            binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned_2ch/"
+            # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/twoImages/"
+            # binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/wololo/"
+            # with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
+            #     in_list = pickle.load(fp, encoding='latin1')
+
+            with open(binDumpPath+'01_03_standard_input.pkl', 'rb') as fp:
+                in_list = pickle.load(fp, encoding='latin1')
+            with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
+                gtshape_list = pickle.load(fp, encoding='latin1')
+            with open(binDumpPath+'perm.pkl', 'rb') as fp:
+                perm = pickle.load(fp, encoding='latin1')
+            with open(binDumpPath+'face_pos.pkl', 'rb') as fp:
+                face_pos = pickle.load(fp, encoding='latin1')
+            with open(binDumpPath+'adj.pkl', 'rb') as fp:
+                adj_list = pickle.load(fp, encoding='latin1')
+
+            for el in range(len(in_list)):
+                in_list[el] = np.expand_dims(in_list[el],axis=0)
+            face_pos = np.expand_dims(face_pos,axis=0)
+
+            inMat = np.concatenate(in_list,axis=0)
+            inMat = inMat[40:60,:,:]
+            # myIn = getInput("/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/01_03/01_03_c0003_img017.jpg", "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/01_03/01_03_c0003_img017_IUV.png")
+            # myFeatures = testBodyShapeNet(myIn, adj_list, perm, face_pos)
+
+            # mode='shape'
+            mode='bodyratio'
+            myShape, myFeatures = testMeshEncoder(inMat, adj_list, perm, face_pos, mode)
+            print("inMat shape = "+str(inMat.shape))
+            print("myFeatures shape = "+str(myFeatures.shape))
+            # print("myShape =  "+str(myShape))
+            print("myShape shape =  "+str(myShape.shape))
+
+            gtshape = np.stack(gtshape_list,axis=0)
+            # --- Get body ratio
+            tfH0 = np.reshape(H0, [1,1])
+            tfW0 = np.reshape(W0, [1,1])
+            tfD0 = np.reshape(D0, [1,1])
+            tfHMat = np.reshape(HMat, [10,1])
+            tfWMat = np.reshape(WMat, [10,1])
+            tfDMat = np.reshape(DMat, [10,1])
+
+            bH = np.matmul(gtshape[:,1:],tfHMat)
+            bW = np.matmul(gtshape[:,1:],tfWMat)
+            bD = np.matmul(gtshape[:,1:],tfDMat)
+
+            bH = bH + tfH0
+            bD = bD + tfD0
+            bW = bW + tfW0
+            gtbodyratio = np.divide(bD,bH)
+
+            meanRatio = np.mean(gtbodyratio)
+
+            totalDiff = 0
+            for inInd in range(inMat.shape[0]):
+                
+                # print("inInd = "+str(inInd))
+
+                if gtshape[inInd,0]==0:
+                    continue
+
+                # print("myShape =  "+str(myShape[inInd]))
+                
+                print("predicted BR = %f, GT BR = %f"%(myShape[inInd]/meanRatio, gtbodyratio[inInd]/meanRatio))
+                totalDiff += abs(myShape[inInd]-gtbodyratio[inInd])
+            totalDiff = totalDiff/meanRatio
+            print("Total diff = "+str(totalDiff))
+            return
+
+
+            feature_color = myFeatures
+            # feature_color[:,1:]=0.0
+            # feature_color = np.concatenate((myFeatures,np.zeros((myFeatures.shape[0],1),dtype=np.float32)),axis=1)
+            
+            # for dim in range(3):
+            #     minDim = np.amin(feature_color[:,dim])
+            #     maxDim = np.amax(feature_color[:,dim])
+            #     # print("maxDim = "+str(maxDim))
+            #     feature_color[:,dim] = feature_color[:,dim]-minDim
+            #     feature_color[:,dim] = feature_color[:,dim]/(maxDim-minDim)
+            #     maxDim = np.amax(feature_color[:,dim])
+            #     # print("maxDim 2 = "+str(maxDim))
+            # # feature_color[:,0] = 0.0
+            
+            totalMax = np.amax(feature_color)
+            totalMin = np.amin(feature_color)
+            print("totalMin = %f, totalMax = %f"%(totalMin, totalMax))
+            feature_color = feature_color-totalMin
+            feature_color = feature_color/(totalMax-totalMin)
+
+            # feature_color = feature_color[:,:3]
+            # feature_color = feature_color[:,3:6]
+            # feature_color = feature_color[:,6:9]
+            # feature_color = feature_color[:,9:12]
+            # feature_color = feature_color[:,12:15]
+            # feature_color = feature_color[:,15:18]
+            # feature_color = feature_color[:,18:21]
+            # feature_color = feature_color[:,21:24]
+            # feature_color = feature_color[:,24:27]
+            feature_color = feature_color[:,27:30]
+
+            noisyFolder = "/morpheo-nas2/marmando/densepose/Test/"
+            noisyFile = "male_template_dp.obj"
+            V0,_,_, faces0, _ = load_mesh(noisyFolder, noisyFile, 0, False)
+            newV, newF = getColoredMesh(V0, faces0, feature_color)
+            write_mesh(newV, newF, "/morpheo-nas2/marmando/ShapeRegression/Test/"+"test.obj")
 
 
 if __name__ == "__main__":

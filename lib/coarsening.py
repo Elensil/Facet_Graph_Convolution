@@ -82,7 +82,7 @@ def metis(W, levels, rid=None):
         vv = val[perm]
 
         bestAssoc=0.0
-        for trial in range(1):
+        for trial in range(100):
             cur_cluster_id, totalAssoc = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
             
             

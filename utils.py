@@ -1513,24 +1513,37 @@ def computeCurvature(fpos, fn, adj):
     return curv_stat
 
 
-def customKMeans(points, k, iternum=500):
+def customKMeans(points, k, iternum=500, repeatNum=10):
 
-    # Initialize random centroids
-    centroids = points.copy()
-    np.random.shuffle(centroids)
-    centroids = centroids[:k]
 
-    for i in range(iternum):
-        closest = closest_centroid(points, centroids)
-        move_centroids(points, closest, centroids)
+    for trial in range(repeatNum):
+        # Initialize random centroids
+        centroids = points.copy()
+        np.random.shuffle(centroids)
+        centroids = centroids[:k]
 
-    return centroids, closest
+        for i in range(iternum):
+            closest, dist = closest_centroid(points, centroids)
+            move_centroids(points, closest, centroids)
+
+        if trial==0:
+            finalCentroids = centroids
+            finalClostest = closest
+            bestDist = dist
+            print("trial %i: avg dist = %f"%(trial,bestDist))
+        else:
+            if dist<bestDist:
+                finalCentroids = centroids
+                finalClostest = closest
+                bestDist = dist
+                print("trial %i: avg dist = %f"%(trial,bestDist))
+    return finalCentroids, finalClostest
 
 
 def closest_centroid(points, centroids):
     """returns an array containing the index to the nearest centroid for each point"""
     distances = np.sqrt(((points - centroids[:, np.newaxis])**2).sum(axis=2))
-    return np.argmin(distances, axis=0)
+    return np.argmin(distances, axis=0), np.mean(np.amin(distances, axis=0))
 
 def move_centroids(points, closest, centroids):
     """returns the new centroids assigned from the points closest to them"""

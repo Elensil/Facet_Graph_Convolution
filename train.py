@@ -2429,7 +2429,7 @@ def mainFunction():
     empiricMax = 30.0
 
     # Coarsening parameters
-    coarseningLvlNum = 5
+    coarseningLvlNum = 3
     coarseningStepNum = COARSENING_STEPS
 
 
@@ -3501,12 +3501,12 @@ def mainFunction():
                     print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
                     # Now recover vertices positions and create Edge maps
 
-                    with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/adj.pkl", 'wb') as fp:
+                    with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/adj3lvl.pkl", 'wb') as fp:
                         pickle.dump(f_adj_list[0], fp)
-                    with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/perm.pkl", 'wb') as fp:
+                    with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/perm3lvl.pkl", 'wb') as fp:
                         pickle.dump(inv_perm(adjPerm_list[0]), fp) 
 
-
+                    return
                     V0 = np.expand_dims(V0, axis=0)
 
                     # print("WARNING!!!!! Hardcoded a change in faces adjacency")
