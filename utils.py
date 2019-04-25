@@ -90,44 +90,10 @@ def tfComputeNormals(points, faces):
     return Nn
 
 
-def getFacesAdj(faces):
+
+def getEdgeMap(faces):
+
     fnum = faces.shape[0]
-    fadj = np.zeros([fnum,4], dtype=np.int32)     # triangular faces only
-    find = np.ones([fnum], dtype=np.int8)
-
-    for i in range(fnum):
-        fadj[i,0] = i+1           # indexed from 1
-
-        j = i+1                     # check next faces only
-        v1 = faces[i,0]
-        v2 = faces[i,1]
-        v3 = faces[i,2]
-
-        while(find[i]<4):
-            if (v1 in faces[j,:]):
-                if (v2 in faces[j,:]) or (v3 in faces[j,:]):
-                    fadj[i,find[i]] = j+1
-                    fadj[j,find[j]] = i+1
-                    find[i]+=1
-                    find[j]+=1
-            if (v2 in faces[j,:]) and (v3 in faces[j,:]):
-                fadj[i,find[i]] = j+1
-                fadj[j,find[j]] = i+1
-                find[i]+=1
-                find[j]+=1
-            j+=1
-
-            if j==fnum:
-                print("WARNING: inconsistent face data!!!")
-                break
-
-    return fadj
-
-def getFacesAdj2(faces):    #trying other method using edges as itnermediate representation
-    fnum = faces.shape[0]
-    fadj = np.zeros([fnum,4], dtype=np.int32)     # triangular faces only
-    find = np.ones([fnum], dtype=np.int8)
-
     # First, generate edges
     e_map = np.zeros([fnum*3,4],dtype=np.int32)    # for each edge, e_map(e) = [v1,v2,f1,f2]
     e_map -=1
@@ -212,18 +178,33 @@ def getFacesAdj2(faces):    #trying other method using edges as itnermediate rep
             v_e_map_ind[v3]+=1
             # Increment total edge count
             eind+=1
+    e_map = e_map[:eind,:]
+    # Edge map done!
+    return e_map, v_e_map
 
+
+
+def getFacesAdj(faces):    #trying other method using edges as itnermediate representation
+    fnum = faces.shape[0]
+    fadj = np.zeros([fnum,4], dtype=np.int32)     # triangular faces only
+    find = np.ones([fnum], dtype=np.int8)
+
+    fborder = np.zeros([fnum], dtype=np.int8)
+
+    # First, generate edges
+    e_map, v_e_map = getEdgeMap(faces)
+    e_num = e_map.shape[0]
     # Edge map done!
     # Now, go through it to generate faces adj graph
 
     for i in range(fnum):
         fadj[i,0] = i+1           # indexed from 1
 
-    for e in range(eind):
+    for e in range(e_num):
         f1 = e_map[e,2]
         f2 = e_map[e,3]
 
-        if (f1>0)and(f2>0):
+        if (f1>=0)and(f2>=0):
             if find[f1]==4:
                 print("ERROR: edge " + str(e) + " ("+str(e_map[e,:]) + ")")
                 print("f1 adj: " + str(fadj[f1,:]))
@@ -235,7 +216,27 @@ def getFacesAdj2(faces):    #trying other method using edges as itnermediate rep
             find[f1]+=1
             find[f2]+=1
 
+        elif (f2<0):
+            fborder[f1]=1
+        else:
+            print("Should not happen?")
+
     return fadj, e_map, v_e_map
+
+def getBorderFaces(faces):
+    fnum = faces.shape[0]
+    fborder = np.zeros([fnum], dtype=np.int8)
+    e_map, v_e_map = getEdgeMap(faces)
+    e_num = e_map.shape[0]
+    for e in range(e_num):
+        f1 = e_map[e,2]
+        f2 = e_map[e,3]
+        if (f2<0):
+            fborder[f1]=1
+        elif(f1<0):
+            print("Should not happen?")
+
+    return fborder
 
 
 def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge-connected faces (i.e. neighbours of type I will count twice)
@@ -751,7 +752,7 @@ def oneSidedHausdorffNew(V0, V1, F):
 
 
 
-def hausdorffOverSampled(V0,V1,sV0,sV1):
+def hausdorffOverSampled(V0,V1,sV0,sV1, accuracyOnly=False):
     
     #First, normalize
     xmin = min(np.amin(V0[:,0]),np.amin(V1[:,0]))
@@ -793,7 +794,7 @@ def hausdorffOverSampled(V0,V1,sV0,sV1):
     ymax = max(np.amax(V0[:,1]),np.amax(V1[:,1]))
     zmax = max(np.amax(V0[:,2]),np.amax(V1[:,2]))
 
-    slices = 8
+    slices = 5
     sSlices = slices+1
 
 
@@ -901,35 +902,40 @@ def hausdorffOverSampled(V0,V1,sV0,sV1):
                     vec_acc = np.amin(dist_acc,axis=1)
                     total_acc = np.concatenate((total_acc,vec_acc),axis=0)
 
-                if (N1>0):
-                    sV0Slice = np.concatenate(( sV0_list[i*sSlices*sSlices+j*sSlices+k],
-                                                sV0_list[i*sSlices*sSlices+j*sSlices+k+1],
-                                                sV0_list[i*sSlices*sSlices+(j+1)*sSlices+k],
-                                                sV0_list[i*sSlices*sSlices+(j+1)*sSlices+k+1],
-                                                sV0_list[(i+1)*sSlices*sSlices+j*sSlices+k],
-                                                sV0_list[(i+1)*sSlices*sSlices+j*sSlices+k+1],
-                                                sV0_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k],
-                                                sV0_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k+1]), axis=0)
-                    Ns0 = sV0Slice.shape[0]
-                    # print("N1 = "+str(N1))
-                    # print("Ns0 = "+str(Ns0))
-                
-                    bV1 = np.reshape(v1Slice,(N1,1,3))
-                    bsV0 = np.reshape(sV0Slice,(1,Ns0,3))
-                    bV1 = np.tile(bV1,(1,Ns0,1))
-                    bsV0 = np.tile(bsV0,(N1,1,1))
+                if not accuracyOnly:
+                    if (N1>0):
+                        sV0Slice = np.concatenate(( sV0_list[i*sSlices*sSlices+j*sSlices+k],
+                                                    sV0_list[i*sSlices*sSlices+j*sSlices+k+1],
+                                                    sV0_list[i*sSlices*sSlices+(j+1)*sSlices+k],
+                                                    sV0_list[i*sSlices*sSlices+(j+1)*sSlices+k+1],
+                                                    sV0_list[(i+1)*sSlices*sSlices+j*sSlices+k],
+                                                    sV0_list[(i+1)*sSlices*sSlices+j*sSlices+k+1],
+                                                    sV0_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k],
+                                                    sV0_list[(i+1)*sSlices*sSlices+(j+1)*sSlices+k+1]), axis=0)
+                        Ns0 = sV0Slice.shape[0]
+                        # print("N1 = "+str(N1))
+                        # print("Ns0 = "+str(Ns0))
                     
-                    diff_comp = bV1 - bsV0
-                    dist_comp = np.linalg.norm(diff_comp, axis=2)
-                    vec_comp = np.amin(dist_comp, axis=1)
-                    total_comp = np.concatenate((total_comp,vec_comp),axis=0)
+                        bV1 = np.reshape(v1Slice,(N1,1,3))
+                        bsV0 = np.reshape(sV0Slice,(1,Ns0,3))
+                        bV1 = np.tile(bV1,(1,Ns0,1))
+                        bsV0 = np.tile(bsV0,(N1,1,1))
+                        
+                        diff_comp = bV1 - bsV0
+                        dist_comp = np.linalg.norm(diff_comp, axis=2)
+                        vec_comp = np.amin(dist_comp, axis=1)
+                        total_comp = np.concatenate((total_comp,vec_comp),axis=0)
 
                 curInd+=1
 
     min_acc = np.amin(total_acc)
-    min_comp = np.amin(total_comp)
     avg_acc = np.mean(total_acc)
-    avg_comp = np.mean(total_comp)
+    if not accuracyOnly:
+        min_comp = np.amin(total_comp)
+        avg_comp = np.mean(total_comp)
+    else:
+        min_comp = 0
+        avg_comp = 0
 
     return min_acc, min_comp, avg_acc, avg_comp
 
@@ -1351,7 +1357,7 @@ def listToSparse(Adj, nodes_pos):
 
     N = Adj.shape[0]
     K = Adj.shape[1]
-
+    sigma = 0.001
     row_ind = np.zeros(N*K,dtype = np.int32)
     col_ind = np.zeros(N*K,dtype = np.int32)
     values = np.zeros(N*K,dtype = np.float32)
@@ -1368,6 +1374,7 @@ def listToSparse(Adj, nodes_pos):
             n_pos = nodes_pos[n,:]
             nnode_pos = nodes_pos[nnode,:]
             values[cur_ind] = 1/(1000*np.linalg.norm(nnode_pos-n_pos))
+            # values[cur_ind] = np.exp(-np.sum(np.square(nnode_pos-n_pos))/2*sigma**2)
             # values[cur_ind] = np.linalg.norm(nnode_pos-n_pos)
             cur_ind+=1
 
@@ -1390,7 +1397,7 @@ def listToSparseWNormals(Adj, nodes_pos, nodes_normals):
     col_ind = np.zeros(N*K,dtype = np.int32)
     values = np.zeros(N*K,dtype = np.float32)
     cur_ind=0
-    sigma = 0.005
+    sigma = 0.001
     ang_sigma = 0.3
     for n in range(N):  # For each node
         for neigh in range(1,K):    # Skip first neighbour, it encodes the current node
@@ -1406,7 +1413,7 @@ def listToSparseWNormals(Adj, nodes_pos, nodes_normals):
             nnode_norm = nodes_normals[n,:]
             dp = np.sum(np.multiply(n_norm,nnode_norm),axis=-1)
             # values[cur_ind] = np.exp(-pow(dp-1,2)/pow(ang_sigma,2))*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)/(sigma*sigma))
-            values[cur_ind] = np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)/(sigma*sigma))
+            values[cur_ind] = max(dp*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)/(2*sigma*sigma)),0.001)
             # values[cur_ind] = (dp+1)/(1000*np.linalg.norm(nnode_pos-n_pos))
             # values[cur_ind] = np.linalg.norm(nnode_pos-n_pos)
             cur_ind+=1
@@ -2135,4 +2142,268 @@ def getGraphDist(myAdj,n0,n1):
                     nQueue.put(nei)
 
 
+def makeFacesMesh(myAdj, myP, myN):
+    
+    K = myAdj.shape[1]
+    N = myAdj.shape[0]
+    print("myAdj shape = "+str(myAdj.shape))
+    print("myP shape = "+str(myP.shape))
+    print("myN shape = "+str(myN.shape))
 
+    nColor = (myN+1)/2
+    # nColor = np.zeros_like(myN)
+    # nColor = nColor + [0.8,0.0,0.0]
+
+    vlInit = np.concatenate([myP, nColor], axis=-1)
+    vl = np.tile(vlInit,[2,1])
+    # vl = np.zeros([N*4, 6],dtype=np.float32)
+    fl = np.zeros([K*N, 3], dtype=np.int32)
+    find=0
+    vind=0
+    myAdj = myAdj-1     #Switching to zero-indexing
+    # for row in range(N):
+    #     col=1
+    #     while (col+1<K) and (myAdj[row, col+1]>=0):
+    #         fl[find,:] = [row,myAdj[row,col],myAdj[row,col+1]]
+    #         find+=1
+    #         col+=2
+    #     if(col<K) and (myAdj[row,col]>=0) and (col>1):
+    #         fl[find,:] = [row,myAdj[row,col],myAdj[row,1]]
+    #         find+=1
+    #         col+=2
+
+    for row in range(N):
+        col=1
+        while (col<K) and (myAdj[row, col]>=0):
+            fl[find,:] = [row,myAdj[row,col],row+N]
+            find+=1
+            col+=1
+
+    fl = fl[:find,:]
+    print("vl shape = "+str(vl.shape))
+    print("fl shape = "+str(fl.shape))
+    return vl, fl
+
+
+# This function takes a mesh (V, F), and return a new set of vertices V, with added low-frequency gaussian noise.
+# By this, we mean that "bumps" in the surface are wider that the average edge length. Noise on neighbouring vertices is not independant
+def addLFGaussianNoise(V, F, Adj):
+    Vnum = V.shape[0]
+    Fnum = F.shape[0]
+    noiseSampNum = int(Fnum/6)
+    gA = 0.005
+    gS = 0.005
+
+    noiseSamp = np.random.randint(noiseSampNum)
+
+# Returns a denser point cloud by sampling the triangles (?)
+def getDensePC(V,F, res=4):
+
+    V1 = V[F[:,0]]
+    V2 = V[F[:,1]]
+    V3 = V[F[:,2]]
+
+    listV = [V]
+
+    for b0 in range(res):
+        for b1 in range(res-b0+1):
+            if(b0<res)and(b1<res)and(b1+b0>0):
+                NP = b0*V1 + b1*V2 + (res-b0-b1)*V3
+                NP = NP/res
+                listV.append(NP)
+
+    finalV = np.concatenate(listV, axis=0)
+    print("finalV shape = "+str(finalV.shape))
+
+    return finalV
+
+
+
+# Perform bilateral filter on list of triangles, as defined in Wang et al. Siggraph paper
+def bilateralFilter(Fc, Fn, Fa, sigma_s, sigma_r):
+
+    filtered_n = np.zeros_like(Fn)
+
+    slices = 10
+    
+    xmin = np.amin(Fc[:,0])
+    ymin = np.amin(Fc[:,1])
+    zmin = np.amin(Fc[:,2])
+    # Put origin in corner
+    transVec = np.array(([[xmin,ymin,zmin]]),dtype=np.float32)
+    Fc = Fc - transVec
+
+    xmax = np.amax(Fc[:,0])
+    ymax = np.amax(Fc[:,1])
+    zmax = np.amax(Fc[:,2])
+
+    print("partitioning space...")
+    
+
+    Fc_list = []
+    Fn_list = []
+    Fa_list = []
+
+    cond_list = []
+
+    # Slightly increasing space size, to make sure all points are taken in
+    xmax *= 1.01
+    ymax *= 1.01
+    zmax *= 1.01
+
+    for i in range(slices):
+        cim = i*xmax/slices
+        ciM = (i+1)*xmax/slices
+        FcCondI = (Fc[:,0]>=cim)&(Fc[:,0]<ciM)
+
+        for j in range(slices):
+            cjm = j*ymax/slices
+            cjM = (j+1)*ymax/slices
+            FcCondJ = (Fc[:,1]>=cjm)&(Fc[:,1]<cjM)
+            
+            for k in range(slices):
+                ckm = k*zmax/slices
+                ckM = (k+1)*zmax/slices
+                FcCondK = (Fc[:,2]>=ckm)&(Fc[:,2]<ckM)
+                
+                FcCond = FcCondI & FcCondJ & FcCondK
+
+                curFc = Fc[FcCond]
+                Fc_list.append(curFc)
+                curFn = Fn[FcCond]
+                Fn_list.append(curFn)
+                curFa = Fa[FcCond]
+                Fa_list.append(curFa)
+                cond_list.append(FcCond)
+
+    # 2nd test: treat each block, and compare to 3x3x3 area around, then push back into original array with the right indexing
+    for i in range(slices):
+        for j in range(slices):
+            for k in range(slices):
+
+                curInd = i*slices**2+j*slices+k
+
+                sliceFc = Fc_list[curInd]
+                sliceFn = Fn_list[curInd]
+
+                if sliceFc.shape[0]==0:
+                    continue
+
+                print("sliceFc shape = "+str(sliceFc.shape))
+
+                # sliceFa = Fa_list[curInd]
+
+                bigSliceFc_list = []
+                bigSliceFn_list = []
+                bigSliceFa_list = []
+
+                for ii in range(max(0,i-1),min(slices,i+2)):
+                    for jj in range(max(0,j-1),min(slices,j+2)):
+                        for kk in range(max(0,k-1),min(slices,k+2)):
+                            tempInd = ii*slices**2+jj*slices+kk
+                            bigSliceFc_list.append(Fc_list[tempInd])
+                            bigSliceFn_list.append(Fn_list[tempInd])
+                            bigSliceFa_list.append(Fa_list[tempInd])
+                bigSliceFc = np.concatenate(bigSliceFc_list,axis=0)
+                bigSliceFn = np.concatenate(bigSliceFn_list,axis=0)
+                bigSliceFa = np.concatenate(bigSliceFa_list,axis=0)
+                
+                print("bigSliceFc shape = "+str(bigSliceFc.shape))
+
+                # Space
+                x_diff = np.subtract.outer(sliceFc[:,0],bigSliceFc[:,0])
+                y_diff = np.subtract.outer(sliceFc[:,1],bigSliceFc[:,1])
+                z_diff = np.subtract.outer(sliceFc[:,2],bigSliceFc[:,2])
+                # [N, Nslice]
+                space_diff = np.stack([x_diff, y_diff, z_diff], axis=-1)
+                # [N, Nslice, 3]
+                space_dist = np.linalg.norm(space_diff, axis=-1)
+                # [N, Nslice]
+                w_space_dist = np.exp(-np.divide(np.square(space_dist), 2*sigma_s**2 ))
+
+                # Normals
+                if sigma_r==-1:
+                    w_n_dist = np.ones_like(space_dist)
+                else:
+                    nx_diff = np.subtract.outer(sliceFn[:,0],bigSliceFn[:,0])
+                    ny_diff = np.subtract.outer(sliceFn[:,1],bigSliceFn[:,1])
+                    nz_diff = np.subtract.outer(sliceFn[:,2],bigSliceFn[:,2])
+                    # [N, Nslice]
+                    n_diff = np.stack([nx_diff, ny_diff, nz_diff], axis=-1)
+                    # [N, Nslice, 3]
+                    n_dist = np.linalg.norm(n_diff, axis=-1)
+                    # [N, Nslice]
+                    w_n_dist = np.exp(-np.divide(np.square(n_dist), 2*sigma_r**2 ))
+
+                final_weights = np.multiply(np.multiply(np.expand_dims(bigSliceFa,axis=0),w_space_dist),w_n_dist)
+
+                final_n_slice = np.multiply(np.expand_dims(final_weights,axis=-1),np.expand_dims(bigSliceFn,axis=0))
+                # [N, Nslice, 3]
+                final_n_slice_sum = np.sum(final_n_slice, axis=1)
+
+                # print("filtered_n shape = "+str(filtered_n.shape))
+                curCond = cond_list[curInd]
+                # print("curCond shape = "+str(curCond.shape))
+                # print("final_n_slice_sum shape = "+str(final_n_slice_sum.shape))
+                filtered_n[curCond] = final_n_slice_sum
+
+
+
+
+    filtered_n = normalize(filtered_n)
+
+    return filtered_n
+
+# Compute FNDs as described in Wang et al. siggrpah paper
+def FND(Fc, Fn, Fa, sigma_s_list, sigma_r_list, K=1):
+
+    # K not implemented for now (no need)
+
+
+    FND_list = []
+    for sigma_s in sigma_s_list:
+
+        for sigma_r in sigma_r_list:
+            print("sigma pair = (%f,%f)"%(sigma_s,sigma_r))
+            cur_fFn = bilateralFilter(Fc, Fn, Fa, sigma_s, sigma_r)
+            FND_list.append(cur_fFn)
+
+    myFND = np.concatenate(FND_list, axis=-1)
+    print("myFND shape = "+str(myFND.shape))
+
+    return myFND
+
+# After normalization!!
+# Returns average edge length, and total number of edges
+# Edges are counted once per adjacent triangle
+def getAverageEdgeLength(vl, fl):
+    
+    xmin = np.amin(vl[:,0])
+    ymin = np.amin(vl[:,1])
+    zmin = np.amin(vl[:,2])
+    xmax = np.amax(vl[:,0])
+    ymax = np.amax(vl[:,1])
+    zmax = np.amax(vl[:,2])
+
+    diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
+    if normalize:
+        vl = vl/diag
+
+    tri = vl[fl]
+
+    e1 = tri[:,1]-tri[:,0]
+    e2 = tri[:,2]-tri[:,1]
+    e3 = tri[:,0]-tri[:,2]
+
+    l1 = np.linalg.norm(e1,axis=-1)
+    l2 = np.linalg.norm(e2,axis=-1)
+    l3 = np.linalg.norm(e3,axis=-1)
+
+    lt = np.concatenate([l1,l2,l3], axis=0)
+
+    return np.mean(lt), lt.shape[0]
+
+
+
+
+# End of file
