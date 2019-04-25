@@ -243,7 +243,7 @@ def trainBodyShapeNet(input_list, gtshape_list, graph_adj, perm, face_pos, nodeP
     train_loss=0
     train_samp=0
 
-    SAVEITER = 500
+    SAVEITER = 2000
 
     evalStepNum=50
 
@@ -2463,7 +2463,7 @@ def mainFunction():
 
 
     if not trainMode:
-        inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/32_07/"
+        inputPath = "/morpheo-nas2/marmando/surreal/Data/SURREAL/data/cmu/train_images/run1/35_16/"
         binDumpPath = "/morpheo-nas2/marmando/ShapeRegression/BinaryDump/cleaned/"
         pickleFolder(inputPath, binDumpPath)
 
@@ -2509,7 +2509,7 @@ def mainFunction():
             #     in_list = pickle.load(fp, encoding='latin1')
             # with open(binDumpPath+'01_03_gt_shape.pkl', 'rb') as fp:
             #     gtshape_list = pickle.load(fp, encoding='latin1')
-            in_list, gtshape_list = getRandominput(binDumpPath, 100, mode='mesh')
+            in_list, gtshape_list = getRandominput(binDumpPath, 50000, mode='mesh')
 
 
             face_pos = np.expand_dims(face_pos,axis=0)
