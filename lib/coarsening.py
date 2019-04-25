@@ -25,8 +25,8 @@ def coarsen(A, levels, self_connections=False):
         graphs[i] = A
 
         Mnew, Mnew = A.shape
-        print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
-              '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
+        # print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added),'
+        #       '|E| = {3} edges'.format(i, Mnew, Mnew-M, A.nnz//2))
 
     return graphs, perms[0] if levels > 0 else None
 
@@ -82,14 +82,14 @@ def metis(W, levels, rid=None):
         vv = val[perm]
 
         bestAssoc=0.0
-        for trial in range(100):
+        for trial in range(1):
             cur_cluster_id, totalAssoc = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
             
             
             if totalAssoc>bestAssoc:
                 cluster_id=cur_cluster_id
                 bestAssoc=totalAssoc
-                print("trial n."+str(trial)+": assoc = "+str(totalAssoc))
+                # print("trial n."+str(trial)+": assoc = "+str(totalAssoc))
             rid = np.random.permutation(range(N))
 
         parents.append(cluster_id)
