@@ -57,6 +57,8 @@ def metis(W, levels, rid=None):
         rid = np.random.permutation(range(N))
     parents = []
     degree = W.sum(axis=0) - W.diagonal()
+
+
     graphs = []
     graphs.append(W)
     #supernode_size = np.ones(N)
@@ -81,8 +83,9 @@ def metis(W, levels, rid=None):
         cc = idx_col[perm]
         vv = val[perm]
 
+        # print("min vv = "+str(np.min(vv)))
         bestAssoc=0.0
-        for trial in range(1):
+        for trial in range(3):
             cur_cluster_id, totalAssoc = metis_one_level(rr,cc,vv,rid,weights)  # rr is ordered
             
             
@@ -132,7 +135,7 @@ def metis(W, levels, rid=None):
 def metis_one_level(rr,cc,vv,rid,weights):
 
     nnz = rr.shape[0]
-    N = rr[nnz-1] + 1
+    N = rr[nnz-1] + 1       # max row number +1?
 
     marked = np.zeros(N, np.bool)
     rowstart = np.zeros(N, np.int32)        # index of 1st entry in the row
@@ -144,12 +147,21 @@ def metis_one_level(rr,cc,vv,rid,weights):
     clustercount = 0
 
     # Counts number of entries per (represented) row?
+    # for ii in range(nnz):
+    #     if rr[ii] > oldval:
+    #         oldval = rr[ii]
+    #         rowstart[count+1] = ii      # Save index of 1st entry in the row
+    #         count = count + 1
+    #     rowlength[count] = rowlength[count] + 1
+
+    count = rr[0]
     for ii in range(nnz):
         if rr[ii] > oldval:
             oldval = rr[ii]
-            rowstart[count+1] = ii      # Save index of 1st entry in the row
-            count = count + 1
-        rowlength[count] = rowlength[count] + 1
+            rowstart[rr[ii]] = ii      # Save index of 1st entry in the row
+            count = rr[ii]
+        rowlength[rr[ii]] = rowlength[rr[ii]] + 1
+
 
     totalAssoc = 0.0
     # For each row

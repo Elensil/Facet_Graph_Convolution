@@ -438,7 +438,7 @@ def load_mesh(path,filename,K,bGetAdj):
 
     
     vertices = np.array(vertices).astype(np.float32)
-    print("vertices shape: "+str(vertices.shape))
+    # print("vertices shape: "+str(vertices.shape))
     nb_vert = vertices.shape[0]
 
     # If 16 bits are not enough to write vertex indices, use 32 bits 
@@ -763,14 +763,14 @@ def hausdorffOverSampled(V0,V1,sV0,sV1, accuracyOnly=False):
     zmax = max(np.amax(V0[:,2]),np.amax(V1[:,2]))
 
     diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
-
+    # print("diag = "+str(diag))
     # Put origin in corner
     transVec = np.array(([[xmin,ymin,zmin]]),dtype=np.float32)
     V0 = V0 - transVec
     V1 = V1 - transVec
     sV1 = sV1 - transVec
     sV0 = sV0 - transVec
-
+    # print("transVec = "+str(transVec))
     V0 = V0/diag
     V1 = V1/diag
     sV0 = sV0/diag
@@ -780,10 +780,10 @@ def hausdorffOverSampled(V0,V1,sV0,sV1, accuracyOnly=False):
     N1 = V1.shape[0]
     Ns0 = sV0.shape[0]
     Ns1 = sV1.shape[0]
-    print("N0 = "+str(N0))
-    print("N1 = "+str(N1))
-    print("Ns0 = "+str(Ns0))
-    print("Ns1 = "+str(Ns1))
+    # print("N0 = "+str(N0))
+    # print("N1 = "+str(N1))
+    # print("Ns0 = "+str(Ns0))
+    # print("Ns1 = "+str(Ns1))
 
     v0_list = []
     v1_list = []
@@ -860,6 +860,7 @@ def hausdorffOverSampled(V0,V1,sV0,sV1, accuracyOnly=False):
                 # print("curV1 shape = "+str(curV1.shape))
 
 
+
     # return v0_list, sV1_list
 
     print("partition complete")
@@ -879,6 +880,8 @@ def hausdorffOverSampled(V0,V1,sV0,sV1, accuracyOnly=False):
 
                 N0 = v0Slice.shape[0]
                 N1 = v1Slice.shape[0]
+
+                # print("(%d,%d,%d): N0 = %d, N1 = %d"%(i,j,k,N0,N1))
                 if (N0>0):
                     sV1Slice = np.concatenate(( sV1_list[i*sSlices*sSlices+j*sSlices+k],
                                                 sV1_list[i*sSlices*sSlices+j*sSlices+k+1],
@@ -901,6 +904,8 @@ def hausdorffOverSampled(V0,V1,sV0,sV1, accuracyOnly=False):
                     dist_acc = np.linalg.norm(diff_acc, axis=2)
                     vec_acc = np.amin(dist_acc,axis=1)
                     total_acc = np.concatenate((total_acc,vec_acc),axis=0)
+
+                    # print("(%d,%d,%d): N0 = %d, Ns1 = %d"%(i,j,k,N0,Ns1))
 
                 if not accuracyOnly:
                     if (N1>0):
@@ -1173,10 +1178,14 @@ def angularDiffVec(n0,n1):
     return angDiff
 
 # Takes a mesh as input (vertices list vl, faces list fl), and returns a list of faces areas (faces are assumed to be triangular)
-def getTrianglesArea(vl,fl):
+def getTrianglesArea(vl,fl, normalize=False):
 
     fnum = fl.shape[0]
     triArea = np.empty([fnum])
+
+    if normalize:
+        el, _ = getAverageEdgeLength(vl,fl)
+        vl = vl/(2*el)
 
     for f in range(fnum):
         v0 = vl[fl[f,0],:]
@@ -1188,6 +1197,8 @@ def getTrianglesArea(vl,fl):
         triArea[f] = 0.5 * np.linalg.norm(cp)
 
     return triArea
+
+
 
 def getTrianglesBarycenter(vl,fl, normalize=True):
 
@@ -1421,6 +1432,8 @@ def listToSparseWNormals(Adj, nodes_pos, nodes_normals):
     row_ind = row_ind[:cur_ind]
     col_ind = col_ind[:cur_ind]
     values = values[:cur_ind]
+
+    # print("min values = "+str(np.min(values)))
     #values = np.ones(cur_ind,dtype = np.int8)
 
     coo = scipy.sparse.coo_matrix((values,(row_ind,col_ind)),shape=(N,N))
@@ -1445,16 +1458,19 @@ def sparseToList(Adj, K):
 
     curNeigh = np.ones(N, dtype=np.int8)   # For each node, keep count of neighbours
 
+    has_saturated = False
     cx = Adj.tocoo()    
     for i,j,_ in zip(cx.row, cx.col, cx.data):
         if(i!=j):
             if(curNeigh[i]==K):
                 print("Warning: saturated node! ("+str(i)+","+str(j)+")")
+                has_saturated=True
             else:
                 listAdj[i,curNeigh[i]] = j+1
                 curNeigh[i]+=1
 
-    return listAdj
+    return listAdj, has_saturated
+    # return listAdj
 
 def inv_perm(perm):
     inverse = [0] * len(perm)
@@ -2402,6 +2418,20 @@ def getAverageEdgeLength(vl, fl):
     lt = np.concatenate([l1,l2,l3], axis=0)
 
     return np.mean(lt), lt.shape[0]
+
+
+# Copied from tensorflow.org (Tensorboard tutorial)
+def variable_summaries(var):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope('summaries'):
+    mean = tf.reduce_mean(var)
+    tf.summary.scalar('mean', mean)
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    tf.summary.scalar('stddev', stddev)
+    tf.summary.scalar('max', tf.reduce_max(var))
+    tf.summary.scalar('min', tf.reduce_min(var))
+    tf.summary.histogram('histogram', var)
 
 
 
