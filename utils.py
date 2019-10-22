@@ -2392,7 +2392,7 @@ def FND(Fc, Fn, Fa, sigma_s_list, sigma_r_list, K=1):
 # After normalization!!
 # Returns average edge length, and total number of edges
 # Edges are counted once per adjacent triangle
-def getAverageEdgeLength(vl, fl):
+def getAverageEdgeLength(vl, fl, normalize=False):
     
     xmin = np.amin(vl[:,0])
     ymin = np.amin(vl[:,1])
