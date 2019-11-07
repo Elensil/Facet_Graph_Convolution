@@ -1073,7 +1073,10 @@ def decoding_layer(x, adj, W, translation_invariance=False):
         return patches
         
 
-def reusable_custom_conv2d(x, adj, out_channels, M, translation_invariance=False, name="conv2d"):
+# BiasMask is not intuitive:
+# We actually discriminate nodes with no connection to the graph, instead of input equal to 0
+# The adjacency matrix is filtered upstream based on input, thanks to the function (filterAdj).
+def reusable_custom_conv2d(x, adj, out_channels, M, biasMask = True, translation_invariance=False, name="conv2d"):
         
         batch_size, input_size, in_channels = x.get_shape().as_list()
         W = reusable_weight_variable([M, out_channels, in_channels], name=(name+"_weight"))
@@ -1133,7 +1136,14 @@ def reusable_custom_conv2d(x, adj, out_channels, M, translation_invariance=False
         patches = tf.reduce_sum(patches, axis=2)
         # [batch_size, input_size, out]
         print("Your patches shape is "+str(patches.shape))
-        patches = patches + b
+
+        if biasMask:
+            # NEW!! Add bias only to nodes with at least one active node in neighbourhood
+            patches = tf.where(tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,out_channels]), patches +b, patches)
+        else:
+            patches = patches + b
+
+        # patches = patches + b
         return patches
 
 
@@ -1266,7 +1276,7 @@ def filterAdj(x, adj, zeroValue):
     for b in range(batch_size):
         xb = x[b,:,:]
         # [N, ch]
-        zeroNodes = tf.reduce_all(tf.equal(xb,-3.0),axis=-1)
+        zeroNodes = tf.reduce_all(tf.equal(xb,zeroValue),axis=-1)
         # [N]
         nodeIndices = tf.where(zeroNodes)
         nodeIndices = nodeIndices + 1
@@ -1329,6 +1339,262 @@ def get_model(x, adj, num_classes, architecture):
                 y_conv = custom_lin(h_fc1, num_classes)
                 return y_conv
 
+
+
+
+def softmaxPooling(x,dim):
+
+    # softmax (no axis support in my tf version)
+    # weights = tf.math.softmax(x,axis=dim)
+    weights = tf.exp(x) / tf.reduce_sum(tf.exp(x), axis=dim, keep_dims=True)
+    weighted_x = tf.multiply(x,weights)
+    return tf.reduce_sum(weighted_x,axis=dim)
+
+
+def enhancementBlock(x, adj, M_conv, d, D3, s):
+
+    # d = 16
+    # D3 = 64
+    # s = 4
+    alpha = 0.1
+
+    D1 = D3-d
+    D2 = D1-d
+    D4 = D3
+    D5 = D4-d
+    D6 = D4+d
+
+    # Above Block
+    h_conv1, _ = custom_conv2d(x, adj, D1, M_conv, translation_invariance=False, rotation_invariance=False)
+    h_conv1_act = lrelu(h_conv1,alpha)
+
+    h_conv2, _ = custom_conv2d(h_conv1_act, adj, D2, M_conv, translation_invariance=False, rotation_invariance=False)
+    h_conv2_act = lrelu(h_conv2,alpha)
+
+    h_conv3, _ = custom_conv2d(h_conv2_act, adj, D3, M_conv, translation_invariance=False, rotation_invariance=False)
+    h_conv3_act = lrelu(h_conv3,alpha)
+
+    # Slice
+    sliceSize = int(D3/s)
+
+    slice0 = h_conv3_act[:,:,:sliceSize]    # 1/s, to be concatenated to input
+    slice1 = h_conv3_act[:,:,sliceSize:]    # 1-1/s, to be passed to the below block
+
+    # Below Block
+    h_conv4, _ = custom_conv2d(slice1, adj, D4, M_conv, translation_invariance=False, rotation_invariance=False)
+    h_conv4_act = lrelu(h_conv4,alpha)
+
+    h_conv5, _ = custom_conv2d(h_conv4_act, adj, D5, M_conv, translation_invariance=False, rotation_invariance=False)
+    h_conv5_act = lrelu(h_conv5,alpha)
+
+    h_conv6, _ = custom_conv2d(h_conv5_act, adj, D6, M_conv, translation_invariance=False, rotation_invariance=False)
+    h_conv6_act = lrelu(h_conv6,alpha)
+
+    # Concat and Add
+
+    R = tf.concat([x,slice0],axis=-1)
+
+    # R and h_conv6 must have the same number of channels!
+    # Meaning, dim(x) + D3/s = D3+d
+    # With default param (D3=64, d=16, s=4), this means dim(x)=64
+    out = R + h_conv6_act
+
+    return out
+
+def compressionBlock(x,out_ch):
+    alpha=0.1
+
+    conv = custom_lin(x,out_ch)
+    out = lrelu(conv,alpha)
+
+    return out
+
+def distillBlock(x,adj, d, D3, s):
+    M_conv=7
+
+    b1 = enhancementBlock(x, adj, M_conv, d, D3, s)
+    comp_outDim = int(D3 + d - D3/s)
+    out = compressionBlock(b1,comp_outDim)
+
+    return out
+
+
+
+def camSubNet(x, adj, architecture, keep_prob, reuse = True):
+
+    M_conv = 7
+    alpha = 0.1
+
+    if architecture == 0:
+        with tf.variable_scope('conv1', reuse=reuse):
+            h_conv1 = reusable_custom_conv2d(x, adj, 8, M_conv)
+            h_conv1_act = lrelu(h_conv1,alpha)
+
+        with tf.variable_scope('conv2', reuse=reuse):
+            h_conv2 = reusable_custom_conv2d(h_conv1_act, adj, 8, M_conv)
+            h_conv2_act = lrelu(h_conv2,alpha)
+
+        with tf.variable_scope('conv3', reuse=reuse):
+            h_conv3 = reusable_custom_conv2d(h_conv2_act, adj, 16, M_conv)
+            h_conv3_act = lrelu(h_conv3,alpha)
+
+        with tf.variable_scope('conv4', reuse=reuse):
+            h_conv4 = reusable_custom_conv2d(h_conv3_act, adj, 16, M_conv)
+            features = lrelu(h_conv4,alpha)
+
+    if architecture == 1:       # Very simple lightweight architecture (single conv) for testing general design
+        with tf.variable_scope('conv1', reuse=reuse):
+            out_channels_conv1 = 8
+            h_conv1 = reusable_custom_conv2d(x, adj, out_channels_conv1, M_conv)
+            features = lrelu(h_conv1,alpha)
+
+    return features
+
+
+def allCamNet(support, signal, adj, numCam, architecture, keep_prob):
+    M_conv = 7
+    alpha = 0.1
+    x_pos = support
+    # Change in dimension:
+    # signal shape: [batch, nodes, cams, channels]
+    camList=[]
+    batch_size,_,pos_channels = x_pos.get_shape().as_list()
+    _,_,_,signal_channels = signal.get_shape().as_list()
+
+    reuse=False
+    # --- Extract features per cameras ---
+    for cam in range(numCam):
+        # cam_color = signal[:,:,(cam*3):(3+cam*3)]
+        cam_color = signal[:,:,cam,:]
+        print("cam_color shape = ",cam_color.shape)
+        x_cam = tf.concat([x_pos,cam_color],axis=-1)
+        print("x_cam shape = ",x_cam.shape)
+        # camAdj = filterAdj(cam_color,adj,-1.0)
+        camAdj = adj
+        cam_features = camSubNet(x_cam,camAdj, architecture, keep_prob, reuse=reuse)
+        print("cam_features shape = ",cam_features.shape)
+        camList.append(cam_features)
+        reuse=True
+    # --- aggregate them (here: max pooling) ---
+    cam_stack = tf.stack(camList, axis=-1)
+    print("cam stack shape = ",cam_stack.shape)
+    # maxPool = tf.reduce_max(cam_stack, axis=-1)
+    maxPool = softmaxPooling(cam_stack,-1)
+    # maxPool = tf.reduce_mean(cam_stack, axis=-1)
+    print("maxPool shape = ",maxPool.shape)
+
+
+    # # Second - hopefully more efficient - version
+    # x_pos = x_pos[:,:,tf.newaxis,:]
+    # x_pos = tf.tile(x_pos,[1,1,numCam,1])
+    # full_in = tf.concat((x_pos,signal),axis=-1)
+    # # [batch, nodes, cams, pos + color channels]
+    # conv_in = tf.transpose(full_in,[0,2,1,3])
+    # # [batch, cams, nodes, all ch]
+    # conv_in = tf.reshape(conv_in,[batch_size*numCam,-1,pos_channels+signal_channels])
+    # # [batch*cams, nodes, all ch]
+
+    # --- decoding branch: returns a color per node ---
+
+    out_channels_dconv1 = 32
+    h_dconv1, _ = custom_conv2d(maxPool, adj, out_channels_dconv1, M_conv)
+    h_dconv1_act = lrelu(h_dconv1,alpha)
+
+    out_channels_fc1 = 64
+    h_fc1 = lrelu(custom_lin(h_dconv1_act, out_channels_fc1),alpha)
+
+    out_channels_reg = 3
+    y_conv = custom_lin(h_fc1, out_channels_reg)
+
+    finalColor = 2*tf.sigmoid(y_conv)-1
+    return finalColor
+
+
+
+def getSRModel(x, adj, architecture, keep_prob):
+
+        M_conv = 7
+        bTransInvariant = False
+        bRotInvariant = False
+        if architecture==0:
+
+            out_channels_fc0 = 8
+            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+            
+            # Conv1
+            out_channels_conv1 = 16
+            h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = tf.nn.relu(h_conv1)
+
+            # Conv2
+            out_channels_conv2 = 32
+            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv2_act = tf.nn.relu(h_conv2)
+
+            # Conv3
+            out_channels_conv3 = 32
+            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv3_act = tf.nn.relu(h_conv3)
+
+            # Lin(1024)
+            out_channels_fc1 = 128
+            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+            
+            # Lin(num_classes)
+            out_channels_reg = 3
+            y_conv = custom_lin(h_fc1, out_channels_reg)
+
+            # Logistic function
+            finalColor = 2*tf.sigmoid(y_conv)-1
+            return finalColor
+
+        if architecture == 1:
+
+            # --- Feature extraction block ---
+            out_channels_conv1 = 32
+            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = tf.nn.relu(h_conv1)
+
+            out_channels_conv2 = 64
+            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            features = tf.nn.relu(h_conv2)
+
+            # --- Information distillation blocks ---
+            id1 = distillBlock(features, adj,16,64,4)
+            # id2 = distillBlock(id1, adj)
+            idOut = distillBlock(id1, adj,16,64,4)
+
+            # --- Reconstruction block ---
+            resColor, _ = custom_conv2d(idOut, adj, 3, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+
+            x_color = x[:,:,3:]
+            x_stack = tf.reshape(x_color,[1,-1,5,3])
+            x_mean = tf.reduce_mean(x_stack,axis=2)
+            return resColor+x_mean
+
+        if architecture == 2:               # Like 1, with fewer channels everywhere
+
+            # --- Feature extraction block ---
+            out_channels_conv1 = 16
+            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = tf.nn.relu(h_conv1)
+
+            out_channels_conv2 = 32
+            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            features = tf.nn.relu(h_conv2)
+
+            # --- Information distillation blocks ---
+            id1 = distillBlock(features, adj,8,32,4)
+            # id2 = distillBlock(id1, adj)
+            idOut = distillBlock(id1, adj,8,32,4)
+
+            # --- Reconstruction block ---
+            resColor, _ = custom_conv2d(idOut, adj, 3, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+
+            x_color = x[:,:,3:]
+            x_stack = tf.reshape(x_color,[1,-1,5,3])
+            x_mean = tf.reduce_mean(x_stack,axis=2)
+            return resColor+x_mean
 
 
 def get_model_reg(x, adj, architecture, keep_prob):

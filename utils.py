@@ -398,6 +398,78 @@ def load_image(path,filename):
     f = os.path.join(path,filename)
     return skimage.data.imread(f)
 
+
+def load_text_adjMat(strFileName):
+
+    adjMat=[]
+    #first, read file and build arrays of vertices and faces
+    text = open(strFileName, "r")
+    for line in text:
+        values = line.split()
+        adjMat.append(list(map(int,values)))
+
+    adjMat = np.array(adjMat).astype(np.int32)
+    nodesNum = adjMat.shape[0]
+    print("nodesNum = "+str(nodesNum))
+    return adjMat
+
+def load_off_PC(strFileName):
+
+    # Read file and build arrays of vertices
+    text = open(strFileName, "r")
+
+    line = text.readline()
+    if line!="OFF\n":
+        print(line)
+        print("ERROR: header does not match")
+        return
+
+    line = text.readline()
+    print(line)
+    values = line.split()
+    vNum = values[0]
+    vertices=[]
+
+    for line in text:
+        values = line.split()
+        vertices.append(list(map(float, values[0:3])))
+
+    vertices = np.array(vertices).astype(np.float32)
+    print("vertices shape: "+str(vertices.shape))
+    nb_vert = vertices.shape[0]
+
+    return vertices
+
+def load_coff_PC(strFileName):
+
+    # Read file and build arrays of vertices
+    text = open(strFileName, "r")
+
+    line = text.readline()
+    if line!="COFF\n":
+        print(line)
+        print("ERROR: header does not match")
+        return
+
+    line = text.readline()
+    print(line)
+    values = line.split()
+    vNum = values[0]
+    vertices=[]
+    colors=[]
+    for line in text:
+        values = line.split()
+        vertices.append(list(map(float, values[0:3])))
+        colors.append(list(map(float, values[3:6])))
+
+    vertices = np.array(vertices).astype(np.float32)
+    colors = np.array(colors).astype(np.float32)
+    nb_vert = vertices.shape[0]
+    print("vertices shape: "+str(vertices.shape))
+    
+    return vertices, colors
+
+
 def load_mesh(path,filename,K,bGetAdj):
     strFileName = os.path.join(path,filename)
     vertices = []
@@ -572,6 +644,7 @@ def load_mesh(path,filename,K,bGetAdj):
     return new_vertices, adj, free_ind, faces, normals
 
 
+
 def write_xyz(vec, strFileName):
 
     #outputFile = open(strFileName,"w")
@@ -580,6 +653,10 @@ def write_xyz(vec, strFileName):
 
 def write_coff(vec, strFileName):
 
+    if np.amax(vec[:,3])<=1:
+        vec[:,3] = vec[:,3]*255
+        vec[:,4] = vec[:,4]*255
+        vec[:,5] = vec[:,5]*255
     outputFile = open(strFileName,"w")
     outputFile.write('COFF\n')
     outputFile.write(str(vec.shape[0])+' 0 0\n')
@@ -1350,6 +1427,96 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
     return vOut, fOut, fAdjOut, vOldInd , fOldInd    # return vOldInd (and fOldInd) as well, so we can run this once for GT/noisy mesh
 
 
+# This function takes a graph as input, and returns a subgraph, which is a patch of given size, by growing around the input seed
+def getGraphPatch(fAdjIn,nodesNum,seed):
+
+    K = fAdjIn.shape[1]
+    fAdjOut = np.zeros((nodesNum+K,K),dtype=int)
+
+    nodesNewInd = np.zeros(fAdjIn.shape[0],dtype=int)  # Array of correspondence between old nodes indices and new ones
+    nodesNewInd -= 1
+    nodesOldInd = np.zeros(fAdjIn.shape[0],dtype=int)      # Array of correspondence between new nodes indices and old ones
+    nodesOldInd -= 1
+
+
+    nIt = [0]   # Using list as a dirty trick for namespace reasons for inner functions
+
+    fAdjIn = fAdjIn-1   # Switch to zero-indexing
+
+
+    # Update correspondance tables
+    def addNode(nind):
+        nodesNewInd[nind] = nIt[0]
+        nodesOldInd[nIt[0]] = nind
+        nIt[0] += 1
+
+    nQueue = queue.Queue()          # Queue of nodes to be added
+    nQueue.put(seed)                # Add seed to start the process
+    #print("fQueue: "+str(fQueue.empty()))
+
+    addNode(seed)
+
+    while (nIt[0]<nodesNum):    # Keep growing until we reach desired count
+        if nQueue.empty():
+            break
+
+
+        curN = nQueue.get()             # Get current node index
+        newNInd = nodesNewInd[curN]     # Get its new index
+        # current node should already be added
+
+
+        fAdjOut[newNInd,0] = newNInd  #Add itself first.
+
+        # Process neighbours
+        for neigh in range(1,K):    # Skip first entry, its the current face
+            
+            curNei = fAdjIn[curN,neigh]
+
+            if curNei==-1:    # We've reached the last neighbour
+                break
+
+            if(nodesNewInd[curNei]==-1):  # If face not processed, add it to faces list and add it to queue
+                addNode(curNei)
+                nQueue.put(curNei)
+
+            fAdjOut[newNInd,neigh] = nodesNewInd[curNei]    #fill new adj graph
+
+    # We've reached the count.
+    # Now, fill adjacency graph for remaining nodes in the queue
+
+    while not nQueue.empty():
+        curN = nQueue.get()         # Get current face index
+        
+        newNInd = nodesNewInd[curN]     # Get its new index
+
+        fAdjOut[newNInd,0] = newNInd  #Add itself first.
+
+        neighCount = 1
+        # Process neighbours
+        for neigh in range(1,K):    # Skip first entry, its the current face
+            
+            curNei = fAdjIn[curN,neigh]
+
+            if curNei==-1:    # We've reached the last neighbour
+                break
+
+            if(nodesNewInd[curNei]==-1):  # If face not in the graph, skip it
+                continue
+
+            fAdjOut[newNInd,neighCount] = nodesNewInd[curNei]    #fill new adj graph
+            neighCount += 1
+
+
+    fAdjOut = fAdjOut[:nIt[0],:]
+    nodesOldInd = nodesOldInd[:nIt[0]]
+
+    fAdjOut = fAdjOut+1     # Switch back to one-indexing
+
+    return fAdjOut, nodesOldInd    # return nodesOldInd as well
+
+
+
 def normalizeTensor(x):
     with tf.variable_scope("normalization"):
         #norm = tf.norm(x,axis=-1)
@@ -1473,7 +1640,10 @@ def sparseToList(Adj, K):
     # return listAdj
 
 def inv_perm(perm):
-    inverse = [0] * len(perm)
+
+    inv_size = max(len(perm),np.amax(perm)+1)
+    print("Inv size = ",inv_size)
+    inverse = [0] * inv_size
     for i, p in enumerate(perm):
         inverse[p] = i
     return np.array(inverse)
@@ -2166,7 +2336,10 @@ def makeFacesMesh(myAdj, myP, myN):
     print("myP shape = "+str(myP.shape))
     print("myN shape = "+str(myN.shape))
 
-    nColor = (myN+1)/2
+    # # /!\ WARNING
+    # # Uncomment this for normals!
+    # nColor = (myN+1)/2
+    nColor = myN
     # nColor = np.zeros_like(myN)
     # nColor = nColor + [0.8,0.0,0.0]
 
@@ -2188,17 +2361,51 @@ def makeFacesMesh(myAdj, myP, myN):
     #         find+=1
     #         col+=2
 
+    # Solution 1
+        # for row in range(N):
+        #     col=1
+        #     while (col<K) and (myAdj[row, col]>=0):
+        #         fl[find,:] = [row,myAdj[row,col],row+N]
+        #         find+=1
+        #         col+=1
+
+    # # Alternate solution: should be longer, but with half as many faces
+    # for row in range(N):
+    #     col=1
+    #     while (col<K) and (myAdj[row, col]>=0):
+    #         neigh = myAdj[row,col]
+    #         if neigh!=row:
+    #             fl[find,:] = [row,neigh,row+N]
+    #             find+=1
+    #             col+=1
+    #             # Remove connection from other node to avoid duplicates
+    #             myIndTuple = np.where(myAdj[neigh,:]==row)
+    #             if len(myIndTuple[0])>0:
+    #                 # print("myIndTuple = ", myIndTuple)
+    #                 myInd = myIndTuple[0][0]
+    #                 myAdj[neigh,myInd]=neigh
+
+    # Fast AND light solution
     for row in range(N):
         col=1
+        neighbourCount=0
         while (col<K) and (myAdj[row, col]>=0):
-            fl[find,:] = [row,myAdj[row,col],row+N]
-            find+=1
+            neigh = myAdj[row,col]
+            if neigh>row:
+                fl[find,:] = [row,neigh,row+N]
+                find+=1
+                neighbourCount+=1
             col+=1
+        # print("node %s, %s neighbours, %s edges added"%(row,(col-1),neighbourCount))
+
 
     fl = fl[:find,:]
     print("vl shape = "+str(vl.shape))
     print("fl shape = "+str(fl.shape))
     return vl, fl
+
+
+
 
 
 # This function takes a mesh (V, F), and return a new set of vertices V, with added low-frequency gaussian noise.
@@ -2434,6 +2641,84 @@ def variable_summaries(var):
     tf.summary.histogram('histogram', var)
 
 
+# Derived from the tensorflow version in model.py (simpler. Because of numpy or not only?)
+def filterNumpyAdj(x, adj, zeroValue):
+    
+    batch_size = x.shape[0]
+    N = x.shape[1]
+    # x : [batch, N, ch]
+    K = adj.shape[2]
+
+    myRange = np.arange(N+1)
+    # [N]
+    adjb = adj[0,:,:]
+    newAdjLst = []
+    for b in range(batch_size):
+        xb = x[b,:,:]
+        # [N, ch]
+        zeroNodes = np.all((xb==zeroValue),axis=-1)
+        # [N]
+        zeroNodesPad = np.concatenate((np.array[False],zeroNodes))
+        # [N+1]
+
+        # Pad adj mat with the "all zero" row to replace other rows
+        adjbPad = np.concatenate((np.zeros([1,K]),adjb),axis=0)
+
+        # Get indices we want to update to index this "zero-row"
+        tempRange = np.copy(myRange)
+        tempRange[zeroNodesPad]=0
+        # Update adj: two steps
+        # Set given rows to all zeros
+        newAdjb = adjbPad[tempRange]
+        # Set  link to these nodes to zero in other rows
+        newAdjb = tempRange[newAdjb]
+
+        # Get rid of extra row
+        newAdjb = newAdjb[1:,:]
+        newAdjLst.append(newAdjb)
+
+
+    newAdj = np.stack(newAdjLst, axis=0)
+
+    return newAdj
+
+
+# input arg adj is considered to be 1-indexed, with no 1st line padding
+# (It's getting hard not to mix things up...)
+def getN2Adj(adj, K2):
+
+    N, K = adj.shape
+
+    adjPad = np.concatenate((np.zeros((1,K),dtype=np.int32),adj),axis=0)
+
+    adjN2 = np.zeros((N,K2),dtype=np.int32)
+    # curN2Ind = np.zeros((N),dtype=np.int32) # Keep track of current index for each row
+    # for row in range(1,N): # For each node n0 (excluding 1st padding row)
+
+    #     for rowInd in range(1,K): # For each of its neighbours (excluding itself)
+
+    #         if adjPad[row,rowInd]>0:    # If real neighbour n1
+    #         # Add n0's neighbours to n1
+
+
+
+    adjN2Raw = adjPad[adjPad]
+    adjN2Raw = np.reshape(adjN2Raw,[N+1,K*K])
+    for row in range(1,N):
+        curRow = adjN2Raw[row,:]
+        _, uniqueRowIdx = np.unique(curRow, return_index=True)
+        uniqueRow = curRow[np.sort(uniqueRowIdx)]
+
+        rowSize = uniqueRow.shape[0]
+        if rowSize>K2:
+            print("ERROR: saturated neighbourhood!! Missing edges!")
+            rowSize=K2
+        adjN2[row,:rowSize] = uniqueRow
+
+    # Remove padding row
+    adjN2 = adjN2[1:,:]
+
+    return adjN2
 
 
 # End of file
