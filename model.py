@@ -1420,7 +1420,7 @@ def distillBlock(x,adj, d, D3, s):
 
 
 
-def camSubNet(x, adj, architecture, keep_prob, reuse = True):
+def camSubNet(x, adj, architecture, keep_prob, reuse = False):
 
     M_conv = 7
     alpha = 0.1
@@ -1441,14 +1441,16 @@ def camSubNet(x, adj, architecture, keep_prob, reuse = True):
         with tf.variable_scope('conv4', reuse=reuse):
             h_conv4 = reusable_custom_conv2d(h_conv3_act, adj, 16, M_conv)
             features = lrelu(h_conv4,alpha)
+        out_ch = 16
 
     if architecture == 1:       # Very simple lightweight architecture (single conv) for testing general design
         with tf.variable_scope('conv1', reuse=reuse):
             out_channels_conv1 = 8
             h_conv1 = reusable_custom_conv2d(x, adj, out_channels_conv1, M_conv)
             features = lrelu(h_conv1,alpha)
+        out_ch = 8
 
-    return features
+    return features, out_ch
 
 
 def allCamNet(support, signal, adj, numCam, architecture, keep_prob):
@@ -1471,7 +1473,7 @@ def allCamNet(support, signal, adj, numCam, architecture, keep_prob):
         print("x_cam shape = ",x_cam.shape)
         # camAdj = filterAdj(cam_color,adj,-1.0)
         camAdj = adj
-        cam_features = camSubNet(x_cam,camAdj, architecture, keep_prob, reuse=reuse)
+        cam_features, _ = camSubNet(x_cam,camAdj, architecture, keep_prob, reuse=reuse)
         print("cam_features shape = ",cam_features.shape)
         camList.append(cam_features)
         reuse=True
@@ -1493,6 +1495,11 @@ def allCamNet(support, signal, adj, numCam, architecture, keep_prob):
     # # [batch, cams, nodes, all ch]
     # conv_in = tf.reshape(conv_in,[batch_size*numCam,-1,pos_channels+signal_channels])
     # # [batch*cams, nodes, all ch]
+
+    # # -- camSubNet replacement ---
+    # conv_out, out_ch = camSubNet(conv_in,tf.tile(adj,[numCam,1,1]), architecture,keep_prob)
+    # conv_out = tf.reshape(conv_out,[batch_size,numCam,-1,out_ch])
+    # maxPool = softmaxPooling(conv_out, 1)
 
     # --- decoding branch: returns a color per node ---
 

@@ -399,10 +399,12 @@ def load_image(path,filename):
     return skimage.data.imread(f)
 
 
+def load_txt_vec(strFileName):
+    myVec=[]
+
 def load_text_adjMat(strFileName):
 
     adjMat=[]
-    #first, read file and build arrays of vertices and faces
     text = open(strFileName, "r")
     for line in text:
         values = line.split()
@@ -2389,12 +2391,13 @@ def makeFacesMesh(myAdj, myP, myN):
     for row in range(N):
         col=1
         neighbourCount=0
-        while (col<K) and (myAdj[row, col]>=0):
-            neigh = myAdj[row,col]
-            if neigh>row:
-                fl[find,:] = [row,neigh,row+N]
-                find+=1
-                neighbourCount+=1
+        while (col<K):
+            if myAdj[row, col]>=0:
+                neigh = myAdj[row,col]
+                if neigh>row:
+                    fl[find,:] = [row,neigh,row+N]
+                    find+=1
+                    neighbourCount+=1
             col+=1
         # print("node %s, %s neighbours, %s edges added"%(row,(col-1),neighbourCount))
 
@@ -2691,7 +2694,7 @@ def getN2Adj(adj, K2):
 
     adjPad = np.concatenate((np.zeros((1,K),dtype=np.int32),adj),axis=0)
 
-    adjN2 = np.zeros((N,K2),dtype=np.int32)
+    adjN2 = np.zeros((N+1,K2),dtype=np.int32)
     # curN2Ind = np.zeros((N),dtype=np.int32) # Keep track of current index for each row
     # for row in range(1,N): # For each node n0 (excluding 1st padding row)
 
@@ -2719,6 +2722,85 @@ def getN2Adj(adj, K2):
     adjN2 = adjN2[1:,:]
 
     return adjN2
+
+
+# Adj is FeaStNet style (1-indexed, auto indexing)
+# lvlList specifies, for each node, the smallest coarsening lvl at which it should be kept (0 = coarsest (vertices only)).
+def buildAdjPyramid(adj, lvlList):
+
+    K = adj.shape[1]
+
+    # List matrices from finest to coarsest
+    adjList = []
+    parentsList = []
+    childrenList = []
+
+    maxLvl = np.amax(lvlList)   # Working only from 0 to 3 for now
+
+    adjList.append(adj)
+
+    # Initialize loop variables
+    curLvl = maxLvl-1
+    fineAdj = adj
+    curLvlList = lvlList
+    while curLvl>=0:
+
+        coarseNodesNum = np.sum(lvlList<=curLvl)
+        fineNodesNum = fineAdj.shape[0]
+        
+        newLvlList= curLvlList[curLvlList<=curLvl]
+        # First, fill children matrix: easy, just select the right rows from fine adj
+        childrenMat = fineAdj[curLvlList<=curLvl] # Should be [coarseNodesNum,K]
+
+        # WARNING!! We follow a more traditional 0-indexing for childrenMat
+        childrenMat = childrenMat-1
+
+        # Given children matrix, parent matrix can be computed easily
+        parentMat = np.zeros([fineNodesNum,2],dtype=np.int32)
+        parentMatInd = np.zeros([fineNodesNum],dtype=np.int32)
+        for p in range(coarseNodesNum):
+
+            for c in range(K):
+                child = childrenMat[p,c]
+                if child>=0:
+                    if(parentMatInd[child]>1):
+                        print("ERROR: more than 2 parents!")
+                    parentMat[child,1] = p
+                    if parentMatInd[child]==0:
+                        parentMat[child,0] = p
+                    parentMatInd[child] = parentMatInd[child]+1
+        # Similarly, parentMat is 0-indexed
+
+
+        # Finally, the parent matrix helps us compute the new adj matrix
+        coarseAdj = np.zeros((coarseNodesNum,K-1),dtype=np.int32) # Contains parent adj
+        # Already prefill the first column (auto-indexing)
+        firstColumn = np.arange(coarseNodesNum)
+        firstColumn = firstColumn[:,np.newaxis] + 1
+        coarseAdj = np.concatenate((firstColumn,coarseAdj),axis=-1)
+
+        coarseAdjInd = np.ones([coarseNodesNum],dtype=np.int32)
+        
+        for row in range(fineNodesNum):
+            p1 = parentMat[row,0]
+            p2 = parentMat[row,1]
+            if (p1!=p2):
+                coarseAdj[p1,coarseAdjInd[p1]] = p2+1
+                coarseAdjInd[p1]=coarseAdjInd[p1]+1
+                coarseAdj[p2,coarseAdjInd[p2]] = p1+1
+                coarseAdjInd[p2]=coarseAdjInd[p2]+1
+
+        # Append to lists
+        adjList.append(coarseAdj)
+        parentsList.append(parentMat)
+        childrenList.append(childrenMat)
+
+        # Update loop variables for next iteration
+        curLvl-=1
+        fineAdj = coarseAdj
+        curLvlList = newLvlList
+
+    return adjList, parentsList, childrenList
 
 
 # End of file

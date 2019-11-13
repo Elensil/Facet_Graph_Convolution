@@ -338,7 +338,7 @@ def inferNet(inputColor_list, pos_list, adjMat_list):
         BATCH_SIZE=1
         NUM_IN_CHANNELS = inputColor_list[0].shape[2]
         # NUM_CAM = inputColor_list[0].shape[2]
-        NUM_CAM = 20
+        NUM_CAM = 10
         TOTAL_CAM = int(NUM_IN_CHANNELS/3)
         # NODES_NUM = inputColor.shape[1]
         K_faces = adjMat_list[0].shape[2]
@@ -350,7 +350,7 @@ def inferNet(inputColor_list, pos_list, adjMat_list):
 
 
         # inColors_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='inColors_')
-        inColors_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, TOTAL_CAM,3], name='inColors_')
+        inColors_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_CAM,3], name='inColors_')
 
         adjMat_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='adjMat_')
         inPos_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='inPos_')
@@ -380,7 +380,7 @@ def inferNet(inputColor_list, pos_list, adjMat_list):
 
         for i in range(len(inputColor_list)):
 
-            my_feed_dict = {inColors_: inputColor_list[i], adjMat_: adjMat_list[i], inPos_: pos_list[i], keep_prob:1}
+            my_feed_dict = {inColors_: inputColor_list[i][:,:,:NUM_CAM,:], adjMat_: adjMat_list[i], inPos_: pos_list[i], keep_prob:1}
 
             outColor = sess.run(outColor_,feed_dict=my_feed_dict)
             outColor_list.append(outColor)
@@ -451,7 +451,7 @@ def trainNet(input_list, GT_list, adj_list, valid_input_list, valid_GT_list, val
     
     # training data
     # inColors_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='inColors_')
-    inColors_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, TOTAL_CAM,3], name='inColors_')
+    inColors_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_CAM,3], name='inColors_')
     
     adjMat_ = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='adjMat_')
 
@@ -598,6 +598,7 @@ def trainNet(input_list, GT_list, adj_list, valid_input_list, valid_GT_list, val
                 np.random.shuffle(temp_in)
                 # print("temp_in shape = ",temp_in.shape)
                 temp_in = np.transpose(temp_in,[1,2,0,3])
+                temp_in = temp_in[:,:,:NUM_CAM,:]
                 # print("temp_in shape = ",temp_in.shape)
                 train_fd = {inColors_: temp_in, gtColor_: temp_GT, adjMat_: adj_list[batchSlice], inPos_: temp_Pos, rot_mat:tens_random_R2, sample_ind: random_ind, keep_prob:1}
 
@@ -687,7 +688,7 @@ def trainNet(input_list, GT_list, adj_list, valid_input_list, valid_GT_list, val
                 tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
                 temp_GT = valid_GT_list[validSlice][:,:,3:]
                 temp_Pos = valid_GT_list[validSlice][:,:,:3]
-                valid_fd = {inColors_: valid_input_list[validSlice], gtColor_: temp_GT, adjMat_: valid_adj_list[validSlice], inPos_: temp_Pos, rot_mat:tens_random_R2, sample_ind: random_ind, keep_prob:1}
+                valid_fd = {inColors_: valid_input_list[validSlice][:,:,:NUM_CAM,:], gtColor_: temp_GT, adjMat_: valid_adj_list[validSlice], inPos_: temp_Pos, rot_mat:tens_random_R2, sample_ind: random_ind, keep_prob:1}
 
                 valid_loss += customLoss.eval(feed_dict=valid_fd)
                 it+=1
@@ -827,31 +828,6 @@ def binaryMSELoss(prediction,gt,adjMat):
     return loss
 
 
-def faceNormalsLoss(fn,gt_fn):
-
-    #version 1
-    n_dt = tensorDotProduct(fn,gt_fn)
-    # [1, fnum]
-    #loss = tf.acos(n_dt-1e-5)    # So that it stays differentiable close to 1
-    close_to_one = 0.9999999
-    loss = tf.acos(tf.minimum(tf.maximum(n_dt,-close_to_one),close_to_one))    # So that it stays differentiable close to 1 and -1
-    gtfn_abs_sum = tf.reduce_sum(tf.abs(gt_fn),axis=2)
-    fakenodes = tf.less_equal(gtfn_abs_sum,10e-4)
-    #fakenodes = tf.reduce_all(fakenodes,axis=-1)
-
-    zeroVec = tf.zeros_like(loss)
-    oneVec = tf.ones_like(loss)
-    realnodes = tf.where(fakenodes,zeroVec,oneVec)
-    loss = 180*loss/math.pi
-    # loss = 1 - n_d
-
-    #Set loss to zero for fake nodes
-    loss = tf.where(fakenodes,zeroVec,loss)
-    loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
-    #loss = tf.reduce_mean(loss)
-    return loss
-
-
 
 
 # Repickle all files in folder with protocol 2 for python 2
@@ -882,56 +858,6 @@ def getFolderAvgEdgeLength(folderPath, normalize=False):
     # print("edge length = "+str(tot_el))
     return tot_el
 
-
-
-def pickleFND(folderPath, binDumpPath):
-    sigma_r_list = [0.1,0.2,0.35,0.5,-1]
-    # sigma_r_list = [-1]
-    sigma_s_list = [AVG_EDGE_LENGTH,2*AVG_EDGE_LENGTH]
-
-    for filename in os.listdir(folderPath):
-
-        # if filename.startswith("dragon"):
-        #     continue
-
-        if not os.path.isfile(binDumpPath+filename+'FND'):
-            print("loading "+filename)
-            V0,_,_, faces0, _ = load_mesh(folderPath, filename, 0, False)
-
-            my_el, _ = getAverageEdgeLength(V0, faces0)
-            print("avg edge length = "+str(my_el))
-            cur_sigma_s_list = [my_el, 2*my_el]
-            # Compute normals
-            f_normals0 = computeFacesNormals(V0, faces0)
-            # Get faces position
-            f_pos0 = getTrianglesBarycenter(V0, faces0)
-
-            f_area0 = getTrianglesArea(V0,faces0)
-
-            
-            f_FND = FND(f_pos0, f_normals0, f_area0, cur_sigma_s_list, sigma_r_list)
-            
-            with open(binDumpPath+filename+'FND', 'wb') as fp:
-                pickle.dump(f_FND, fp)
-
-
-
-def checkFND(filePath, filename):
-
-    V0,_,_, faces_noisy, _ = load_mesh(filePath, filename, 0, False)
-
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/FND_el_c4/"
-    with open(binDumpPath+filename+'FND', 'rb') as fp:
-        fnd = pickle.load(fp)
-
-    for fil in range(10):
-
-        cur_n = fnd[:,3*fil:3*fil+3]
-
-        colormap = (cur_n+1)/2
-        newV, newF = getColoredMesh(V0, faces_noisy, colormap)
-        
-        write_mesh(newV, newF, RESULTS_PATH+filename[:-4]+"_FND_"+str(fil)+".obj")
 
 
 
@@ -1071,8 +997,14 @@ def mainFunction():
 
         adjMat = newAdj
 
+        print("adjMat shape = ",adjMat.shape)
+        print("max adjMat = ",np.amax(adjMat))
+
         if BOOL_N2:
             adjMat = getN2Adj(adjMat,40)
+
+        print("adjMat shape = ",adjMat.shape)
+        print("max adjMat = ",np.amax(adjMat))
 
         # Get patches if mesh is too big
         nodesNum = nodesInput.shape[0]
@@ -2495,8 +2427,9 @@ def mainFunction():
         adj_list = []
         GT_list = []
 
-        maxSize = 50000
+        maxSize = 30000
         patchSize = maxSize
+        maxPatch = 80
         patchIndices_list, nodesNum = addMesh(dataFolder, dataBaseName, in_list, GT_list, adj_list, training_meshes_num)
         # inPos = GT_list[0][:,:,:3]
 
