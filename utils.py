@@ -1727,10 +1727,10 @@ def transposeNormals(targetPoints, targetFaces, sourcePoints, sourceFaces, targe
             curC = np.tile(curC,(fnumS,1))
             diff = curC-sourceC
             dist = np.linalg.norm(diff,axis=1)
-            if mode=='closest':
+            if mode=='closest':                 # Take normal of closest triangle in source mesh
                 ind = np.argmin(dist)
                 targetNormals[f,:] = sourceNormals[ind,:]
-            if mode=='varying_gaussian':
+            if mode=='varying_gaussian':        # Take weighted average of local neighbourhood with a gaussian kernel. Sigma depends on distance to source mesh
 
                 # orient = np.sum(np.multiply(np.tile(np.reshape(targetNormals[f,:],(1,3)),(fnumS,1)),diff),axis=1)
                 # orient = np.sum(np.multiply(np.reshape(targetNormals[f,:],(1,3)),diff),axis=1)
@@ -1757,7 +1757,7 @@ def transposeNormals(targetPoints, targetFaces, sourcePoints, sourceFaces, targe
                 finalNorm = np.sum(finalNorm,axis=0)/np.sum(weights)
                 targetNormals[f,:] = finalNorm
 
-            if mode=='fixed_gaussian':
+            if mode=='fixed_gaussian':          # Take weighted average of local neighbourhood with a gaussian kernel. Sigma fixed. Normal set to -1 if empty neighbourhood
 
                 # orient = np.sum(np.multiply(np.tile(np.reshape(targetNormals[f,:],(1,3)),(fnumS,1)),diff),axis=1)
                 # orient = np.sum(np.multiply(np.reshape(targetNormals[f,:],(1,3)),diff),axis=1)
@@ -1790,7 +1790,7 @@ def transposeNormals(targetPoints, targetFaces, sourcePoints, sourceFaces, targe
                     targetNormals[f,:] = finalNorm
 
 
-    if mode=='fancy':
+    if mode=='fancy':                           # Pair a few faces with closest source face. Use these seed to grow pairs around, with connectivity constraints. Repeat N times with random seed and keep best match
         minDist = 0
         K = targetAdj.shape[1]
         curTargetNormals = targetNormals

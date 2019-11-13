@@ -2093,6 +2093,8 @@ def update_position_MS(x, face_normals_list, faces, v_faces0, coarsening_steps, 
     x = tf.expand_dims(x,axis=0)
     return x, dx_list
 
+
+# Contrary to what the name suggests, it seems 'face_normals_list' is actually a displacement per face
 def update_position_disp(x, face_normals_list, faces, v_faces0, coarsening_steps):
 
     batch_size, num_points, space_dims = x.get_shape().as_list()
