@@ -189,8 +189,8 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
         upN2 = custom_upsampling(new_normals2,COARSENING_STEPS*2)
         new_normals = [new_normals0, new_normals1, new_normals2]
         
-        # refined_x, dx_list = update_position_disp(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
-        refined_x, dx_list = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        refined_x, dx_list = update_position_disp(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
+        # refined_x, dx_list = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
 
         refined_x = refined_x #+ dx_list[1] #+ dx_list[2]
 
@@ -680,8 +680,8 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
 
-    if not os.path.exists(RESULTS_PATH):
-            os.makedirs(RESULTS_PATH)
+    if not os.path.exists(NETWORK_PATH):
+            os.makedirs(NETWORK_PATH)
 
 
     """
@@ -700,6 +700,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     NUM_POINTS=in_points_list[0].shape[1]
     # training data
     fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
+    # tfn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='tfn_')
     #fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj')
 
     vp_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE, None, 3], name='vp_')
@@ -730,10 +731,10 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
     # --- Starting iterative process ---
 
-
     #Add random rotation
     fn_rot = tf.reshape(fn_,[BATCH_SIZE,-1,2,3])    # 2 because of normal + position
     fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # switch dimensions
+    # tfn_rot = tf.reshape(tfn_,[BATCH_SIZE,-1,3,1])
     
     vp_rot = tf.reshape(vp_,[BATCH_SIZE,-1,3,1])
     gtvp_rot = tf.reshape(gtvp_,[BATCH_SIZE,-1,3,1])
@@ -742,11 +743,13 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         fn_rot = tf.matmul(rot_mat,fn_rot)
         vp_rot = tf.matmul(rot_mat_vert,vp_rot)
         gtvp_rot = tf.matmul(rot_mat_gt,gtvp_rot)
+        # tfn_rot = tf.matmul(rot_mat,tfn_rot)
     else:
         print("WARNING: hard-coded rot inv removal")
 
     fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # Put it back
     fn_rot = tf.reshape(fn_rot,[BATCH_SIZE,-1,6])
+    # tfn_rot = tf.reshape(tfn_rot,[BATCH_SIZE,-1,3])
 
     vp_rot = tf.reshape(vp_rot,[BATCH_SIZE,-1,3])
     gtvp_rot = tf.reshape(gtvp_rot,[BATCH_SIZE,-1,3])
@@ -771,6 +774,17 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     refined_x, _ = update_position_disp(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS)
     # refined_x = update_position2(vp_rot, n_conv, e_map_, ve_map_, iter_num=2000)
     
+    # For debugging:
+    # disp = refined_x-vp_rot
+    # refined_x = gtvp_rot+0.00001*disp
+
+    newfpos, newfnorm, _ = updateFacesCenterAndNormals(refined_x, faces_, COARSENING_STEPS)
+    
+    _, gtfn, gtfn_raw = updateFacesCenterAndNormals(gtvp_rot, faces_, COARSENING_STEPS)
+
+
+    tfn_rot = gtfn[0]
+    gtfn_normalized = normalizeTensor(tfn_rot)
 
     # samp_x = tf.transpose(refined_x,[1,0,2])
     # samp_x = tf.gather(samp_x,sample_ind0)
@@ -778,10 +792,13 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     samp_x = refined_x
     
     with tf.device(DEVICE):
-        # customLoss = accuracyLoss(refined_x, gtvp_rot, sample_ind0)
-        # customLoss = fullLoss(refined_x, gtvp_rot, sample_ind0, sample_ind1) + connectivityRegularizer(refined_x,faces_,v_faces_, sample_ind0)
-        customLoss = fullLoss(refined_x, gtvp_rot, sample_ind0, sample_ind1)
-        # customLoss = sampledAccuracyLoss(samp_x, gtvp_rot)
+        # # customLoss = accuracyLoss(refined_x, gtvp_rot, sample_ind0)
+        # # customLoss = fullLoss(refined_x, gtvp_rot, sample_ind0, sample_ind1) + connectivityRegularizer(refined_x,faces_,v_faces_, sample_ind0)
+        # customLoss = fullLoss(refined_x, gtvp_rot, sample_ind0, sample_ind1)
+        # # customLoss = sampledAccuracyLoss(samp_x, gtvp_rot)
+
+        customLoss, detail, dotp = faceNormalsLoss(newfnorm[0],tfn_rot)
+
         train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
 
     saver = tf.train.Saver()
@@ -790,7 +807,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
     globalStep = 0
 
-    ckpt = tf.train.get_checkpoint_state(os.path.dirname(RESULTS_PATH))
+    ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
     if ckpt and ckpt.model_checkpoint_path:
         splitCkpt = os.path.basename(ckpt.model_checkpoint_path).split('-')
         if splitCkpt[0] == NET_NAME:
@@ -850,6 +867,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                         fadj2: f_adj_list[batch_num][2], vp_: in_points_list[batch_num], gtvp_: GT_points_list[batch_num],
                         faces_: faces_list[batch_num], v_faces_: v_faces_list[batch_num], 
                         rot_mat:tens_random_R2, rot_mat_vert:tens_random_Rv, rot_mat_gt: tens_random_Rgt,
+                        # tfn_: GTfn_list[batch_num],
                         sample_ind0: random_ind0, sample_ind1: random_ind1, keep_prob:dropout_prob}
         # train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
         #                 fadj2: f_adj_list[batch_num][2], vp_: batch_in_points, gtvp_: GT_points_list[batch_num],
@@ -859,6 +877,20 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
 
         train_loss_cur = customLoss.eval(feed_dict=train_fd)
+
+        # nv, gtv, nc, gtn, gtn_norm, gtn_raw, predn, detail_eval, dotp_eval = sess.run([vp_rot,gtvp_rot, n_conv0, tfn_rot, gtfn_normalized, gtfn_raw, newfnorm[0], detail, dotp], feed_dict=train_fd)
+        # print("example num ",batch_num)
+        # print("vp samp = ",nv[0,:5,:])
+        # print("gtvp samp = ",gtv[0,:5,:])
+        # print("nconv samp = ",nc[0,:5,:])
+        # print("gtn_raw samp = ",gtn_raw[0,:5,:])
+        # print("gtn samp = ",gtn[0,:5,:])
+        # print("gtn_norm samp = ",gtn_norm[0,:5,:])
+        # print("predn samp = ",predn[0,:5,:])
+        # print("dotp samp = ",dotp_eval[0,:5])
+        # print("detailed loss = ",detail_eval[0,:5])
+        # print("curloss = %f"%train_loss_cur)
+
 
         train_loss += train_loss_cur
         train_samp+=1
@@ -893,6 +925,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                         fadj2: valid_f_adj_list[vbm][2], vp_: valid_in_points_list[vbm], gtvp_: valid_GT_points_list[vbm],
                         faces_:valid_faces_list[vbm], v_faces_:valid_v_faces_list[vbm],
                         rot_mat:tens_random_R2, rot_mat_vert:tens_random_Rv, rot_mat_gt: tens_random_Rgt,
+                        # tfn_:valid_GTfn_list[vbm],
                         sample_ind0: valid_random_ind0, sample_ind1: valid_random_ind1, keep_prob:1.0}
 
                 valid_loss_cur = customLoss.eval(feed_dict=valid_fd)
@@ -911,10 +944,10 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         #     print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
         #     print("patch size: "+str(f_normals_list[batch_num].shape))
         if ((iter%500 == 0)and(iter>0)):
-            saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+iter)
+            saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+iter)
             # if sess.run(isFullNanNConv, feed_dict=train_fd):
             #     break
-            csv_filename = RESULTS_PATH+NET_NAME+".csv"
+            csv_filename = NETWORK_PATH+NET_NAME+".csv"
             f = open(csv_filename,'ab')
             np.savetxt(f,lossArray, delimiter=",")
             f.close()
@@ -923,10 +956,10 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
         lossArrayIter+=1
     
-    saver.save(sess, RESULTS_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
+    saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
 
     sess.close()
-    csv_filename = RESULTS_PATH+NET_NAME+".csv"
+    csv_filename = NETWORK_PATH+NET_NAME+".csv"
     f = open(csv_filename,'ab')
     np.savetxt(f,lossArray, delimiter=",")
     f.close()
@@ -1511,9 +1544,10 @@ def faceNormalsLoss(fn,gt_fn):
 
     #Set loss to zero for fake nodes
     loss = tf.where(fakenodes,zeroVec,loss)
+    lossDetail = loss
     loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
     #loss = tf.reduce_mean(loss)
-    return loss
+    return loss, lossDetail, n_dt
 
 def squareFaceNormalsLoss(fn,gt_fn):
 
@@ -2348,7 +2382,7 @@ def updateFacesCenterAndNormals(vertices, faces, coarsening_steps):
     N2 = custom_binary_tree_pooling(N1, steps=coarsening_steps, pooltype='avg_ignore_zeros')
     N2 = normalizeTensor(N2)
 
-    return [fpos0, fpos1, fpos2], [N0, N1, N2]
+    return [fpos0, fpos1, fpos2], [N0, N1, N2], N
 
 
 def mainFunction():
@@ -2357,10 +2391,10 @@ def mainFunction():
     pickleLoad = True
     pickleSave = True
 
-    K_faces = 30
+    K_faces = 25
 
-    maxSize = 30000 #35000
-    patchSize = 30000 #15000
+    maxSize = 15000 #30000
+    patchSize = 15000 #30000
 
     training_meshes_num = [0]
     valid_meshes_num = [0]
@@ -2381,31 +2415,33 @@ def mainFunction():
     #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/furu/cleaned_c4/"
     #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/BinaryDump/tola/c4/"
 
-    # if COARSENING_STEPS==3:
-    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c8/"
-    # elif COARSENING_STEPS==2:
-    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
-
     if COARSENING_STEPS==3:
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8_clean/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_decim_gauss/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_debug/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_gauss/"
-
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/faceAssignment_c8/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/faceAssignment_c8_30/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/fullGT_c8/"
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8_decim/"
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_decim/"
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_decim_gauss_clean_full/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c8/"
     elif COARSENING_STEPS==2:
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4_decim/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim_gauss_full/"
-        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim_gauss_clean_full/"
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim_gauss/"
-        # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/newT2/"
+        binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/msVertices_c4/"
+
+
+    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/NewExp/BinDump/"
+    # if COARSENING_STEPS==3:
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8_clean/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_decim_gauss/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_debug/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_gauss/"
+
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/faceAssignment_c8/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/faceAssignment_c8_30/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/fullGT_c8/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c8_decim/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_decim/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c8_decim_gauss_clean_full/"
+    # elif COARSENING_STEPS==2:
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/msVertices_c4_decim/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim_gauss_full/"
+    #     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim_gauss_clean_full/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/normals_c4_decim_gauss/"
+    #     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/BinaryDump/newT2/"
 
     empiricMax = 30.0
 
@@ -2600,6 +2636,17 @@ def mainFunction():
         # Normalize vertices
         # V0, GT0 = normalizePointSets(V0,GT0)
 
+        diag = getPCDiag(V0)
+
+        V0 = 2*math.sqrt(3)*V0/diag
+        GT0 = 2*math.sqrt(3)*GT0/diag
+        f_pos0 = 2*math.sqrt(3)*f_pos0/diag
+
+        meanPoint = np.mean(V0,axis=0)
+        meanPoint = meanPoint[np.newaxis,:]
+        V0 = V0-meanPoint
+        GT0 = GT0-meanPoint
+        f_pos0 = f_pos0-meanPoint
 
         # Get patches if mesh is too big
         facesNum = faces0.shape[0]
@@ -2631,8 +2678,10 @@ def mainFunction():
 
                 # For DTU: take slice of GT points
                 patchBB = getBoundingBox(testPatchV)
-                patchGTV = takePointSetSlice(GT0,patchBB)
+                # patchGTV = takePointSetSlice(GT0,patchBB)
                 
+                patchGTV = GT0[vOldInd]
+
                 # If no GT in the window, skip this patch (fake surface)
                 if patchGTV.shape[0]<testPatchV.shape[0]:
                     continue
@@ -3408,10 +3457,10 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/test_bits/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/test/"
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
-        noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/test_bits/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid_cleaned/"
+        # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid_cleaned/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train_cleaned/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/results/1stStep/"
@@ -3426,6 +3475,8 @@ def mainFunction():
 
             
             if (not noisyFile.endswith(".obj")):
+                continue
+            if (noisyFile.startswith("arma")):
                 continue
             print("noisyFile: "+noisyFile)
             # if (not noisyFile.startswith("chinese")):
@@ -3493,8 +3544,8 @@ def mainFunction():
                     t0 = time.clock()
                     #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                     # upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, faces_num, patch_indices, permutations,facesNum)
-                    # upV0, upN0, upN1, upN2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                    upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
+                    upV0, upN0, upN1, upN2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
+                    # upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                     print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
 
                     write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
@@ -3870,14 +3921,14 @@ def mainFunction():
 
         # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/train_cleaned/"
         # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid_cleaned/"
-        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
-        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid/"
+        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
+        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid/"
 
-        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
+        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
 
-        # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-        # validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-        # gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
+        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
         
         #print("training_meshes_num 0 " + str(training_meshes_num))
         if pickleLoad:
@@ -3953,14 +4004,14 @@ def mainFunction():
                     # fileNumStr = filename[4:7]
                     # gtfilename = 'stl'+fileNumStr+'_total.obj'
 
-                    # # For CNR dataset
-                    # gtfilename = filename[:-gtnameoffset]+".obj"
+                    # For CNR dataset
+                    gtfilename = filename[:-gtnameoffset]+".obj"
 
-                    #For FAUST
-                    fileNumStr = filename[5:8]
-                    # if int(fileNumStr)>2:
-                    #     continue
-                    gtfilename = 'gt'+fileNumStr+'.obj'
+                    # #For FAUST
+                    # fileNumStr = filename[5:8]
+                    # # if int(fileNumStr)>2:
+                    # #     continue
+                    # gtfilename = 'gt'+fileNumStr+'.obj'
 
                     addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
 
@@ -4043,12 +4094,12 @@ def mainFunction():
                     # fileNumStr = filename[4:7]
                     # gtfilename = 'stl'+fileNumStr+'_total.obj'
 
-                    # # For CNR dataset
-                    # gtfilename = filename[:-gtnameoffset]+".obj"
+                    # For CNR dataset
+                    gtfilename = filename[:-gtnameoffset]+".obj"
 
-                    #For FAUST
-                    fileNumStr = filename[5:8]
-                    gtfilename = 'gt'+fileNumStr+'.obj'
+                    # #For FAUST
+                    # fileNumStr = filename[5:8]
+                    # gtfilename = 'gt'+fileNumStr+'.obj'
 
                     addMeshWithVertices(validFilePath, filename, gtFilePath, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list, valid_meshes_num)
                     
@@ -4069,6 +4120,17 @@ def mainFunction():
                     pickle.dump(valid_faces_list, fp)
                 with open(binDumpPath+'valid_v_faces_list', 'wb') as fp:
                     pickle.dump(valid_v_faces_list, fp)
+
+        
+        # for ind in range(len(v_pos_list)):
+        #     print("Mesh ",ind)
+        #     print("v_pos shape = ",v_pos_list[ind].shape)
+        #     print("gtv_pos shape = ",gtv_pos_list[ind].shape)
+        #     print("faces shape = ",faces_list[ind].shape)
+        #     print("f_normals shape = ",f_normals_list[ind].shape)
+        #     print("f_adj shape = ",f_adj_list[ind][0].shape)
+        #     print("v_faces shape = ",v_faces_list[ind].shape)
+        #     print("min/max pos: (%f,%f)"%(np.amin(v_pos_list[ind]),np.amax(v_pos_list[ind])))
 
         trainAccuracyNet(v_pos_list, gtv_pos_list, faces_list, f_normals_list, f_adj_list, v_faces_list, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list)
         # trainAccuracyNet(valid_v_pos_list, valid_gtv_pos_list, valid_f_normals_list, valid_f_adj_list, valid_e_map_list, valid_v_emap_list, valid_v_pos_list, valid_gtv_pos_list, valid_f_normals_list, valid_f_adj_list, valid_e_map_list, valid_v_emap_list)
