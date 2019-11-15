@@ -1324,9 +1324,14 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
 
 
 def normalizeTensor(x):
+                     # Get values to a workable order of magnitude. Otherwise, for small values, epsilon (added for numerical stability) can change the result
     with tf.variable_scope("normalization"):
         #norm = tf.norm(x,axis=-1)
         epsilon = tf.constant(1e-5,name="epsilon")
+
+        meanVal = tf.reduce_mean(tf.abs(x))
+        x = x/(meanVal+epsilon)  
+
         square = tf.square(x,name="square")
         square_sum = tf.reduce_sum(square,axis=-1,name="square_sum")
         norm = tf.sqrt(epsilon+square_sum,name="sqrt")
@@ -1657,6 +1662,19 @@ def normalizePointSets(vl1, vl2):
     vl2 = vl2/diag
 
     return vl1, vl2
+
+
+def getPCDiag(vl1):
+    xmin = np.amin(vl1[:,0])
+    ymin = np.amin(vl1[:,1])
+    zmin = np.amin(vl1[:,2])
+    xmax = np.amax(vl1[:,0])
+    ymax = np.amax(vl1[:,1])
+    zmax = np.amax(vl1[:,2])
+
+    diag = math.sqrt(math.pow(xmax-xmin,2)+math.pow(ymax-ymin,2)+math.pow(zmax-zmin,2))
+
+    return diag
 
 
 # Returns a point set, with all points of 'points' that lie in 'boundBox'
