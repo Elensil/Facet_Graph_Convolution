@@ -1520,630 +1520,630 @@ def allCamNet(support, signal, adj, numCam, architecture, keep_prob):
 
 def getSRModel(x, adj, architecture, keep_prob):
 
-        M_conv = 7
-        bTransInvariant = False
-        bRotInvariant = False
-        if architecture==0:
+    M_conv = 7
+    bTransInvariant = False
+    bRotInvariant = False
+    if architecture==0:
 
-            out_channels_fc0 = 8
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
-            
-            # Conv1
-            out_channels_conv1 = 16
-            h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        out_channels_fc0 = 8
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        out_channels_conv1 = 16
+        h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            # Conv2
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv2_act = tf.nn.relu(h_conv2)
+        # Conv2
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            # Conv3
-            out_channels_conv3 = 32
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv3_act = tf.nn.relu(h_conv3)
+        # Conv3
+        out_channels_conv3 = 32
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv3_act = tf.nn.relu(h_conv3)
 
-            # Lin(1024)
-            out_channels_fc1 = 128
-            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
+        # Lin(1024)
+        out_channels_fc1 = 128
+        h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
 
-            # Logistic function
-            finalColor = 2*tf.sigmoid(y_conv)-1
-            return finalColor
+        # Logistic function
+        finalColor = 2*tf.sigmoid(y_conv)-1
+        return finalColor
 
-        if architecture == 1:
+    if architecture == 1:
 
-            # --- Feature extraction block ---
-            out_channels_conv1 = 32
-            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        # --- Feature extraction block ---
+        out_channels_conv1 = 32
+        h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            out_channels_conv2 = 64
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            features = tf.nn.relu(h_conv2)
+        out_channels_conv2 = 64
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        features = tf.nn.relu(h_conv2)
 
-            # --- Information distillation blocks ---
-            id1 = distillBlock(features, adj,16,64,4)
-            # id2 = distillBlock(id1, adj)
-            idOut = distillBlock(id1, adj,16,64,4)
+        # --- Information distillation blocks ---
+        id1 = distillBlock(features, adj,16,64,4)
+        # id2 = distillBlock(id1, adj)
+        idOut = distillBlock(id1, adj,16,64,4)
 
-            # --- Reconstruction block ---
-            resColor, _ = custom_conv2d(idOut, adj, 3, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        # --- Reconstruction block ---
+        resColor, _ = custom_conv2d(idOut, adj, 3, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
 
-            x_color = x[:,:,3:]
-            x_stack = tf.reshape(x_color,[1,-1,5,3])
-            x_mean = tf.reduce_mean(x_stack,axis=2)
-            return resColor+x_mean
+        x_color = x[:,:,3:]
+        x_stack = tf.reshape(x_color,[1,-1,5,3])
+        x_mean = tf.reduce_mean(x_stack,axis=2)
+        return resColor+x_mean
 
-        if architecture == 2:               # Like 1, with fewer channels everywhere
+    if architecture == 2:               # Like 1, with fewer channels everywhere
 
-            # --- Feature extraction block ---
-            out_channels_conv1 = 16
-            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        # --- Feature extraction block ---
+        out_channels_conv1 = 16
+        h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            features = tf.nn.relu(h_conv2)
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        features = tf.nn.relu(h_conv2)
 
-            # --- Information distillation blocks ---
-            id1 = distillBlock(features, adj,8,32,4)
-            # id2 = distillBlock(id1, adj)
-            idOut = distillBlock(id1, adj,8,32,4)
+        # --- Information distillation blocks ---
+        id1 = distillBlock(features, adj,8,32,4)
+        # id2 = distillBlock(id1, adj)
+        idOut = distillBlock(id1, adj,8,32,4)
 
-            # --- Reconstruction block ---
-            resColor, _ = custom_conv2d(idOut, adj, 3, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        # --- Reconstruction block ---
+        resColor, _ = custom_conv2d(idOut, adj, 3, M_conv, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
 
-            x_color = x[:,:,3:]
-            x_stack = tf.reshape(x_color,[1,-1,5,3])
-            x_mean = tf.reduce_mean(x_stack,axis=2)
-            return resColor+x_mean
+        x_color = x[:,:,3:]
+        x_stack = tf.reshape(x_color,[1,-1,5,3])
+        x_mean = tf.reduce_mean(x_stack,axis=2)
+        return resColor+x_mean
 
 
 def get_model_reg(x, adj, architecture, keep_prob):
-        """ 
-        0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
-        """
-        default_M_conv = 18
-        bTransInvariant = False
-        bRotInvariant = False
-        if architecture == 0:       # Original Nitika's architecture (3 conv layers)
-                
-            out_channels_fc0 = 16
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+    """ 
+    0 - input(3) - LIN(16) - CONV(32) - CONV(64) - CONV(128) - LIN(1024) - Output(50)
+    """
+    default_M_conv = 18
+    bTransInvariant = False
+    bRotInvariant = False
+    if architecture == 0:       # Original Nitika's architecture (3 conv layers)
             
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 32
-            h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        out_channels_fc0 = 16
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 32
+        h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 64
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv2_act = tf.nn.relu(h_conv2)
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 64
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 128
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv3_act = tf.nn.relu(h_conv3)
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 128
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv3_act = tf.nn.relu(h_conv3)
 
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
+
+    if architecture == 1:       # Copy of original architecture, with relus replaced by sigmoids
             
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+        out_channels_fc0 = 16
+        h_fc0 = tf.nn.sigmoid(custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 32
+        h_conv1 = tf.nn.sigmoid(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant))
+        
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 64
+        h_conv2 = tf.nn.sigmoid(custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant))
+        
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 128
+        h_conv3 = tf.nn.sigmoid(custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant))
+        
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.sigmoid(custom_lin(h_conv3, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-        if architecture == 1:       # Copy of original architecture, with relus replaced by sigmoids
-                
-            out_channels_fc0 = 16
-            h_fc0 = tf.nn.sigmoid(custom_lin(x, out_channels_fc0))
-            
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 32
-            h_conv1 = tf.nn.sigmoid(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant))
-            
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 64
-            h_conv2 = tf.nn.sigmoid(custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant))
-            
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 128
-            h_conv3 = tf.nn.sigmoid(custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant))
-            
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.sigmoid(custom_lin(h_conv3, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+    if architecture == 2:       # one big linear hidden layer
 
-        if architecture == 2:       # one big linear hidden layer
+        out_channels_fc0 = 60000
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0),name="h_fc0")
+        nan0 = tf.is_nan(h_fc0,name="nan0")
 
-            out_channels_fc0 = 60000
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0),name="h_fc0")
-            nan0 = tf.is_nan(h_fc0,name="nan0")
+        out_channels_reg = 1
+        y_conv = custom_lin(h_fc0, out_channels_reg)
+        return y_conv
 
-            out_channels_reg = 1
-            y_conv = custom_lin(h_fc0, out_channels_reg)
-            return y_conv
+    if architecture == 3:       # Two smaller linear layers
 
-        if architecture == 3:       # Two smaller linear layers
+        out_channels_fc0 = 1800
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
 
-            out_channels_fc0 = 1800
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+        out_channels_fc1 = 1800
+        h_fc1 = tf.nn.relu(custom_lin(h_fc0, out_channels_fc1))
 
-            out_channels_fc1 = 1800
-            h_fc1 = tf.nn.relu(custom_lin(h_fc0, out_channels_fc1))
+        out_channels_reg = 1
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-            out_channels_reg = 1
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+    if architecture == 4:       #Six small linear layers (+ dropout)
 
-        if architecture == 4:       #Six small linear layers (+ dropout)
+        out_channels_fc0 = 200
+        h_fc0 = tf.nn.relu6(custom_lin(x, out_channels_fc0),name="h_fc0")
+        nan0 = tf.is_nan(h_fc0,name="nan0")
+        # apply DropOut to hidden layer
+        drop_out0 = tf.nn.dropout(h_fc0, keep_prob)  # DROP-OUT here
 
+        out_channels_fc1 = 200
+        h_fc1 = tf.nn.relu6(custom_lin(drop_out0, out_channels_fc1),name="h_fc1")
+        nan1 = tf.is_nan(h_fc1,name="nan1")
+        # apply DropOut to hidden layer
+        drop_out1 = tf.nn.dropout(h_fc1, keep_prob)  # DROP-OUT here
+
+        out_channels_fc2 = 200
+        h_fc2 = tf.nn.relu6(custom_lin(drop_out1, out_channels_fc2),name="h_fc2")
+        nan2 = tf.is_nan(h_fc2,name="nan2")
+        # apply DropOut to hidden layer
+        drop_out2 = tf.nn.dropout(h_fc2, keep_prob)  # DROP-OUT here
+
+        out_channels_fc3 = 400
+        h_fc3 = tf.nn.relu6(custom_lin(drop_out2, out_channels_fc3),name="h_fc3")
+        nan3 = tf.is_nan(h_fc3,name="nan3")
+        # apply DropOut to hidden layer
+        drop_out3 = tf.nn.dropout(h_fc3, keep_prob)  # DROP-OUT here
+
+        out_channels_fc4 = 400
+        h_fc4 = tf.nn.relu6(custom_lin(drop_out3, out_channels_fc4),name="h_fc4")
+        nan4 = tf.is_nan(h_fc4,name="nan4")
+        # apply DropOut to hidden layer
+        drop_out4 = tf.nn.dropout(h_fc4, keep_prob)  # DROP-OUT here
+
+        out_channels_fc5 = 200
+        h_fc5 = tf.nn.relu6(custom_lin(drop_out4, out_channels_fc5),name="h_fc5")
+        nan5 = tf.is_nan(h_fc5,name="nan5")
+        # apply DropOut to hidden layer
+        drop_out5 = tf.nn.dropout(h_fc5, keep_prob)  # DROP-OUT here
+
+        out_channels_fc6 = 200
+        h_fc6 = tf.nn.relu6(custom_lin(drop_out5, out_channels_fc6),name="h_fc6")
+        nan6 = tf.is_nan(h_fc6,name="nan6")
+        # apply DropOut to hidden layer
+        drop_out6 = tf.nn.dropout(h_fc6, keep_prob)  # DROP-OUT here
+
+        out_channels_reg = 3
+        y_conv = custom_lin(drop_out6, out_channels_reg)
+        return y_conv
+
+    if architecture == 5:       # Reusable archi 4 (w/o dropout)
+
+        with tf.variable_scope('fc0'):
             out_channels_fc0 = 200
-            h_fc0 = tf.nn.relu6(custom_lin(x, out_channels_fc0),name="h_fc0")
+            h_fc0 = tf.nn.relu6(reusable_custom_lin(x, out_channels_fc0),name="h_fc0")
             nan0 = tf.is_nan(h_fc0,name="nan0")
-            # apply DropOut to hidden layer
-            drop_out0 = tf.nn.dropout(h_fc0, keep_prob)  # DROP-OUT here
 
+        with tf.variable_scope('fc1'):
             out_channels_fc1 = 200
-            h_fc1 = tf.nn.relu6(custom_lin(drop_out0, out_channels_fc1),name="h_fc1")
+            h_fc1 = tf.nn.relu6(reusable_custom_lin(h_fc0, out_channels_fc1),name="h_fc1")
             nan1 = tf.is_nan(h_fc1,name="nan1")
-            # apply DropOut to hidden layer
-            drop_out1 = tf.nn.dropout(h_fc1, keep_prob)  # DROP-OUT here
 
+        with tf.variable_scope('fc2'):
             out_channels_fc2 = 200
-            h_fc2 = tf.nn.relu6(custom_lin(drop_out1, out_channels_fc2),name="h_fc2")
+            h_fc2 = tf.nn.relu6(reusable_custom_lin(h_fc1, out_channels_fc2),name="h_fc2")
             nan2 = tf.is_nan(h_fc2,name="nan2")
-            # apply DropOut to hidden layer
-            drop_out2 = tf.nn.dropout(h_fc2, keep_prob)  # DROP-OUT here
 
+        with tf.variable_scope('fc3'):
             out_channels_fc3 = 400
-            h_fc3 = tf.nn.relu6(custom_lin(drop_out2, out_channels_fc3),name="h_fc3")
+            h_fc3 = tf.nn.relu6(reusable_custom_lin(h_fc2, out_channels_fc3),name="h_fc3")
             nan3 = tf.is_nan(h_fc3,name="nan3")
-            # apply DropOut to hidden layer
-            drop_out3 = tf.nn.dropout(h_fc3, keep_prob)  # DROP-OUT here
 
+        with tf.variable_scope('fc4'):
             out_channels_fc4 = 400
-            h_fc4 = tf.nn.relu6(custom_lin(drop_out3, out_channels_fc4),name="h_fc4")
+            h_fc4 = tf.nn.relu6(reusable_custom_lin(h_fc3, out_channels_fc4),name="h_fc4")
             nan4 = tf.is_nan(h_fc4,name="nan4")
-            # apply DropOut to hidden layer
-            drop_out4 = tf.nn.dropout(h_fc4, keep_prob)  # DROP-OUT here
 
+        with tf.variable_scope('fc5'):
             out_channels_fc5 = 200
-            h_fc5 = tf.nn.relu6(custom_lin(drop_out4, out_channels_fc5),name="h_fc5")
+            h_fc5 = tf.nn.relu6(reusable_custom_lin(h_fc4, out_channels_fc5),name="h_fc5")
             nan5 = tf.is_nan(h_fc5,name="nan5")
-            # apply DropOut to hidden layer
-            drop_out5 = tf.nn.dropout(h_fc5, keep_prob)  # DROP-OUT here
 
+        with tf.variable_scope('fc6'):
             out_channels_fc6 = 200
-            h_fc6 = tf.nn.relu6(custom_lin(drop_out5, out_channels_fc6),name="h_fc6")
+            h_fc6 = tf.nn.relu6(reusable_custom_lin(h_fc5, out_channels_fc6),name="h_fc6")
             nan6 = tf.is_nan(h_fc6,name="nan6")
-            # apply DropOut to hidden layer
-            drop_out6 = tf.nn.dropout(h_fc6, keep_prob)  # DROP-OUT here
 
-            out_channels_reg = 3
-            y_conv = custom_lin(drop_out6, out_channels_reg)
-            return y_conv
+        with tf.variable_scope('fcfinal'):
+            out_channels_reg = 1
+            y_conv = reusable_custom_lin(h_fc6, out_channels_reg)
+        return y_conv
 
-        if architecture == 5:       # Reusable archi 4 (w/o dropout)
+    if architecture == 6:       # One conv layer, concatenated w/ output of previous layer
 
-            with tf.variable_scope('fc0'):
-                out_channels_fc0 = 200
-                h_fc0 = tf.nn.relu6(reusable_custom_lin(x, out_channels_fc0),name="h_fc0")
-                nan0 = tf.is_nan(h_fc0,name="nan0")
+        out_channels_fc0 = 16
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 32
+        h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant))
+        
+        test_layer = tf.concat([h_conv1, h_fc0], axis=2)
 
-            with tf.variable_scope('fc1'):
-                out_channels_fc1 = 200
-                h_fc1 = tf.nn.relu6(reusable_custom_lin(h_fc0, out_channels_fc1),name="h_fc1")
-                nan1 = tf.is_nan(h_fc1,name="nan1")
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(test_layer, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-            with tf.variable_scope('fc2'):
-                out_channels_fc2 = 200
-                h_fc2 = tf.nn.relu6(reusable_custom_lin(h_fc1, out_channels_fc2),name="h_fc2")
-                nan2 = tf.is_nan(h_fc2,name="nan2")
+    if architecture == 7:       # Kind of like 6, with one extra conv layer
 
-            with tf.variable_scope('fc3'):
-                out_channels_fc3 = 400
-                h_fc3 = tf.nn.relu6(reusable_custom_lin(h_fc2, out_channels_fc3),name="h_fc3")
-                nan3 = tf.is_nan(h_fc3,name="nan3")
+        out_channels_fc0 = 16
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 32
+        h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            with tf.variable_scope('fc4'):
-                out_channels_fc4 = 400
-                h_fc4 = tf.nn.relu6(reusable_custom_lin(h_fc3, out_channels_fc4),name="h_fc4")
-                nan4 = tf.is_nan(h_fc4,name="nan4")
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 40     #64
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            with tf.variable_scope('fc5'):
-                out_channels_fc5 = 200
-                h_fc5 = tf.nn.relu6(reusable_custom_lin(h_fc4, out_channels_fc5),name="h_fc5")
-                nan5 = tf.is_nan(h_fc5,name="nan5")
+        test_layer = tf.concat([h_conv2_act, h_conv1_act, h_fc0], axis=2)
 
-            with tf.variable_scope('fc6'):
-                out_channels_fc6 = 200
-                h_fc6 = tf.nn.relu6(reusable_custom_lin(h_fc5, out_channels_fc6),name="h_fc6")
-                nan6 = tf.is_nan(h_fc6,name="nan6")
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(test_layer, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-            with tf.variable_scope('fcfinal'):
-                out_channels_reg = 1
-                y_conv = reusable_custom_lin(h_fc6, out_channels_reg)
-            return y_conv
-
-        if architecture == 6:       # One conv layer, concatenated w/ output of previous layer
-
+    if architecture == 8:       # Reusable archi 0 for iterative network
+        
+        with tf.variable_scope('fc0'):
             out_channels_fc0 = 16
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
-            
-            # Conv1
+            h_fc0 = tf.nn.relu(reusable_custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        with tf.variable_scope('conv1'):
             M_conv1 = 9
             out_channels_conv1 = 32
-            h_conv1 = tf.nn.relu(custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant))
-            
-            test_layer = tf.concat([h_conv1, h_fc0], axis=2)
-
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(test_layer, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
-
-        if architecture == 7:       # Kind of like 6, with one extra conv layer
-
-            out_channels_fc0 = 16
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
-            
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 32
-            h_conv1, _ = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
-
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 40     #64
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant)
-            h_conv2_act = tf.nn.relu(h_conv2)
-
-            test_layer = tf.concat([h_conv2_act, h_conv1_act, h_fc0], axis=2)
-
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(test_layer, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
-
-        if architecture == 8:       # Reusable archi 0 for iterative network
-            
-            with tf.variable_scope('fc0'):
-                out_channels_fc0 = 16
-                h_fc0 = tf.nn.relu(reusable_custom_lin(x, out_channels_fc0))
-            
-            # Conv1
-            with tf.variable_scope('conv1'):
-                M_conv1 = 9
-                out_channels_conv1 = 32
-                h_conv1 = tf.nn.relu(reusable_custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant))
-            
-            # Conv2
-            with tf.variable_scope('conv2'):
-                M_conv2 = 9
-                out_channels_conv2 = 64
-                h_conv2 = tf.nn.relu(reusable_custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant))
-            
-            # Conv3
-            with tf.variable_scope('conv3'):
-                M_conv3 = 9
-                out_channels_conv3 = 128
-                h_conv3 = tf.nn.relu(reusable_custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant))
-            
-            # Lin(1024)
-            with tf.variable_scope('fc1'):
-                out_channels_fc1 = 1024
-                h_fc1 = tf.nn.relu(reusable_custom_lin(h_conv3, out_channels_fc1))
-            
-            # Lin(num_classes)
-            with tf.variable_scope('fcfinal'):
-                out_channels_reg = 3
-                y_conv = reusable_custom_lin(h_fc1, out_channels_reg)
-            return y_conv
-
-        if architecture == 9:       # Auto-encoder test
-                
-            out_channels_fc0 = 16
-            h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
-            
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 32
-            h_conv1, conv1_W = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
-
-            # Conv2
+            h_conv1 = tf.nn.relu(reusable_custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant))
+        
+        # Conv2
+        with tf.variable_scope('conv2'):
             M_conv2 = 9
             out_channels_conv2 = 64
-            h_conv2, conv2_W = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant)
-            h_conv2_act = tf.nn.relu(h_conv2)
-
-            # Conv3
+            h_conv2 = tf.nn.relu(reusable_custom_conv2d(h_conv1, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant))
+        
+        # Conv3
+        with tf.variable_scope('conv3'):
             M_conv3 = 9
             out_channels_conv3 = 128
-            h_conv3, conv3_W = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant)
-            h_conv3_act = tf.nn.relu(h_conv3)
-
-            # End encoding
-            # ---
-            # Start decoding
-            conv3_Wp = tf.transpose(conv3_W,[0,2,1])
-            d_conv2 = decoding_layer(h_conv3_act, adj, conv3_Wp, translation_invariance=bTransInvariant)
-            d_conv2_act = tf.nn.relu(d_conv2)   
-            # Same as custom_conv2d layer, expect that the weight matrix is provided
-            # Thus, no need to provide the number of output channels and number of filters, they can be deduced from W
-            # Assignments and bias are independant (initialized within the function)
-
-            conv2_Wp = tf.transpose(conv2_W,[0,2,1])
-            d_conv1 = decoding_layer(d_conv2_act, adj, conv2_Wp, translation_invariance=bTransInvariant)
-            d_conv1_act = tf.nn.relu(d_conv1)
-
-            conv1_Wp = tf.transpose(conv1_W,[0,2,1])
-            d_conv0 = decoding_layer(d_conv1_act, adj, conv1_Wp, translation_invariance=bTransInvariant)
-            d_conv0_act = tf.nn.relu(d_conv0)
-
-            # Keep linear layers ??
-
-            # Lin(1024)
+            h_conv3 = tf.nn.relu(reusable_custom_conv2d(h_conv2, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant))
+        
+        # Lin(1024)
+        with tf.variable_scope('fc1'):
             out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(d_conv0_act, out_channels_fc1))
-            
-            # Lin(num_classes)
+            h_fc1 = tf.nn.relu(reusable_custom_lin(h_conv3, out_channels_fc1))
+        
+        # Lin(num_classes)
+        with tf.variable_scope('fcfinal'):
             out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+            y_conv = reusable_custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-        if architecture == 10:      # 3 conv layers, first one is rotation invariant
-
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 16
-            #h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
-            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
-
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
-
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 36
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
-
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+    if architecture == 9:       # Auto-encoder test
             
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+        out_channels_fc0 = 16
+        h_fc0 = tf.nn.relu(custom_lin(x, out_channels_fc0))
+        
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 32
+        h_conv1, conv1_W = custom_conv2d(h_fc0, adj, out_channels_conv1, M_conv1,translation_invariance=bTransInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-        if architecture == 11:      # 4 conv layers, first one is rotation invariant
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 64
+        h_conv2, conv2_W = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 16
-            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 128
+        h_conv3, conv3_W = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant)
+        h_conv3_act = tf.nn.relu(h_conv3)
 
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
+        # End encoding
+        # ---
+        # Start decoding
+        conv3_Wp = tf.transpose(conv3_W,[0,2,1])
+        d_conv2 = decoding_layer(h_conv3_act, adj, conv3_Wp, translation_invariance=bTransInvariant)
+        d_conv2_act = tf.nn.relu(d_conv2)   
+        # Same as custom_conv2d layer, expect that the weight matrix is provided
+        # Thus, no need to provide the number of output channels and number of filters, they can be deduced from W
+        # Assignments and bias are independant (initialized within the function)
 
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 64
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
+        conv2_Wp = tf.transpose(conv2_W,[0,2,1])
+        d_conv1 = decoding_layer(d_conv2_act, adj, conv2_Wp, translation_invariance=bTransInvariant)
+        d_conv1_act = tf.nn.relu(d_conv1)
 
-            # Conv4
-            M_conv4 = 9
-            out_channels_conv4 = 128
-            h_conv4, _ = custom_conv2d(h_conv3_act, adj, out_channels_conv4, M_conv4,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv4_act = tf.nn.relu(h_conv4)
+        conv1_Wp = tf.transpose(conv1_W,[0,2,1])
+        d_conv0 = decoding_layer(d_conv1_act, adj, conv1_Wp, translation_invariance=bTransInvariant)
+        d_conv0_act = tf.nn.relu(d_conv0)
 
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv4_act, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+        # Keep linear layers ??
 
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(d_conv0_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-        if architecture == 12:      # 4 conv layers, first one is rotation invariant
+    if architecture == 10:      # 3 conv layers, first one is rotation invariant
 
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 8
-            h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 16
+        #h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
+        h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 16
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 32
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 36
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
 
-            # Conv4
-            M_conv4 = 9
-            out_channels_conv4 = 48
-            h_conv4, _ = custom_conv2d(h_conv3_act, adj, out_channels_conv4, M_conv4,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv4_act = tf.nn.relu(h_conv4)
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv4_act, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+    if architecture == 11:      # 4 conv layers, first one is rotation invariant
 
-        if architecture == 13:      # Like 10, with MORE WEIGHTS!
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 16
+        h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 16
-            h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
-            #h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 64
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
 
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 64
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
+        # Conv4
+        M_conv4 = 9
+        out_channels_conv4 = 128
+        h_conv4, _ = custom_conv2d(h_conv3_act, adj, out_channels_conv4, M_conv4,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv4_act = tf.nn.relu(h_conv4)
 
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
-
-        if architecture == 14:      # 3 conv layers, first one is translation invariant for position only. Position is only used for assignment
-
-            # Conv1
-            M_conv1 = default_M_conv
-            out_channels_conv1 = 16
-            h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
-
-            # Conv2
-            M_conv2 = default_M_conv
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
-
-            # Conv3
-            M_conv3 = default_M_conv
-            out_channels_conv3 = 64
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
-
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
-
-        if architecture == 15:      # Same as 14, with concatenation at every layer
-
-            # Conv1
-            M_conv1 = 9
-            out_channels_conv1 = 16
-            h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
-
-            concat1 = tf.concat([h_conv1_act,x],axis=2)
-
-            # Conv2
-            M_conv2 = 9
-            out_channels_conv2 = 32
-            h_conv2, _ = custom_conv2d(concat1, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
-
-            concat2 = tf.concat([h_conv2_act,concat1],axis=2)
-
-            # Conv3
-            M_conv3 = 9
-            out_channels_conv3 = 64
-            h_conv3, _ = custom_conv2d(concat2, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
-
-            concat3 = tf.concat([h_conv3_act,concat2],axis=2)
-
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(concat3, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv4_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
 
-        if architecture == 16:      # Like 14, with smaller weights (and bigger M)
+    if architecture == 12:      # 4 conv layers, first one is rotation invariant
 
-            # Conv1
-            M_conv1 = default_M_conv
-            out_channels_conv1 = 8
-            h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-            h_conv1_act = tf.nn.relu(h_conv1)
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 8
+        h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
 
-            # Conv2
-            M_conv2 = default_M_conv
-            out_channels_conv2 = 16
-            h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv2_act = tf.nn.relu(h_conv2)
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 16
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
 
-            # Conv3
-            M_conv3 = default_M_conv
-            out_channels_conv3 = 32
-            h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-            h_conv3_act = tf.nn.relu(h_conv3)
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 32
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
 
-            # Lin(1024)
-            out_channels_fc1 = 1024
-            h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
-            
-            # Lin(num_classes)
-            out_channels_reg = 3
-            y_conv = custom_lin(h_fc1, out_channels_reg)
-            return y_conv
+        # Conv4
+        M_conv4 = 9
+        out_channels_conv4 = 48
+        h_conv4, _ = custom_conv2d(h_conv3_act, adj, out_channels_conv4, M_conv4,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv4_act = tf.nn.relu(h_conv4)
+
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv4_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
+
+    if architecture == 13:      # Like 10, with MORE WEIGHTS!
+
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 16
+        h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
+        #h_conv1, _ = custom_conv2d(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
+
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
+
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 64
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
+
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
+
+    if architecture == 14:      # 3 conv layers, first one is translation invariant for position only. Position is only used for assignment
+
+        # Conv1
+        M_conv1 = default_M_conv
+        out_channels_conv1 = 16
+        h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
+
+        # Conv2
+        M_conv2 = default_M_conv
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
+
+        # Conv3
+        M_conv3 = default_M_conv
+        out_channels_conv3 = 64
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
+
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
+
+    if architecture == 15:      # Same as 14, with concatenation at every layer
+
+        # Conv1
+        M_conv1 = 9
+        out_channels_conv1 = 16
+        h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
+
+        concat1 = tf.concat([h_conv1_act,x],axis=2)
+
+        # Conv2
+        M_conv2 = 9
+        out_channels_conv2 = 32
+        h_conv2, _ = custom_conv2d(concat1, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
+
+        concat2 = tf.concat([h_conv2_act,concat1],axis=2)
+
+        # Conv3
+        M_conv3 = 9
+        out_channels_conv3 = 64
+        h_conv3, _ = custom_conv2d(concat2, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
+
+        concat3 = tf.concat([h_conv3_act,concat2],axis=2)
+
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(concat3, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
+
+
+    if architecture == 16:      # Like 14, with smaller weights (and bigger M)
+
+        # Conv1
+        M_conv1 = default_M_conv
+        out_channels_conv1 = 8
+        h_conv1, _ = custom_conv2d_pos_for_assignment(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+        h_conv1_act = tf.nn.relu(h_conv1)
+
+        # Conv2
+        M_conv2 = default_M_conv
+        out_channels_conv2 = 16
+        h_conv2, _ = custom_conv2d(h_conv1_act, adj, out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv2_act = tf.nn.relu(h_conv2)
+
+        # Conv3
+        M_conv3 = default_M_conv
+        out_channels_conv3 = 32
+        h_conv3, _ = custom_conv2d(h_conv2_act, adj, out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+        h_conv3_act = tf.nn.relu(h_conv3)
+
+        # Lin(1024)
+        out_channels_fc1 = 1024
+        h_fc1 = tf.nn.relu(custom_lin(h_conv3_act, out_channels_fc1))
+        
+        # Lin(num_classes)
+        out_channels_reg = 3
+        y_conv = custom_lin(h_fc1, out_channels_reg)
+        return y_conv
 
 
 # For this function, we give a pyramid of adjacency matrix, from detailed to coarse
