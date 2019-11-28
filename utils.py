@@ -1523,6 +1523,10 @@ def normalizeTensor(x):
     with tf.variable_scope("normalization"):
         #norm = tf.norm(x,axis=-1)
         epsilon = tf.constant(1e-5,name="epsilon")
+
+        meanVal = tf.reduce_mean(tf.abs(x))
+        x = x/(meanVal+epsilon)
+        
         square = tf.square(x,name="square")
         square_sum = tf.reduce_sum(square,axis=-1,name="square_sum")
         norm = tf.sqrt(epsilon+square_sum,name="sqrt")
