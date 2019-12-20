@@ -1798,21 +1798,24 @@ def getColoredMesh(V, F, faceColors):
     #switch to one-indexing for fake faces
     F = F+1
     V = np.concatenate((np.array([[0,0,0]],dtype=np.float32),V),axis=0)
-
+    print("V shape = ", V.shape)
     Vl = V[F];
+    print("Vl shape = ",Vl.shape)
     # Shape (facesNum,3,3)
 
     faceColors = np.expand_dims(faceColors,axis=1)
     # Shape (facesNum,3,1)
     faceColors = np.tile(faceColors,(1,3,1))
     # Shape (facesNum,3,3)
+    print("faceColors shape = ",faceColors.shape)
 
     vArr = np.concatenate((Vl,faceColors),axis=-1)
+    print("vArr shape = ",vArr.shape)
     # Shape (facesNum,3,6)
     newV = np.reshape(vArr,(3*facesNum,6))
-
+    print("newV shape = ",newV.shape)
     newF = np.reshape(np.arange(3*facesNum),(facesNum,3))
-
+    print("newF shape = ",newF.shape)
     return newV, newF
 
 
@@ -2413,6 +2416,55 @@ def makeFacesMesh(myAdj, myP, myN):
 
 
 
+
+def filterFlippedFaces(faceNormals, adj):
+    
+    dpTh = -0.5
+    adj = adj-1 # switching to zero-indexing
+    samp = 1641
+
+    K = adj.shape[1]
+    tiledN = np.tile(faceNormals[:,np.newaxis,:],[1,K-1,1])
+    # [N, K-1, 3]
+    neighN = faceNormals[adj[:,1:]]
+    # [N, K-1, 3]
+
+    dp = np.sum(np.multiply(tiledN,neighN),axis=-1)
+    # [N, K-1]
+    
+    # print("tiledN samp = ",tiledN[samp])
+    # print("neighN samp = ",neighN[samp])
+    # print("dp samp = ",dp[samp])
+
+    # print("avg dp = ",np.mean(dp))
+    # print("max dp = ",np.amax(dp))
+    # print("min dp = ",np.amin(dp))
+    minDP = np.amin(dp,axis=-1)
+    adjNeigh = adj[:,1:]
+    neighNum = np.sum((adjNeigh>-1),axis=-1)
+    avgDP = np.sum(dp,axis=-1) / neighNum
+    # [N]
+
+    # print("min dp samp = ",minDP[samp])
+    badFaces = (minDP<dpTh)
+    # print("badFaces samp = ",badFaces[samp])
+    # print("faceNormals samp = ",faceNormals[samp])
+    # print("faceNormals shape = ",faceNormals.shape)
+    faceNormals[badFaces] = 0.0
+    # print("faceNormals samp = ",faceNormals[samp])
+    # print("faceNormals shape = ",faceNormals.shape)
+    return faceNormals
+
+def colorFacesByAdjacency(faceNormals, adj):
+    
+    adj = adj-1 # switching to zero-indexing
+    K = adj.shape[1]
+    adjNeigh = adj[:,1:]
+    neighNum = np.sum((adjNeigh>-1),axis=-1)
+    maxNeigh = np.amax(neighNum)
+    neighNum = np.tile(neighNum[:,np.newaxis],[1,3])
+
+    return neighNum*2/maxNeigh - 1
 
 
 # This function takes a mesh (V, F), and return a new set of vertices V, with added low-frequency gaussian noise.
