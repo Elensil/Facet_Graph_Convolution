@@ -757,6 +757,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
         samp_gtn = tf.transpose(samp_gtn,[1,0,2])
         # customLoss = faceNormalsLoss(n_conv, tfn_rot)
         customLoss = faceNormalsLoss(samp_n, samp_gtn)
+        # print("WARNING!! Charbonnier loss!")
+        # customLoss = charbonnierFaceNormalsLoss(samp_n, samp_gtn)
         train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
 
     saver = tf.train.Saver()
@@ -2181,6 +2183,38 @@ def faceNormalsLoss(fn,gt_fn):
     #loss = tf.reduce_mean(loss)
     return loss
 
+
+def charbonnierFaceNormalsLoss(fn, gt_fn):
+
+    # Squared Error part
+    n_dt = tensorDotProduct(fn,gt_fn)
+    # [1, fnum]
+    #loss = tf.acos(n_dt-1e-5)    # So that it stays differentiable close to 1
+    close_to_one = 0.999999999
+    loss = tf.acos(tf.minimum(tf.maximum(n_dt,-close_to_one),close_to_one))    # So that it stays differentiable close to 1 and -1
+    gtfn_abs_sum = tf.reduce_sum(tf.abs(gt_fn),axis=2)
+    fakenodes = tf.less_equal(gtfn_abs_sum,10e-4)
+    #fakenodes = tf.reduce_all(fakenodes,axis=-1)
+
+    zeroVec = tf.zeros_like(loss)
+    oneVec = tf.ones_like(loss)
+    realnodes = tf.where(fakenodes,zeroVec,oneVec)
+    squaredDiff = tf.square(loss)
+
+    #Set loss to zero for fake nodes
+    squaredDiff = tf.where(fakenodes,zeroVec,squaredDiff)
+
+    # Charbonnier part
+    epsilon = 10e-4
+    summedSquaredDiff = tf.reduce_sum(squaredDiff,axis=-1)
+    squaredEpsilonTensor = tf.constant(epsilon*epsilon,shape=summedSquaredDiff.shape)
+    withEps = summedSquaredDiff + squaredEpsilonTensor
+    loss = tf.sqrt(withEps)
+    # loss = tf.reduce_mean(loss)
+    loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
+    return loss
+
+
 def squareFaceNormalsLoss(fn,gt_fn):
 
     #version 1
@@ -3425,9 +3459,9 @@ def mainFunction():
         # with open("/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/Dump2_FND_el/"+filename+"FND", 'rb') as fp:
         #     f_FND = pickle.load(fp)
         # f_normals_pos = np.concatenate((f_FND, f_pos0), axis=1)
-        # f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
-        print("WARNING!!! Added binary channel for border faces")
-        f_normals_pos = np.concatenate((f_normals0, f_borderCh0, f_pos0), axis=1)
+        f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
+        # print("WARNING!!! Added binary channel for border faces")
+        # f_normals_pos = np.concatenate((f_normals0, f_borderCh0, f_pos0), axis=1)
 
         # print("WARNING!!! Added area channel and binary channel for border faces")
         # f_normals_pos = np.concatenate((f_normals0, f_area0, f_borderCh0, f_pos0), axis=1)
@@ -4451,36 +4485,45 @@ def mainFunction():
 
 
         examplesNum = len(f_normals_list)
+        print("training examples num = ",examplesNum)
+        print("f_normals_list shape = ",f_normals_list[0].shape)
+        print("GTfn_list shape = ",GTfn_list[0].shape)
+        print("valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
+        print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
 
         for p in range(examplesNum):
+
+            # First, filter flipped faces for GT normals:
             myN = GTfn_list[p][0]
-
-            myNextra = myN[:,3:]
-            # For removing border channel!!:
-            # myNextra = myN[:,4:]
-
-            myN = myN[:,:3]
             myN = normalize(myN)
             myAdj = f_adj_list[p][0][0]
             filteredN = filterFlippedFaces(myN, myAdj)
-            newN = np.concatenate((filteredN,myNextra),axis=1)
-            GTfn_list[p] = newN[np.newaxis,:,:]
+            GTfn_list[p] = filteredN[np.newaxis,:,:]
+
+            # Optional: remove border channel for noisy input
+            myN = f_normals_list[p][0]
+            myNhead = myN[:,:3]
+            myNtail = myN[:,4:]
+            newN = np.concatenate((myNhead,myNtail),axis=1)
+            f_normals_list[p] = newN[np.newaxis,:,:]
 
         valid_examplesNum = len(valid_f_normals_list)
+        
         for p in range(valid_examplesNum):
-            myN = valid_GTfn_list[p][0]
-            
-            myNextra = myN[:,3:]
-            # For removing border channel!!:
-            # myNextra = myN[:,4:]
 
-            myN = myN[:,:3]
+            # First, filter flipped faces for GT normals:
+            myN = valid_GTfn_list[p][0]
             myN = normalize(myN)
             myAdj = valid_f_adj_list[p][0][0]
             filteredN = filterFlippedFaces(myN, myAdj)
-            newN = np.concatenate((filteredN,myNextra),axis=1)
-            valid_GTfn_list[p] = newN[np.newaxis,:,:]
+            valid_GTfn_list[p] = filteredN[np.newaxis,:,:]
 
+            # Optional: remove border channel for noisy input
+            myN = valid_f_normals_list[p][0]
+            myNhead = myN[:,:3]
+            myNtail = myN[:,4:]
+            newN = np.concatenate((myNhead,myNtail),axis=1)
+            valid_f_normals_list[p] = newN[np.newaxis,:,:]
 
         trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
@@ -4932,6 +4975,7 @@ def mainFunction():
 
                         # upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                         # upV0, upN0 = inferNetOld(V0exp, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+
 
                         upV0, upN0 = inferNetOld(V0exp, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum, depth_dir)
 
