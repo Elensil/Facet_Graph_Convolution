@@ -18,7 +18,7 @@ import random
 from lib.coarsening import *
 
 
-def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations,num_faces, depth_dir):
+def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations,num_faces):
 
     with tf.Graph().as_default():
         # random_seed = 0
@@ -3443,18 +3443,32 @@ def mainFunction():
         num_faces = []
 
         # --- Load mesh ---
+        t0 = time.clock()
         V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
+        t1 = time.clock()
+        print("mesh loaded ("+str(1000*(t1-t0))+"ms)")
+
         # print("faces0 shape: "+str(faces0.shape))
         # Compute normals
         f_normals0 = computeFacesNormals(V0, faces0)
+        t2 = time.clock()
+        print("normals computed ("+str(1000*(t2-t1))+"ms)")
+        
         # Get adjacency
         f_adj0 = getFacesLargeAdj(faces0,K_faces)
+        t3 = time.clock()
+        print("Adj computed ("+str(1000*(t3-t2))+"ms)")
         # Get faces position
         f_pos0 = getTrianglesBarycenter(V0, faces0)
-
+        t4 = time.clock()
+        print("faces barycenters computed ("+str(1000*(t4-t3))+"ms)")
         f_area0 = np.expand_dims(getTrianglesArea(V0,faces0, normalize=True), axis=1)
-
+        t5 = time.clock()
+        print("Areas computed ("+str(1000*(t5-t4))+"ms)")
         f_borderCh0 = np.expand_dims(getBorderFaces(faces0),axis=1)
+        
+        t6 = time.clock()
+        print("Borders computed ("+str(1000*(t6-t5))+"ms)")
         # print("WARNING!!! hard-coded change in data loading: FND instead of normals")
         # with open("/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/Dump2_FND_el/"+filename+"FND", 'rb') as fp:
         #     f_FND = pickle.load(fp)
@@ -3469,9 +3483,14 @@ def mainFunction():
         # f_area0 = np.reshape(f_area0, (-1,1))
         # f_normals0 = np.concatenate((f_normals0, f_area0), axis=1)
 
+        t7 = time.clock()
+
         # Load GT
         GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
         GTf_normals0 = computeFacesNormals(GT0, faces0)
+
+        t8 = time.clock()
+        print("GT loaded + normals computed ("+str(1000*(t8-t7))+"ms)")
 
         # Get patches if mesh is too big
         facesNum = faces0.shape[0]
@@ -3479,14 +3498,16 @@ def mainFunction():
         faceCheck = np.zeros(facesNum)
         faceRange = np.arange(facesNum)
         if facesNum>maxSize:
+            print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
             patchNum = 0
             while(np.any(faceCheck==0)):
                 toBeProcessed = faceRange[faceCheck==0]
                 faceSeed = np.random.randint(toBeProcessed.shape[0])
                 faceSeed = toBeProcessed[faceSeed]
-
+                tp0 = time.clock()
                 testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
-
+                tp1 = time.clock()
+                print("Mesh patch extracted ("+str(1000*(tp1-tp0))+"ms)")
                 faceCheck[fOldInd]+=1
 
                 patchFNormals = f_normals_pos[fOldInd]
@@ -3497,6 +3518,7 @@ def mainFunction():
                 # Don't add small disjoint components
                 if old_N<100:
                     continue
+
                 # Convert to sparse matrix and coarsen graph
                 coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
 
@@ -3606,6 +3628,187 @@ def mainFunction():
 
         return num_faces, patch_indices, new_to_old_permutations_list
 
+    #Takes the path to noisy and GT meshes as input, and add data to the lists fed to tensroflow graph, with the right format
+    def addMesh_TimeEfficient(inputFilePath,filename, gtFilePath, gtfilename, in_list, adj_list, mesh_count_list):
+        patch_indices = []
+        new_to_old_permutations_list = []
+        num_faces = []
+
+        # --- Load mesh ---
+        t0 = time.clock()
+        V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
+        t1 = time.clock()
+        print("mesh loaded ("+str(1000*(t1-t0))+"ms)")
+
+        # print("faces0 shape: "+str(faces0.shape))
+        # Compute normals
+        f_normals0 = computeFacesNormals(V0, faces0)
+        t2 = time.clock()
+        print("normals computed ("+str(1000*(t2-t1))+"ms)")
+        
+        # Get adjacency
+        f_adj0 = getFacesLargeAdj(faces0,K_faces)
+        t3 = time.clock()
+        print("Adj computed ("+str(1000*(t3-t2))+"ms)")
+        # Get faces position
+        f_pos0 = getTrianglesBarycenter(V0, faces0)
+        t4 = time.clock()
+        print("faces barycenters computed ("+str(1000*(t4-t3))+"ms)")
+
+
+        # print("WARNING!!! hard-coded change in data loading: FND instead of normals")
+        # with open("/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/Dump2_FND_el/"+filename+"FND", 'rb') as fp:
+        #     f_FND = pickle.load(fp)
+        # f_normals_pos = np.concatenate((f_FND, f_pos0), axis=1)
+        f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
+
+        t7 = time.clock()
+
+
+        # Get patches if mesh is too big
+        facesNum = faces0.shape[0]
+
+        faceCheck = np.zeros(facesNum)
+        faceRange = np.arange(facesNum)
+        if facesNum>maxSize:
+            print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
+            patchNum = 0
+            nextSeed = -1
+            while(np.any(faceCheck==0)):
+                toBeProcessed = faceRange[faceCheck==0]
+                if nextSeed==-1:
+                    faceSeed = np.random.randint(toBeProcessed.shape[0])
+                    faceSeed = toBeProcessed[faceSeed]
+                else:
+                    faceSeed = nextSeed
+                    if faceCheck[faceSeed]==1:
+                        print("ERROR: Bad seed returned!!")
+                        return
+                tp0 = time.clock()
+                # testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
+                # testPatchAdj, fOldInd, nextSeed = getGraphPatch_wMask(f_adj0, patchSize, faceSeed, faceCheck)
+                coo_adj, fOldInd, nextSeed = getSparseGraphPatch_wMask(f_adj0,f_pos0, f_normals0, patchSize, faceSeed, faceCheck)
+                tp1 = time.clock()
+                print("\nMesh patch extracted ("+str(1000*(tp1-tp0))+"ms)")
+                # print("Patch size = %i"%testPatchAdj.shape[0])
+                faceCheck[fOldInd]=1
+                print("Total added faces = %i"%np.sum(faceCheck==1))
+
+                patchFNormals = f_normals_pos[fOldInd]
+
+                old_N = patchFNormals.shape[0]
+
+                # Don't add small disjoint components
+                if old_N<100:
+                    continue
+
+                # Convert to sparse matrix and coarsen graph
+                # tls0 = time.clock()
+                # coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
+                # print("list to sparse conversion ("+str(1000*(time.clock()-tls0))+"ms)")
+                has_sat = True
+
+                while has_sat:
+                    print("Coarsening...")
+                    tc0 = time.clock()
+                    adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                    tc1 = time.clock()
+                    print("Coarsening complete ("+str(1000*(tc1-tc0))+"ms)")
+                    has_sat = False
+                    # Change adj format
+                    fAdjs = []
+                    for lvl in range(coarseningLvlNum):
+                        tsl0 = time.clock()
+                        fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                        print("sparse to list conversion ("+str(1000*(time.clock()-tsl0))+"ms)")
+                        fadj = np.expand_dims(fadj, axis=0)
+                        fAdjs.append(fadj)
+                        has_sat = has_sat or has_sat_temp
+
+
+
+                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                new_N = len(newToOld)
+                
+                padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
+                # padding6 =np.zeros((new_N-old_N,33))
+                padding3 =np.zeros((new_N-old_N,3))
+                patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
+                # Reorder nodes
+                patchFNormals = patchFNormals[newToOld]
+
+                ##### Save number of triangles and patch new_to_old permutation #####
+                num_faces.append(old_N)
+                patch_indices.append(fOldInd)
+                new_to_old_permutations_list.append(newToOld)
+                #####################################################################
+
+                # Expand dimensions
+                f_normals = np.expand_dims(patchFNormals, axis=0)
+                #f_adj = np.expand_dims(testPatchAdj, axis=0)
+
+                in_list.append(f_normals)
+                adj_list.append(fAdjs)
+
+                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(mesh_count_list[0]) + ")")
+                mesh_count_list[0]+=1
+                patchNum+=1
+        else:       #Small mesh case
+
+            # Convert to sparse matrix and coarsen graph
+            # print("f_adj0 shape: "+str(f_adj0.shape))
+            # print("f_pos0 shape: "+str(f_pos0.shape))
+            coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
+            
+            has_sat = True
+
+            while has_sat:
+                print("Coarsening...")
+                adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                has_sat = False
+
+                # Change adj format
+                fAdjs = []
+                for lvl in range(coarseningLvlNum):
+                    fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                    fadj = np.expand_dims(fadj, axis=0)
+                    fAdjs.append(fadj)
+                    has_sat = has_sat or has_sat_temp
+
+            # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+            new_N = len(newToOld)
+            old_N = facesNum
+            padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
+            padding3 =np.zeros((new_N-old_N,3))
+            f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
+            # GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+
+            ##### Save number of triangles and patch new_to_old permutation #####
+            num_faces.append(old_N) # Keep track of fake nodes
+            patch_indices.append([])
+            new_to_old_permutations_list.append(newToOld) # Nothing to append here, faces are already correctly ordered
+            #####################################################################
+
+            # Reorder nodes
+            f_normals_pos = f_normals_pos[newToOld]
+            # GTf_normals0 = GTf_normals0[newToOld]
+
+            
+
+            # Expand dimensions
+            f_normals = np.expand_dims(f_normals_pos, axis=0)
+            #f_adj = np.expand_dims(f_adj0, axis=0)
+            # GTf_normals = np.expand_dims(GTf_normals0, axis=0)
+
+            in_list.append(f_normals)
+            adj_list.append(fAdjs)
+            # gt_list.append(GTf_normals)
+        
+            # print("Added training mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
+
+            mesh_count_list[0]+=1
+
+        return num_faces, patch_indices, new_to_old_permutations_list
     
     #Takes the path to noisy and GT meshes as input, and add data to the lists fed to tensroflow graph, with the right format
     def addMeshWithVertices(inputFilePath,filename, gtFilePath, gtfilename, v_list, gtv_list, faces_list, n_list, gtn_list, adj_list, v_faces_list, mesh_count_list):
@@ -3636,9 +3839,9 @@ def mainFunction():
 
         # print("WARNING!!! Added area channel and binary channel for border faces")
         # f_normals_pos = np.concatenate((f_normals0, f_area0, f_borderCh0, f_pos0), axis=1)
-        print("WARNING!!! Added binary channel for border faces")
-        f_normals_pos = np.concatenate((f_normals0, f_borderCh0, f_pos0), axis=1)
-        # f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
+        # print("WARNING!!! Added binary channel for border faces")
+        # f_normals_pos = np.concatenate((f_normals0, f_borderCh0, f_pos0), axis=1)
+        f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
 
         # Load GT
         GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
@@ -4556,7 +4759,7 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/noisy/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
-
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/KickTest/"
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
@@ -4737,14 +4940,17 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
         noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
-
-
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/KickTest/Manifold/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/ModelsENVT/noisy/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/GMNF/original/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/nice_stuff/kendo/"
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
 
-            if (not noisyFile.endswith(".obj")):
-                continue
+            if (not noisyFile.endswith("eros100K_n2.obj")):
+                pass # continue
             mesh_count = [0]
 
 
@@ -4762,7 +4968,7 @@ def mainFunction():
                 noisyFileWColor = noisyFile[:-4]+"_original_normals.obj"
                 denoizedFileWColor = noisyFile[:-4]+"_denoised_color.obj"
 
-                if not os.path.isfile(RESULTS_PATH+denoizedFile):
+                if not os.path.isfile(RESULTS_PATH+denoizedFile+'aa'):
                     
 
                     f_normals_list = []
@@ -4774,7 +4980,7 @@ def mainFunction():
 
                     print("Adding mesh "+noisyFile+"...")
                     t0 = time.clock()
-                    faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, GTfn_list, f_adj_list, mesh_count)
+                    faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
                     print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
                     # Now recover vertices positions and create Edge maps
 
@@ -4782,12 +4988,13 @@ def mainFunction():
 
                     facesNum = faces_noisy.shape[0]
                     V0 = np.expand_dims(V0, axis=0)
-
-                    _, edge_map, v_e_map = getFacesAdj(faces_noisy)
-                    f_adj = getFacesLargeAdj(faces_noisy,K_faces)
+                    t0 = time.clock()
+                    # _, edge_map, v_e_map = getFacesAdj(faces_noisy)
+                    edge_map, v_e_map = getEdgeMap(faces_noisy)
+                    # f_adj = getFacesLargeAdj(faces_noisy,K_faces)
                     # print("WARNING!!!!! Hardcoded a change in faces adjacency")
                     # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
-                    
+                    print("edge map computed ("+str(1000*(time.clock()-t0))+"ms)")
 
                     faces_noisy = np.array(faces_noisy).astype(np.int32)
                     faces = np.expand_dims(faces_noisy,axis=0)
@@ -5786,9 +5993,9 @@ def mainFunction():
         resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
                             # [Max distance, Mean distance, Mean angle, std angle, face num]
 
-        # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
+        gtFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_gt/"
-        gtFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/original/"
+        # gtFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/original/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v2/test/original/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/original/"
         # gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
@@ -5802,16 +6009,20 @@ def mainFunction():
 
             nameArray = []
             resultsArray = []
-            if (not gtFileName.endswith(".obj")):
+            if (gtFileName.endswith("Merlion.obj")):
                 continue
 
             # denoizedFile0 = gtFileName[:-4]+"_n1-dtree3.obj"
             # denoizedFile1 = gtFileName[:-4]+"_n2-dtree3.obj"
             # denoizedFile2 = gtFileName[:-4]+"_n3-dtree3.obj"
 
-            denoizedFile0 = gtFileName[:-4]+"_noisy-dtree3.obj"
+            denoizedFile0 = gtFileName[:-4]+"_n1_nllr_default.obj"
+            denoizedFile1 = gtFileName[:-4]+"_n2_nllr_default.obj"
+            denoizedFile2 = gtFileName[:-4]+"_n3_nllr_default.obj"
+
+            # denoizedFile0 = gtFileName[:-4]+"_noisy-dtree3.obj"
             # denoizedFile0 = gtFileName[:-4]+"_denoized.obj"
-            heatFile0 = gtFileName[:-4]+"_heatmap.obj"
+            # heatFile0 = gtFileName[:-4]+"_heatmap.obj"
 
             # denoizedFile0 = gtFileName[:-4]+"_denoized_gray_1.obj"
             # denoizedFile1 = gtFileName[:-4]+"_denoized_gray_2.obj"
@@ -5829,9 +6040,9 @@ def mainFunction():
             # heatFile1 = gtFileName[:-4]+"_dtree3_heatmap_2.obj"
             # heatFile2 = gtFileName[:-4]+"_dtree3_heatmap_3.obj"
 
-            # heatFile0 = gtFileName[:-4]+"_heatmap_1.obj"
-            # heatFile1 = gtFileName[:-4]+"_heatmap_2.obj"
-            # heatFile2 = gtFileName[:-4]+"_heatmap_3.obj"
+            heatFile0 = gtFileName[:-4]+"_heatmap_1.obj"
+            heatFile1 = gtFileName[:-4]+"_heatmap_2.obj"
+            heatFile2 = gtFileName[:-4]+"_heatmap_3.obj"
 
             # if (os.path.isfile(RESULTS_PATH+heatFile0)) and (os.path.isfile(RESULTS_PATH+heatFile1)) and (os.path.isfile(RESULTS_PATH+heatFile2)):
             #     continue
@@ -5860,8 +6071,8 @@ def mainFunction():
             denoizedFilesList = [denoizedFile0]
             heatMapFilesList = [heatFile0]
 
-            # denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
-            # heatMapFilesList = [heatFile0,heatFile1,heatFile2]
+            denoizedFilesList = [denoizedFile0,denoizedFile1,denoizedFile2]
+            heatMapFilesList = [heatFile0,heatFile1,heatFile2]
 
             for fileNum in range(len(denoizedFilesList)):
                 
