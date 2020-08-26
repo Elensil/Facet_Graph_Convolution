@@ -63,11 +63,13 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
         
         if len(f_adj[0])>3:
             fadjs = [fadj0,fadj1,fadj2, fadj3]
+        elif len(f_adj[0])==1:
+            fadjs = [fadj0]
         else:
             fadjs = [fadj0,fadj1,fadj2]
         
         #Add random rotation (for experiment)
-        rot_mat = tf.placeholder(tf.float32, shape=(BATCH_SIZE,None,3,3),name='rot_mat')    #Random rotation matrix, used for data augmentation. Generated anew for each training iteration. None correspond to the tiling for each face.
+        # rot_mat = tf.placeholder(tf.float32, shape=(BATCH_SIZE,None,3,3),name='rot_mat')    #Random rotation matrix, used for data augmentation. Generated anew for each training iteration. None correspond to the tiling for each face.
     
         # fn_rot = tf.reshape(fn_,[BATCH_SIZE,-1,2,3])    # 2 because of normal + position
         # fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # switch dimensions
@@ -120,22 +122,36 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
             tens_random_R = np.reshape(random_R,(1,1,3,3))
             tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
 
-            my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2], rot_mat:tens_random_R2,
-                            keep_prob:1.0}
+            # my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2], rot_mat:tens_random_R2,
+            #                 keep_prob:1.0}
+            my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0]}
 
+            # writer = tf.summary.FileWriter("/morpheo-nas2/marmando/DeepMeshRefinement/TensorboardTest/", sess.graph)
+            # print(sess.run(n_conv,feed_dict=my_feed_dict))
+            # writer.close()
+            # return
+
+            if len(f_adj[0])>1:
+                my_feed_dict[fadj1]=f_adj[i][1]
+                my_feed_dict[fadj2]=f_adj[i][2]
             if len(f_adj[0])>3:
                 my_feed_dict[fadj3]=f_adj[i][3]
             outN, outNRaw = sess.run([squeezed_n_conv_rot, squeezed_n_conv],feed_dict=my_feed_dict)
             #outN = f_normals[i][0]
 
-            # Permute back patch
-            temp_perm = inv_perm(old_to_new_permutations[i])
-            outN = outN[temp_perm]
-            outN = outN[0:num_wofake_nodes[i]]
+            if len(f_adj[0])>1:
+                # Permute back patch
+                temp_perm = inv_perm(old_to_new_permutations[i])
+                outN = outN[temp_perm]
+                outN = outN[0:num_wofake_nodes[i]]
 
-            outNRaw = outNRaw[temp_perm]
-            outNRaw = outNRaw[0:num_wofake_nodes[i]]
-            # remove fake nodes from prediction
+                outNRaw = outNRaw[temp_perm]
+                outNRaw = outNRaw[0:num_wofake_nodes[i]]
+                # remove fake nodes from prediction
+
+
+
+
             if len(patch_indices[i]) == 0:
                 predicted_normals = outN
                 # predicted_normalsRaw = outNRaw
@@ -627,7 +643,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     # np.random.seed(random_seed)
 
     # sess = tf.InteractiveSession(config=tf.ConfigProto( allow_soft_placement=True, log_device_placement=False))
-    sess = tf.InteractiveSession()
+    # sess = tf.InteractiveSession()
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
     if(FLAGS.debug):    #launches debugger at every sess.run() call
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
@@ -652,7 +669,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     fadj1 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj1')
     fadj2 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj2')
 
-    costSamplesNum = 10000
+    costSamplesNum = 4000
 
     if len(f_adj_list[0])>3:
         fadj3 = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj3')
@@ -672,7 +689,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
 
     #rotTens = getRotationToAxis(fn_)
-    # print("NUM_IN_CHANNELS = "+str(NUM_IN_CHANNELS))
+    print("NUM_IN_CHANNELS = "+str(NUM_IN_CHANNELS))
     # print("NUM_IN_CHANNELS/3 = "+str(NUM_IN_CHANNELS/3))
     # print("int(NUM_IN_CHANNELS/3) = "+str(int(NUM_IN_CHANNELS/3)))
     bAddRot=True
@@ -726,6 +743,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
     if len(f_adj_list[0])>3:
         fadjs = [fadj0,fadj1, fadj2, fadj3]
+    elif len(f_adj_list[0])==1:
+        fadjs = [fadj0]
     else:
         fadjs = [fadj0,fadj1,fadj2]
 
@@ -834,12 +853,15 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
             #               sample_ind: random_ind, keep_prob:1}
 
             
+            
 
 
-            train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
-                            fadj2: f_adj_list[batch_num][2], tfn_: GTfn_list[batch_num], rot_mat:tens_random_R2,
+            train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], tfn_: GTfn_list[batch_num], rot_mat:tens_random_R2,
                             sample_ind: random_ind, keep_prob:1}
 
+            if len(f_adj_list[0])>1:
+                train_fd[fadj1]=f_adj_list[batch_num][1]
+                train_fd[fadj2]=f_adj_list[batch_num][2]
             # print("OK?")
             if len(f_adj_list[0])>3:
                 train_fd[fadj3]=f_adj_list[batch_num][3]
@@ -849,7 +871,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
             #sess.run(customLoss,feed_dict=train_fd)
 
             # print("OK")
-            train_loss += customLoss.eval(feed_dict=train_fd)
+            # train_loss += customLoss.eval(feed_dict=train_fd)
+            train_loss += sess.run(customLoss,feed_dict=train_fd)
             train_samp+=1
             # print("Still OK!")
             # Show smoothed training loss
@@ -886,14 +909,18 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
                     tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
 
-                    valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], fadj1: valid_f_adj_list[vbm][1],
-                            fadj2: valid_f_adj_list[vbm][2], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
+                    valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
                             sample_ind: valid_random_ind, keep_prob:1}
+
+                    if len(f_adj_list[0])>1:
+                        valid_fd[fadj1]=valid_f_adj_list[vbm][1]
+                        valid_fd[fadj2]=valid_f_adj_list[vbm][2]
 
                     if len(f_adj_list[0])>3:
                         valid_fd[fadj3]=valid_f_adj_list[vbm][3]
 
-                    valid_loss += customLoss.eval(feed_dict=valid_fd)
+                    # valid_loss += customLoss.eval(feed_dict=valid_fd)
+                    valid_loss += sess.run(customLoss,feed_dict=valid_fd)
                 valid_loss/=valid_samp
                 print("Iteration %d, validation loss %g"%(iter, valid_loss))
                 lossArray[int(iter/evalStepNum),1]=valid_loss
@@ -3314,8 +3341,8 @@ def mainFunction():
 
     K_faces = 23
 
-    maxSize = 30000 #35000
-    patchSize = 30000 #15000
+    maxSize = 4000 #30000 #35000
+    patchSize = 4000 #30000 #15000
 
     training_meshes_num = [0]
     valid_meshes_num = [0]
@@ -3403,16 +3430,22 @@ def mainFunction():
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_v2/BinaryDump/wBorders_c4_new2/"
 
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_v1/BinaryDump/2ndstep_wBorders_c4/"
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_Fusion/BinaryDump/wBorders_c4_new/"
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_Fusion/BinaryDump/Dump2_wBorders_c4_new/"
+    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_Fusion/BinaryDump/wBorders_c4_new/"
+    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_Fusion/BinaryDump/Dump2_wBorders_c4_new/"
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_Fusion/BinaryDump/normals_c4_new/"
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Kinect_Fusion/BinaryDump/msVertices_c4/"
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Dec2019Exp/Kinect_Fusion/BinaryDump/doubleLoss_wBorders_c4/"
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Dec2019Exp/Synthetic/BinaryDump/doubleLoss_wBorders_c4/"
 
+    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OneLevel/"
+    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OrderedOneLevel/"
+    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/"
+
     # Coarsening parameters
-    coarseningLvlNum = 3
+    # coarseningLvlNum = 3
     coarseningStepNum = COARSENING_STEPS
+    coarseningLvlNum = 1
+
 
     # pickleFND("/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/", "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/FND_c4/")
     # pickleFND("/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/noisy/", "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/FND_el/")
@@ -3455,7 +3488,8 @@ def mainFunction():
         print("normals computed ("+str(1000*(t2-t1))+"ms)")
         
         # Get adjacency
-        f_adj0 = getFacesLargeAdj(faces0,K_faces)
+        # f_adj0 = getFacesLargeAdj(faces0,K_faces)
+        f_adj0 = getFacesOrderedAdj(faces0,K_faces)
         t3 = time.clock()
         print("Adj computed ("+str(1000*(t3-t2))+"ms)")
         # Get faces position
@@ -3519,42 +3553,48 @@ def mainFunction():
                 if old_N<100:
                     continue
 
-                # Convert to sparse matrix and coarsen graph
-                coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
+                if coarseningLvlNum>1:
 
-                has_sat = True
+                    # Convert to sparse matrix and coarsen graph
+                    coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
 
-                while has_sat:
-                    print("Coarsening...")
-                    adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                    has_sat = True
 
-                    has_sat = False
-                    # Change adj format
+                    while has_sat:
+                        print("Coarsening...")
+                        adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+
+                        has_sat = False
+                        # Change adj format
+                        fAdjs = []
+                        for lvl in range(coarseningLvlNum):
+                            fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                            fadj = np.expand_dims(fadj, axis=0)
+                            fAdjs.append(fadj)
+                            has_sat = has_sat or has_sat_temp
+
+
+
+                    # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                    new_N = len(newToOld)
+                    
+                    padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
+                    # padding6 =np.zeros((new_N-old_N,33))
+                    padding3 =np.zeros((new_N-old_N,3))
+                    patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
+                    patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+                    # Reorder nodes
+                    patchFNormals = patchFNormals[newToOld]
+                    patchGTFNormals = patchGTFNormals[newToOld]
+                else:
                     fAdjs = []
-                    for lvl in range(coarseningLvlNum):
-                        fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
-                        fadj = np.expand_dims(fadj, axis=0)
-                        fAdjs.append(fadj)
-                        has_sat = has_sat or has_sat_temp
-
-
-
-                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
-                new_N = len(newToOld)
-                
-                padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
-                # padding6 =np.zeros((new_N-old_N,33))
-                padding3 =np.zeros((new_N-old_N,3))
-                patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
-                patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
-                # Reorder nodes
-                patchFNormals = patchFNormals[newToOld]
-                patchGTFNormals = patchGTFNormals[newToOld]
+                    fAdjs.append(testPatchAdj[np.newaxis,:,:])
 
                 ##### Save number of triangles and patch new_to_old permutation #####
                 num_faces.append(old_N)
                 patch_indices.append(fOldInd)
-                new_to_old_permutations_list.append(newToOld)
+                if coarseningLvlNum>1:
+                    new_to_old_permutations_list.append(newToOld)
                 #####################################################################
 
                 
@@ -3572,44 +3612,52 @@ def mainFunction():
                 mesh_count_list[0]+=1
                 patchNum+=1
         else:       #Small mesh case
-
+            old_N = facesNum
             # Convert to sparse matrix and coarsen graph
             # print("f_adj0 shape: "+str(f_adj0.shape))
             # print("f_pos0 shape: "+str(f_pos0.shape))
-            coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
             
-            has_sat = True
+            
+            if coarseningLvlNum>1:
+                coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
+                has_sat = True
 
-            while has_sat:
-                print("Coarsening...")
-                adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
-                has_sat = False
+                while has_sat:
+                    print("Coarsening...")
+                    adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                    has_sat = False
 
-                # Change adj format
+                    # Change adj format
+                    fAdjs = []
+                    for lvl in range(coarseningLvlNum):
+                        fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                        fadj = np.expand_dims(fadj, axis=0)
+                        fAdjs.append(fadj)
+                        has_sat = has_sat or has_sat_temp
+
+                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                new_N = len(newToOld)
+                
+                padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
+                padding3 =np.zeros((new_N-old_N,3))
+                f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
+                GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+                # Reorder nodes
+                f_normals_pos = f_normals_pos[newToOld]
+                GTf_normals0 = GTf_normals0[newToOld]
+
+            else:
                 fAdjs = []
-                for lvl in range(coarseningLvlNum):
-                    fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
-                    fadj = np.expand_dims(fadj, axis=0)
-                    fAdjs.append(fadj)
-                    has_sat = has_sat or has_sat_temp
-
-            # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
-            new_N = len(newToOld)
-            old_N = facesNum
-            padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
-            padding3 =np.zeros((new_N-old_N,3))
-            f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
-            GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+                fAdjs.append(f_adj0[np.newaxis,:,:])
 
             ##### Save number of triangles and patch new_to_old permutation #####
             num_faces.append(old_N) # Keep track of fake nodes
             patch_indices.append([])
-            new_to_old_permutations_list.append(newToOld) # Nothing to append here, faces are already correctly ordered
+            if coarseningLvlNum>1:
+                new_to_old_permutations_list.append(newToOld) # Nothing to append here, faces are already correctly ordered
             #####################################################################
 
-            # Reorder nodes
-            f_normals_pos = f_normals_pos[newToOld]
-            GTf_normals0 = GTf_normals0[newToOld]
+            
 
             
 
@@ -3648,6 +3696,7 @@ def mainFunction():
         
         # Get adjacency
         f_adj0 = getFacesLargeAdj(faces0,K_faces)
+        # f_adj0 = getFacesOrderedAdj(faces0,K_faces)
         t3 = time.clock()
         print("Adj computed ("+str(1000*(t3-t2))+"ms)")
         # Get faces position
@@ -3685,9 +3734,10 @@ def mainFunction():
                         print("ERROR: Bad seed returned!!")
                         return
                 tp0 = time.clock()
+
                 # testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
-                # testPatchAdj, fOldInd, nextSeed = getGraphPatch_wMask(f_adj0, patchSize, faceSeed, faceCheck)
-                coo_adj, fOldInd, nextSeed = getSparseGraphPatch_wMask(f_adj0,f_pos0, f_normals0, patchSize, faceSeed, faceCheck)
+                testPatchAdj, fOldInd, nextSeed = getGraphPatch_wMask(f_adj0, patchSize, faceSeed, faceCheck)
+                # coo_adj, fOldInd, nextSeed = getSparseGraphPatch_wMask(f_adj0,f_pos0, f_normals0, patchSize, faceSeed, faceCheck)
                 tp1 = time.clock()
                 print("\nMesh patch extracted ("+str(1000*(tp1-tp0))+"ms)")
                 # print("Patch size = %i"%testPatchAdj.shape[0])
@@ -3702,45 +3752,52 @@ def mainFunction():
                 if old_N<100:
                     continue
 
-                # Convert to sparse matrix and coarsen graph
-                # tls0 = time.clock()
-                # coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
-                # print("list to sparse conversion ("+str(1000*(time.clock()-tls0))+"ms)")
-                has_sat = True
+                if coarseningLvlNum>1:
+                    # Convert to sparse matrix and coarsen graph
+                    # tls0 = time.clock()
+                    coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
+                    # print("list to sparse conversion ("+str(1000*(time.clock()-tls0))+"ms)")
+                    has_sat = True
 
-                while has_sat:
-                    print("Coarsening...")
-                    tc0 = time.clock()
-                    adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
-                    tc1 = time.clock()
-                    print("Coarsening complete ("+str(1000*(tc1-tc0))+"ms)")
-                    has_sat = False
-                    # Change adj format
+                    while has_sat:
+                        print("Coarsening...")
+                        tc0 = time.clock()
+                        adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                        tc1 = time.clock()
+                        print("Coarsening complete ("+str(1000*(tc1-tc0))+"ms)")
+                        has_sat = False
+                        # Change adj format
+                        fAdjs = []
+                        for lvl in range(coarseningLvlNum):
+                            tsl0 = time.clock()
+                            fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                            print("sparse to list conversion ("+str(1000*(time.clock()-tsl0))+"ms)")
+                            fadj = np.expand_dims(fadj, axis=0)
+                            fAdjs.append(fadj)
+                            has_sat = has_sat or has_sat_temp
+
+
+
+                    # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                    new_N = len(newToOld)
+                    
+                    padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
+                    # padding6 =np.zeros((new_N-old_N,33))
+                    padding3 =np.zeros((new_N-old_N,3))
+                    patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
+                    # Reorder nodes
+                    patchFNormals = patchFNormals[newToOld]
+
+                else:   # One level only: no coarsening
                     fAdjs = []
-                    for lvl in range(coarseningLvlNum):
-                        tsl0 = time.clock()
-                        fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
-                        print("sparse to list conversion ("+str(1000*(time.clock()-tsl0))+"ms)")
-                        fadj = np.expand_dims(fadj, axis=0)
-                        fAdjs.append(fadj)
-                        has_sat = has_sat or has_sat_temp
+                    fAdjs.append(testPatchAdj[np.newaxis,:,:])
 
-
-
-                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
-                new_N = len(newToOld)
-                
-                padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
-                # padding6 =np.zeros((new_N-old_N,33))
-                padding3 =np.zeros((new_N-old_N,3))
-                patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
-                # Reorder nodes
-                patchFNormals = patchFNormals[newToOld]
 
                 ##### Save number of triangles and patch new_to_old permutation #####
                 num_faces.append(old_N)
                 patch_indices.append(fOldInd)
-                new_to_old_permutations_list.append(newToOld)
+                if coarseningLvlNum>1:
+                    new_to_old_permutations_list.append(newToOld)
                 #####################################################################
 
                 # Expand dimensions
@@ -3754,44 +3811,53 @@ def mainFunction():
                 mesh_count_list[0]+=1
                 patchNum+=1
         else:       #Small mesh case
-
-            # Convert to sparse matrix and coarsen graph
-            # print("f_adj0 shape: "+str(f_adj0.shape))
-            # print("f_pos0 shape: "+str(f_pos0.shape))
-            coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
-            
-            has_sat = True
-
-            while has_sat:
-                print("Coarsening...")
-                adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
-                has_sat = False
-
-                # Change adj format
-                fAdjs = []
-                for lvl in range(coarseningLvlNum):
-                    fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
-                    fadj = np.expand_dims(fadj, axis=0)
-                    fAdjs.append(fadj)
-                    has_sat = has_sat or has_sat_temp
-
-            # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
-            new_N = len(newToOld)
             old_N = facesNum
-            padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
-            padding3 =np.zeros((new_N-old_N,3))
-            f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
-            # GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+
+            if coarseningLvlNum>1:
+                # Convert to sparse matrix and coarsen graph
+                # print("f_adj0 shape: "+str(f_adj0.shape))
+                # print("f_pos0 shape: "+str(f_pos0.shape))
+                coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
+                
+                has_sat = True
+
+                while has_sat:
+                    print("Coarsening...")
+                    adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                    has_sat = False
+
+                    # Change adj format
+                    fAdjs = []
+                    for lvl in range(coarseningLvlNum):
+                        fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                        fadj = np.expand_dims(fadj, axis=0)
+                        fAdjs.append(fadj)
+                        has_sat = has_sat or has_sat_temp
+
+                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                new_N = len(newToOld)
+                
+                padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
+                padding3 =np.zeros((new_N-old_N,3))
+                f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
+                # GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+
+                # Reorder nodes
+                f_normals_pos = f_normals_pos[newToOld]
+                # GTf_normals0 = GTf_normals0[newToOld]
+
+            else:
+                fAdjs = []
+                fAdjs.append(f_adj0[np.newaxis,:,:])
 
             ##### Save number of triangles and patch new_to_old permutation #####
             num_faces.append(old_N) # Keep track of fake nodes
             patch_indices.append([])
-            new_to_old_permutations_list.append(newToOld) # Nothing to append here, faces are already correctly ordered
+            if coarseningLvlNum>1:
+                new_to_old_permutations_list.append(newToOld) # Nothing to append here, faces are already correctly ordered
             #####################################################################
 
-            # Reorder nodes
-            f_normals_pos = f_normals_pos[newToOld]
-            # GTf_normals0 = GTf_normals0[newToOld]
+            
 
             
 
@@ -4565,9 +4631,9 @@ def mainFunction():
         valid_GTfn_list = []
 
 
-        inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-        validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-        gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
+        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
         gtnameoffset = 7
 
         # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/noisy/"
@@ -4651,9 +4717,9 @@ def mainFunction():
                     gtfilename = filename[:-gtnameoffset]+".obj"
                     # addMeshTransposeNormals(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
                     addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-                    print("WARNING!! Adding each mesh twice! For diversity in the graph coarsening step")
-                    addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-                    addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
+                    # print("WARNING!! Adding each mesh twice! For diversity in the graph coarsening step")
+                    # addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
+                    # addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
                     # addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
 
             if pickleSave:
@@ -4688,11 +4754,39 @@ def mainFunction():
 
 
         examplesNum = len(f_normals_list)
+        valid_examplesNum = len(valid_f_normals_list)
         print("training examples num = ",examplesNum)
         print("f_normals_list shape = ",f_normals_list[0].shape)
         print("GTfn_list shape = ",GTfn_list[0].shape)
         print("valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
         print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
+
+
+
+
+        # Reformat adj list, for binary dump without coarsening
+        new_adj_list = []
+        new_valid_adj_list = []
+        for p in range(examplesNum):
+            adj_p_list = []
+            adjP = f_adj_list[p]
+            adjPLength = len(adjP)
+            for i in range(adjPLength):
+                adjMat = adjP[i]
+                adj_p_list.append(adjMat[np.newaxis,:,:])
+            new_adj_list.append(adj_p_list)
+
+        for p in range(valid_examplesNum):
+            adj_p_list = []
+            adjP = valid_f_adj_list[p]
+            adjPLength = len(adjP)
+            for i in range(adjPLength):
+                adjMat = adjP[i]
+                adj_p_list.append(adjMat[np.newaxis,:,:])
+            new_valid_adj_list.append(adj_p_list)
+
+        f_adj_list = new_adj_list
+        valid_f_adj_list = new_valid_adj_list
 
         for p in range(examplesNum):
 
@@ -4700,17 +4794,31 @@ def mainFunction():
             myN = GTfn_list[p][0]
             myN = normalize(myN)
             myAdj = f_adj_list[p][0][0]
-            filteredN = filterFlippedFaces(myN, myAdj)
+
+            if (p==0):
+                test0 = f_adj_list[0]
+                print("f_adj_list[0] length = ",len(test0))
+                test1 = test0[0]
+                print("f_adj_list[0][0] length = ",len(test1))
+                print("f_adj_list[0][0] shape = ",test1.shape)
+                print("f_adj_list[0][0][0] shape = ",f_adj_list[0][0][0].shape)
+                print("myAdj shape = ",myAdj.shape)
+
+
+            # print("WARNING!!!!!!!!!!!!!!!!!")
+            # myAdj = f_adj_list[p][0]
+            # print("myAdj shape = ",myAdj.shape)
+            filteredN = filterFlippedFaces(myN, myAdj, printAdjShape=(p==0))
             GTfn_list[p] = filteredN[np.newaxis,:,:]
 
-            # Optional: remove border channel for noisy input
-            myN = f_normals_list[p][0]
-            myNhead = myN[:,:3]
-            myNtail = myN[:,4:]
-            newN = np.concatenate((myNhead,myNtail),axis=1)
-            f_normals_list[p] = newN[np.newaxis,:,:]
+            # # Optional: remove border channel for noisy input
+            # myN = f_normals_list[p][0]
+            # myNhead = myN[:,:3]
+            # myNtail = myN[:,4:]
+            # newN = np.concatenate((myNhead,myNtail),axis=1)
+            # f_normals_list[p] = newN[np.newaxis,:,:]
 
-        valid_examplesNum = len(valid_f_normals_list)
+        
         
         for p in range(valid_examplesNum):
 
@@ -4718,15 +4826,17 @@ def mainFunction():
             myN = valid_GTfn_list[p][0]
             myN = normalize(myN)
             myAdj = valid_f_adj_list[p][0][0]
+            # print("WARNING!!!!!!!!!!!!!!!!!")
+            # myAdj = valid_f_adj_list[p][0]
             filteredN = filterFlippedFaces(myN, myAdj)
             valid_GTfn_list[p] = filteredN[np.newaxis,:,:]
 
-            # Optional: remove border channel for noisy input
-            myN = valid_f_normals_list[p][0]
-            myNhead = myN[:,:3]
-            myNtail = myN[:,4:]
-            newN = np.concatenate((myNhead,myNtail),axis=1)
-            valid_f_normals_list[p] = newN[np.newaxis,:,:]
+            # # Optional: remove border channel for noisy input
+            # myN = valid_f_normals_list[p][0]
+            # myNhead = myN[:,:3]
+            # myNtail = myN[:,4:]
+            # newN = np.concatenate((myNhead,myNtail),axis=1)
+            # valid_f_normals_list[p] = newN[np.newaxis,:,:]
 
         trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
@@ -4929,8 +5039,11 @@ def mainFunction():
     # master branch inference (old school, w/o multi-scale vertex update)
     elif running_mode == 12:
         
-        maxSize = 100000
-        patchSize = 100000
+        # maxSize = 100000
+        # patchSize = 100000
+
+        maxSize = 10000
+        patchSize = 10000
 
         # noisyFolder = "/morpheo-nas2/vincent/DTU_Robot_Image_Dataset/Surface/furu/"
 
@@ -4944,13 +5057,13 @@ def mainFunction():
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/ModelsENVT/noisy/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/GMNF/original/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/nice_stuff/kendo/"
+        # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/nice_stuff/kendo/"
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
 
-            if (not noisyFile.endswith("eros100K_n2.obj")):
-                pass # continue
+            if (not noisyFile.endswith("part_Lp_n2.obj")):
+                continue
             mesh_count = [0]
 
 
@@ -4981,10 +5094,30 @@ def mainFunction():
                     print("Adding mesh "+noisyFile+"...")
                     t0 = time.clock()
                     faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
+                    # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, [], f_adj_list, mesh_count)
                     print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
                     # Now recover vertices positions and create Edge maps
 
                     
+                    print("f_adj_list length = %i"%len(f_adj_list))
+                    print("f_adj_list[0] length = %i"%len(f_adj_list[0]))
+                    print("f_adj_list[0][0] shape = ",f_adj_list[0][0].shape)
+
+                    # # Reformat adj list, for binary dump without coarsening
+                    # new_adj_list = []
+                    # for p in range(examplesNum):
+                    #     adj_p_list = []
+                    #     adjP = f_adj_list[p]
+                    #     adjPLength = len(adjP)
+                    #     for i in range(adjPLength):
+                    #         adjMat = adjP[i]
+                    #         adj_p_list.append(adjMat[np.newaxis,:,:])
+                    #     new_adj_list.append(adj_p_list)
+
+
+
+
+
 
                     facesNum = faces_noisy.shape[0]
                     V0 = np.expand_dims(V0, axis=0)
@@ -7306,7 +7439,7 @@ if __name__ == "__main__":
     #parser.add_argument('--dataset_path')
     parser.add_argument('--results_path', type=str)
     parser.add_argument('--network_path', type=str)
-    parser.add_argument('--num_iterations', type=int, default=30000)
+    parser.add_argument('--num_iterations', type=int, default=20000)
     parser.add_argument('--debug', type=bool, default=False)
     parser.add_argument('--device', type=str, default='/gpu:0')
     parser.add_argument('--net_name', type=str, default='net')

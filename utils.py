@@ -11,6 +11,8 @@ except ImportError:
 import scipy.sparse
 import itertools
 
+from halfedge_mesh_Matt import *
+
 #import h5py
 
 def one_hot_encoding_batch_per_point(y, num_classes):
@@ -290,6 +292,122 @@ def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge
                     find[f2]+=1
     if unregistered_connections>0:
         print("unregistered connections (faces): "+str(unregistered_connections/2))
+
+    return fadj
+
+# HALFEDGES!!
+def getFacesOrderedAdj(faces,K):
+
+    vnum = np.max(faces)+1
+    fakeV = np.zeros([vnum,3])
+
+    meshHE = HalfedgeMesh(fakeV,faces)
+
+    fnum = faces.shape[0]
+    fadj = np.zeros([fnum,K-1], dtype=np.int32)-1     # triangular faces only
+    # find = np.zeros([fnum], dtype=np.int8)           # Keep track of current writing index for each face (in fadj)
+
+
+    def getNextEdge(curHE):
+
+        nominalNE = curHE.next.opposite
+        if nominalNE is not None:
+            return nominalNE
+        elif curHE.opposite is None:
+            return None
+        else:
+            prevEdge = curHE.opposite.prev
+            while prevEdge.opposite is not None:
+                prevEdge = prevEdge.opposite.prev
+            return prevEdge
+
+    for f in range(fnum):
+        # print("face %i"%f)
+        v0 = faces[f,0]
+        v1 = faces[f,1]
+        neighCount = 0
+
+        # There are three loops, one for each neighbouring vertex.
+        # The last face of each loop is skipped, since it is also the first face of the next loop
+        # If we reach the last face, or a border edge, we break from the loop and go to the next one
+        
+        endHE = meshHE.facets[f].halfedge.prev
+        endHE2 = meshHE.facets[f].halfedge.next
+        endHE3 = meshHE.facets[f].halfedge
+
+        # startHE = meshHE.facets[f].halfedge.opposite
+        # startHE2 = meshHE.facets[f].halfedge.prev.opposite
+        # startHE3 = meshHE.facets[f].halfedge.next.opposite
+        startHE = getNextEdge(endHE)
+        startHE2 = getNextEdge(endHE2)
+        startHE3 = getNextEdge(endHE3)
+
+        curHE = startHE
+        # print("1st loop")
+        while (neighCount<(K-1)) and (curHE is not None):
+            # We have looped around first vertex, and reached the current face: check and move to the next 
+            if (curHE.next.opposite is not None) and (curHE.next.opposite == endHE):
+                break
+
+            fadj[f,neighCount] = curHE.facet.index
+            # print("Adding neighbour %i [%i,%i,%i]"%(curHE.facet.index, curHE.facet.halfedge.vertex.index,curHE.facet.halfedge.next.vertex.index,curHE.facet.halfedge.prev.vertex.index))
+            curHE = getNextEdge(curHE)
+            neighCount += 1
+
+            if curHE is None:
+                # print("border edge")
+                break
+            if curHE == endHE:
+                break
+            
+
+        # second vertex
+        # curHE = curHE.opposite.next.opposite
+        curHE = startHE2
+        # print("2nd loop")
+        while (neighCount<(K-1)) and (curHE is not None):
+            # We have looped around second vertex, and reached the current face: check and move to the next
+            if (curHE.next.opposite is not None) and (curHE.next.opposite == endHE2):
+                break
+
+            fadj[f,neighCount] = curHE.facet.index
+            # print("Adding neighbour %i [%i,%i,%i]"%(curHE.facet.index, curHE.facet.halfedge.vertex.index,curHE.facet.halfedge.next.vertex.index,curHE.facet.halfedge.prev.vertex.index))
+            curHE = getNextEdge(curHE)
+            neighCount += 1
+            if curHE is None:
+                # print("border edge")
+                break
+            if curHE == endHE2:
+                break
+
+            
+            
+
+        # third vertex
+        # curHE = curHE.opposite.next.opposite
+        curHE = startHE3
+        # print("3rd loop")
+        while (neighCount<(K-1)) and (curHE is not None):
+
+            # We have looped around third vertex, and reached the current face: check and move to the next
+            if (curHE.next.opposite is not None) and (curHE.next.opposite == endHE3):
+                break
+
+            fadj[f,neighCount] = curHE.facet.index
+            # print("Adding neighbour %i [%i,%i,%i]"%(curHE.facet.index, curHE.facet.halfedge.vertex.index,curHE.facet.halfedge.next.vertex.index,curHE.facet.halfedge.prev.vertex.index))
+            curHE = getNextEdge(curHE)
+            neighCount += 1
+            if curHE is None:
+                # print("border edge")
+                break
+            if curHE == endHE3:
+                break
+
+            
+            
+
+    fadj = fadj+1
+    fadj = np.concatenate([np.expand_dims(np.arange(fnum)+1,axis=-1),fadj],axis=-1)
 
     return fadj
 
@@ -2710,13 +2828,16 @@ def makeFacesMesh(myAdj, myP, myN):
 
 
 
-def filterFlippedFaces(faceNormals, adj):
+def filterFlippedFaces(faceNormals, adj, printAdjShape=False):
     
     dpTh = -0.5
     adj = adj-1 # switching to zero-indexing
     samp = 1641
 
     K = adj.shape[1]
+    if printAdjShape:
+        print("adj shape = ",adj.shape)
+        print("K = ",K)
     tiledN = np.tile(faceNormals[:,np.newaxis,:],[1,K-1,1])
     # [N, K-1, 3]
     neighN = faceNormals[adj[:,1:]]

@@ -549,7 +549,7 @@ def batch_norm(x, fullNorm=True):
 
 
 def custom_conv2d(x, adj, out_channels, M, biasMask = True, translation_invariance=False, rotation_invariance=False):
-        
+    # with tf.variable_scope('Conv'):
         batch_size, input_size, in_channels = x.get_shape().as_list()
         W0 = weight_variable([M, out_channels, in_channels])
         b = bias_variable([out_channels])
@@ -1077,78 +1077,167 @@ def decoding_layer(x, adj, W, translation_invariance=False):
 # We actually discriminate nodes with no connection to the graph, instead of input equal to 0
 # The adjacency matrix is filtered upstream based on input, thanks to the function (filterAdj).
 def reusable_custom_conv2d(x, adj, out_channels, M, biasMask = True, translation_invariance=False, name="conv2d"):
-        
-        batch_size, input_size, in_channels = x.get_shape().as_list()
-        W = reusable_weight_variable([M, out_channels, in_channels], name=(name+"_weight"))
-        b = reusable_bias_variable([out_channels], name=(name+"_bias"))
-        u = reusable_assignment_variable([M, in_channels], name=(name+"_u"))
-        c = reusable_assignment_variable([M], name=(name+"_c"))
-        batch_size, input_size, K = adj.get_shape().as_list()
+    
 
-        # Calculate neighbourhood size for each input - [batch_size, input_size, neighbours]
-        adj_size = tf.count_nonzero(adj, 2)
-        #deal with unconnected points: replace NaN with 0
-        non_zeros = tf.not_equal(adj_size, 0)
-        adj_size = tf.cast(adj_size, tf.float32)
-        adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
+    batch_size, input_size, in_channels = x.get_shape().as_list()
+    W = reusable_weight_variable([M, out_channels, in_channels], name=(name+"_weight"))
+    b = reusable_bias_variable([out_channels], name=(name+"_bias"))
+    u = reusable_assignment_variable([M, in_channels], name=(name+"_u"))
+    c = reusable_assignment_variable([M], name=(name+"_c"))
+    batch_size, input_size, K = adj.get_shape().as_list()
 
-        # [batch_size, input_size, 1, 1]
-        #adj_size = tf.reshape(adj_size, [batch_size, input_size, 1, 1])
-        adj_size = tf.reshape(adj_size, [batch_size, -1, 1, 1])
+    # Calculate neighbourhood size for each input - [batch_size, input_size, neighbours]
+    adj_size = tf.count_nonzero(adj, 2)
+    #deal with unconnected points: replace NaN with 0
+    non_zeros = tf.not_equal(adj_size, 0)
+    adj_size = tf.cast(adj_size, tf.float32)
+    adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
 
-        if translation_invariance == False:
-            v = reusable_assignment_variable([M, in_channels], name=(name+"_v"))
-        else:
-            print("Translation-invariant\n")
-            # [batch_size, input_size, K, M]
-            q = get_weight_assigments_translation_invariance(x, adj, u, c)
+    # [batch_size, input_size, 1, 1]
+    #adj_size = tf.reshape(adj_size, [batch_size, input_size, 1, 1])
+    adj_size = tf.reshape(adj_size, [batch_size, -1, 1, 1])
 
-        # [batch_size, in_channels, input_size]
-        x = tf.transpose(x, [0, 2, 1])
-        W = tf.reshape(W, [M*out_channels, in_channels])
-        # Multiple w and x -> [batch_size, M*out_channels, input_size]
-        wx = tf.map_fn(lambda x: tf.matmul(W, x), x)
-        # Reshape and transpose wx into [batch_size, input_size, M*out_channels]
-        wx = tf.transpose(wx, [0, 2, 1])
-        # Get patches from wx - [batch_size, input_size, K(neighbours-here input_size), M*out_channels]
-        patches = get_patches(wx, adj)
+    if translation_invariance == False:
+        v = reusable_assignment_variable([M, in_channels], name=(name+"_v"))
+    else:
+        print("Translation-invariant\n")
         # [batch_size, input_size, K, M]
+        q = get_weight_assigments_translation_invariance(x, adj, u, c)
 
-        if translation_invariance == False:
-            q = get_weight_assigments(x, adj, u, v, c)
-            # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
-        else:
-            #q = get_weight_assigments_translation_invariance(x, adj, u, c)
-            # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
-            pass
-        
-        #patches = tf.reshape(patches, [batch_size, input_size, K, M, out_channels])
-        patches = tf.reshape(patches, [batch_size, -1, K, M, out_channels])
-        # [out, batch_size, input_size, K, M]
-        patches = tf.transpose(patches, [4, 0, 1, 2, 3])
-        patches = tf.multiply(q, patches)
-        patches = tf.transpose(patches, [1, 2, 3, 4, 0])
+    # [batch_size, in_channels, input_size]
+    x = tf.transpose(x, [0, 2, 1])
+    W = tf.reshape(W, [M*out_channels, in_channels])
+    # Multiple w and x -> [batch_size, M*out_channels, input_size]
+    wx = tf.map_fn(lambda x: tf.matmul(W, x), x)
+    # Reshape and transpose wx into [batch_size, input_size, M*out_channels]
+    wx = tf.transpose(wx, [0, 2, 1])
+    # Get patches from wx - [batch_size, input_size, K(neighbours-here input_size), M*out_channels]
+    patches = get_patches(wx, adj)
+    # [batch_size, input_size, K, M]
 
-        # Add all the elements for all neighbours for a particular m sum_{j in N_i} qwx -- [batch_size, input_size, M, out]
-        patches = tf.reduce_sum(patches, axis=2)
-        patches = tf.multiply(adj_size, patches)
-        # Add add elements for all m
-        patches = tf.reduce_sum(patches, axis=2)
-        # [batch_size, input_size, out]
-        print("Your patches shape is "+str(patches.shape))
+    if translation_invariance == False:
+        q = get_weight_assigments(x, adj, u, v, c)
+        # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
+    else:
+        #q = get_weight_assigments_translation_invariance(x, adj, u, c)
+        # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
+        pass
+    
+    #patches = tf.reshape(patches, [batch_size, input_size, K, M, out_channels])
+    patches = tf.reshape(patches, [batch_size, -1, K, M, out_channels])
+    # [out, batch_size, input_size, K, M]
+    patches = tf.transpose(patches, [4, 0, 1, 2, 3])
+    patches = tf.multiply(q, patches)
+    patches = tf.transpose(patches, [1, 2, 3, 4, 0])
 
-        if biasMask:
-            # NEW!! Add bias only to nodes with at least one active node in neighbourhood
-            patches = tf.where(tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,out_channels]), patches +b, patches)
-        else:
-            patches = patches + b
+    # Add all the elements for all neighbours for a particular m sum_{j in N_i} qwx -- [batch_size, input_size, M, out]
+    patches = tf.reduce_sum(patches, axis=2)
+    patches = tf.multiply(adj_size, patches)
+    # Add add elements for all m
+    patches = tf.reduce_sum(patches, axis=2)
+    # [batch_size, input_size, out]
+    print("Your patches shape is "+str(patches.shape))
 
-        # patches = patches + b
-        return patches
+    if biasMask:
+        # NEW!! Add bias only to nodes with at least one active node in neighbourhood
+        patches = tf.where(tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,out_channels]), patches +b, patches)
+    else:
+        patches = patches + b
+
+    # patches = patches + b
+    return patches
+
+def cycle_conv2d(x, adj, out_channels, M, biasMask=True, translation_invariance=False, rotation_invariance=False, name="conv2d"):    
+    batch_size, input_size, in_channels = x.get_shape().as_list()
+    W = reusable_weight_variable([M, out_channels, in_channels], name=(name+"_weight"))
+    b = reusable_bias_variable([out_channels], name=(name+"_bias"))
+    u = reusable_assignment_variable([M, in_channels], name=(name+"_u"))
+    c = reusable_assignment_variable([M], name=(name+"_c"))
+    batch_size, input_size, K = adj.get_shape().as_list()
+
+    # Calculate neighbourhood size for each input - [batch_size, input_size, neighbours]
+    adj_size = tf.count_nonzero(adj, 2)
+    #deal with unconnected points: replace NaN with 0
+    non_zeros = tf.not_equal(adj_size, 0)
+    adj_size = tf.cast(adj_size, tf.float32)
+    adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
+
+    # [batch_size, input_size, 1, 1]
+    #adj_size = tf.reshape(adj_size, [batch_size, input_size, 1, 1])
+    adj_size = tf.reshape(adj_size, [batch_size, -1, 1, 1])
+
+    if translation_invariance == False:
+        v = reusable_assignment_variable([M, in_channels], name=(name+"_v"))
+    else:
+        print("Translation-invariant\n")
+        # [batch_size, input_size, K, M]
+        q = get_weight_assigments_translation_invariance(x, adj, u, c)
+
+    # [batch_size, in_channels, input_size]
+    x = tf.transpose(x, [0, 2, 1])
+    W = tf.reshape(W, [M*out_channels, in_channels])
+    # Multiple w and x -> [batch_size, M*out_channels, input_size]
+    wx = tf.map_fn(lambda x: tf.matmul(W, x), x)
+    # Reshape and transpose wx into [batch_size, input_size, M*out_channels]
+    wx = tf.transpose(wx, [0, 2, 1])
+    # Get patches from wx - [batch_size, input_size, K(neighbours-here input_size), M*out_channels]
+    patches = get_patches(wx, adj)
+    # [batch_size, input_size, K, M]
+
+    if translation_invariance == False:
+        q = get_weight_assigments(x, adj, u, v, c)
+        # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
+    else:
+        #q = get_weight_assigments_translation_invariance(x, adj, u, c)
+        # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
+        pass
+
+    #patches = tf.reshape(patches, [batch_size, input_size, K, M, out_channels])
+    patches = tf.reshape(patches, [batch_size, -1, K, M, out_channels])
+    # [out, batch_size, input_size, K, M]
+    patches = tf.transpose(patches, [4, 0, 1, 2, 3])
+    patches = tf.multiply(q, patches)
+    patches = tf.transpose(patches, [1, 2, 3, 4, 0])
+
+    # ---
+    # This is where the trick happens:
+    # Roll tensors to align cycles on columns
+    # Then, sum over columns and maxpool over rows
+    # ---
+    sliceList = []
+    for neighbourInd in range(K):   # I don't know any better than to loop and roll each row independently...
+        patchSlice = patches[:,:,neighbourInd,:]
+        newSlice = tf.manip.roll(patchSlice,-neighbourInd,axis=-1)
+        sliceList.append(newSlice)
+    patches = tf.stack(sliceList,axis=2)
+
+
+    # Add all the elements for all neighbours for a particular m sum_{j in N_i} qwx -- [batch_size, input_size, M, out]
+    patches = tf.reduce_sum(patches, axis=2)
+    patches = tf.multiply(adj_size, patches)
+
+    # Now, (soft)max pool over all possible rotations instead of summing
+    # patches = tf.reduce_sum(patches, axis=2)
+    patches = softmaxPooling(patches, axis=2)
+    # [batch_size, input_size, out]
+    # print("Your patches shape is "+str(patches.shape))
+    if biasMask:
+        # NEW!! Add bias only to nodes with at least one active node in neighbourhood
+        patches = tf.where(tf.tile(tf.expand_dims(non_zeros,axis=-1),[1,1,out_channels]), patches +b, patches)
+    else:
+        patches = patches + b
+
+    return patches
+
+
+
+
+
 
 
 
 def custom_lin(input, out_channels):
+    with tf.variable_scope('MLP'):
         batch_size, input_size, in_channels = input.get_shape().as_list()
 
         W = weight_variable([in_channels, out_channels])
@@ -1170,51 +1259,52 @@ def custom_max_pool(input, kernel_size, stride=[2, 2], padding='VALID'):
         return outputs
 
 def custom_binary_tree_pooling(x, steps=1, pooltype='max'):
+    with tf.variable_scope('Pooling'):
+        batch_size, input_size, channels = x.get_shape().as_list()
+        # print("x shape: "+str(x.shape))
+        # print("batch_size = "+str(batch_size))
+        # print("channels = "+str(channels))
+        # Pairs of nodes should already be grouped together
+        if pooltype=='max':
+            x = tf.reshape(x,[batch_size,-1,int(math.pow(2,steps)),channels])
+            outputs = tf.reduce_max(x,axis=2)
+        elif pooltype=='avg':
+            x = tf.reshape(x,[batch_size,-1,int(math.pow(2,steps)),channels])
+            outputs = tf.reduce_mean(x,axis=2)
+        elif pooltype=='avg_ignore_zeros':
+            px = x
+            for step in range(steps):
+                px = tf.reshape(px,[batch_size,-1,2,channels])
+                line0 = tf.slice(px,[0,0,0,0],[-1,-1,1,-1])
+                line1 = tf.slice(px,[0,0,1,0],[-1,-1,-1,-1])
 
-    batch_size, input_size, channels = x.get_shape().as_list()
-    # print("x shape: "+str(x.shape))
-    # print("batch_size = "+str(batch_size))
-    # print("channels = "+str(channels))
-    # Pairs of nodes should already be grouped together
-    if pooltype=='max':
-        x = tf.reshape(x,[batch_size,-1,int(math.pow(2,steps)),channels])
-        outputs = tf.reduce_max(x,axis=2)
-    elif pooltype=='avg':
-        x = tf.reshape(x,[batch_size,-1,int(math.pow(2,steps)),channels])
-        outputs = tf.reduce_mean(x,axis=2)
-    elif pooltype=='avg_ignore_zeros':
-        px = x
-        for step in range(steps):
-            px = tf.reshape(px,[batch_size,-1,2,channels])
-            line0 = tf.slice(px,[0,0,0,0],[-1,-1,1,-1])
-            line1 = tf.slice(px,[0,0,1,0],[-1,-1,-1,-1])
+                z0 = tf.equal(line0,0)
+                z1 = tf.equal(line1,0)
 
-            z0 = tf.equal(line0,0)
-            z1 = tf.equal(line1,0)
+                z0 = tf.reduce_all(z0,axis=-1,keep_dims=True)
+                z1 = tf.reduce_all(z1,axis=-1,keep_dims=True)
 
-            z0 = tf.reduce_all(z0,axis=-1,keep_dims=True)
-            z1 = tf.reduce_all(z1,axis=-1,keep_dims=True)
+                z0 = tf.tile(z0,[1,1,1,channels])
+                z1 = tf.tile(z1,[1,1,1,channels])
 
-            z0 = tf.tile(z0,[1,1,1,channels])
-            z1 = tf.tile(z1,[1,1,1,channels])
+                cline0 = tf.where(z0,line1,line0)
+                cline1 = tf.where(z1,line0,line1)
 
-            cline0 = tf.where(z0,line1,line0)
-            cline1 = tf.where(z1,line0,line1)
+                cx = tf.concat([cline0,cline1],axis=2)
 
-            cx = tf.concat([cline0,cline1],axis=2)
-
-            px = tf.reduce_mean(cx,axis=2)
-        outputs = px
-    return outputs
+                px = tf.reduce_mean(cx,axis=2)
+            outputs = px
+        return outputs
 
 def custom_upsampling(x, steps=1):
-    batch_size, input_size, channels = x.get_shape().as_list()
+    with tf.variable_scope('Upsampling'):
+        batch_size, input_size, channels = x.get_shape().as_list()
 
-    x = tf.expand_dims(x,axis=2)
-    outputs = tf.tile(x,[1,1,int(math.pow(2,steps)),1])
-    outputs = tf.reshape(outputs,[batch_size,-1,channels])
+        x = tf.expand_dims(x,axis=2)
+        outputs = tf.tile(x,[1,1,int(math.pow(2,steps)),1])
+        outputs = tf.reshape(outputs,[batch_size,-1,channels])
 
-    return outputs
+        return outputs
 
 
 def filterAdj(x, adj, zeroValue):
@@ -1308,7 +1398,8 @@ def filterAdj(x, adj, zeroValue):
 
 
 def lrelu(x, alpha):
-  return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
+    with tf.variable_scope('lReLU'):
+        return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
 
 def lrelu6(x, alpha):
   return tf.nn.relu6(x) - alpha * tf.nn.relu6(-x)
@@ -1341,14 +1432,13 @@ def get_model(x, adj, num_classes, architecture):
 
 
 
-
-def softmaxPooling(x,dim):
+def softmaxPooling(x,axis=-1):
 
     # softmax (no axis support in my tf version)
     # weights = tf.math.softmax(x,axis=dim)
-    weights = tf.exp(x) / tf.reduce_sum(tf.exp(x), axis=dim, keep_dims=True)
+    weights = tf.exp(x) / tf.reduce_sum(tf.exp(x), axis=axis, keepdims=True)
     weighted_x = tf.multiply(x,weights)
-    return tf.reduce_sum(weighted_x,axis=dim)
+    return tf.reduce_sum(weighted_x,axis=axis)
 
 
 def enhancementBlock(x, adj, M_conv, d, D3, s):
@@ -4030,79 +4120,82 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
         # pos0 = tf.slice(x,[0,0,in_channels-3],[-1,-1,-1])
         # pos1 = custom_binary_tree_pooling(pos0, steps=coarsening_steps, pooltype='avg_ignore_zeros')
         # pos2 = custom_binary_tree_pooling(pos1, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+        with tf.variable_scope('Level0'):
+            # Conv1
+            M_conv1 = 9
+            out_channels_conv1 = 32
+            #h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
+            h_conv1, _ = custom_conv2d(x, adjs[0], out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = lrelu(h_conv1,alpha)
+            # [batch, N, 64]
 
-        # Conv1
-        M_conv1 = 9
-        out_channels_conv1 = 32
-        #h_conv1, _ = custom_conv2d_norm_pos(x, adj, out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=True)
-        h_conv1, _ = custom_conv2d(x, adjs[0], out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
-        h_conv1_act = lrelu(h_conv1,alpha)
-        # [batch, N, 64]
+            # Pooling 1
+            pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps) # TODO: deal with fake nodes??
+            # [batch, N/4, 64]
 
-        # Pooling 1
-        pool1 = custom_binary_tree_pooling(h_conv1_act, steps=coarsening_steps) # TODO: deal with fake nodes??
-        # [batch, N/4, 64]
+        with tf.variable_scope('Level1'):
+            # Conv2
+            M_conv2 = 9
+            out_channels_conv2 = 64
+            h_conv2, _ = custom_conv2d(pool1, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv2_act = lrelu(h_conv2,alpha)
+            # [batch, N/4, 128]
 
-        # Conv2
-        M_conv2 = 9
-        out_channels_conv2 = 64
-        h_conv2, _ = custom_conv2d(pool1, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-        h_conv2_act = lrelu(h_conv2,alpha)
-        # [batch, N/4, 128]
+            # Pooling 2
+            pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
+            # [batch, N/16, 128]
 
-        # Pooling 2
-        pool2 = custom_binary_tree_pooling(h_conv2_act, steps=coarsening_steps)
-        # [batch, N/16, 128]
+        with tf.variable_scope('Level2'):
+            # Conv3
+            M_conv3 = 9
+            out_channels_conv3 = 128
+            h_conv3, _ = custom_conv2d(pool2, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv3_act = lrelu(h_conv3,alpha)
+            # [batch, N/16, 256]
 
-        # Conv3
-        M_conv3 = 9
-        out_channels_conv3 = 128
-        h_conv3, _ = custom_conv2d(pool2, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-        h_conv3_act = lrelu(h_conv3,alpha)
-        # [batch, N/16, 256]
+            # --- Central features ---
 
-        # --- Central features ---
+            #DeConv3
+            dconv3, _ = custom_conv2d(h_conv3_act, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv3_act = lrelu(dconv3,alpha)
+            # [batch, N/16, 256]
 
-        #DeConv3
-        dconv3, _ = custom_conv2d(h_conv3_act, adjs[2], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
-        dconv3_act = lrelu(dconv3,alpha)
-        # [batch, N/16, 256]
+            #Upsampling2
+            upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
+            # [batch, N/4, 256]
+        with tf.variable_scope('Level1'):
+            upconv2, _ = custom_conv2d(upsamp2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            # [batch, N/4, 128]
 
-        #Upsampling2
-        upsamp2 = custom_upsampling(dconv3_act, steps=coarsening_steps)
-        # [batch, N/4, 256]
+            #DeConv2
+            concat2 = tf.concat([upconv2, h_conv2_act], axis=-1)
+            # [batch, N/4, 256]
+            dconv2, _ = custom_conv2d(concat2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv2_act = lrelu(dconv2,alpha)
+            # [batch, N/4, 128]
 
-        upconv2, _ = custom_conv2d(upsamp2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-        # [batch, N/4, 128]
+            #Upsampling1
+            upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
+            # [batch, N, 128]
+        with tf.variable_scope('Level0'):
+            upconv1, _ = custom_conv2d(upsamp1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            # [batch, N, 64]
 
-        #DeConv2
-        concat2 = tf.concat([upconv2, h_conv2_act], axis=-1)
-        # [batch, N/4, 256]
-        dconv2, _ = custom_conv2d(concat2, adjs[1], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
-        dconv2_act = lrelu(dconv2,alpha)
-        # [batch, N/4, 128]
+            concat1 = tf.concat([upconv1, h_conv1_act], axis=-1)
+            # [batch, N, 128]
 
-        #Upsampling1
-        upsamp1 = custom_upsampling(dconv2_act, steps=coarsening_steps)
-        # [batch, N, 128]
-        upconv1, _ = custom_conv2d(upsamp1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
-        # [batch, N, 64]
+            dconv1, _ = custom_conv2d(concat1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv1_act = lrelu(dconv1,alpha)
+            # [batch, N, 64]
 
-        concat1 = tf.concat([upconv1, h_conv1_act], axis=-1)
-        # [batch, N, 128]
-
-        dconv1, _ = custom_conv2d(concat1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
-        dconv1_act = lrelu(dconv1,alpha)
-        # [batch, N, 64]
-
-        # Lin(1024)
-        out_channels_fc1 = 1024
-        h_fc1 = lrelu(custom_lin(dconv1_act, out_channels_fc1),alpha)
-        
-        # Lin(3)
-        out_channels_reg = 3
-        y_conv = custom_lin(h_fc1, out_channels_reg)
-        return y_conv
+            # Lin(1024)
+            out_channels_fc1 = 1024
+            h_fc1 = lrelu(custom_lin(dconv1_act, out_channels_fc1),alpha)
+            
+            # Lin(3)
+            out_channels_reg = 3
+            y_conv = custom_lin(h_fc1, out_channels_reg)
+            return y_conv
 
     if architecture == 23:       # Like 9, with only pos for assignment (and translation invariance)
         bTransInvariant = True
@@ -4689,6 +4782,153 @@ def get_model_reg_multi_scale(x, adjs, architecture, keep_prob):
         out_channels_reg = 3
         y_conv = custom_lin(h_fc1, out_channels_reg)
         return y_conv
+
+
+    if architecture == 29:      # Like 22, without pooling/upsampling
+        alpha = 0.1
+        coarsening_steps = 2
+        _, _,in_channels = x.get_shape().as_list()
+        # x = tf.slice(x,[0,0,0],[-1,-1,3])
+        # pos0 = tf.slice(x,[0,0,in_channels-3],[-1,-1,-1])
+        # pos1 = custom_binary_tree_pooling(pos0, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+        # pos2 = custom_binary_tree_pooling(pos1, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+        with tf.variable_scope('Level0'):
+            # Conv1
+            M_conv1 = 9
+            out_channels_conv1 = 32
+            h_conv1, _ = custom_conv2d(x, adjs[0], out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = lrelu(h_conv1,alpha)
+            # [batch, N, 64]
+
+        with tf.variable_scope('Level1'):
+            # Conv2
+            M_conv2 = 9
+            out_channels_conv2 = 64
+            h_conv2, _ = custom_conv2d(h_conv1_act, adjs[0], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv2_act = lrelu(h_conv2,alpha)
+            # [batch, N/4, 128]
+
+        with tf.variable_scope('Level2'):
+            # Conv3
+            M_conv3 = 9
+            out_channels_conv3 = 128
+            h_conv3, _ = custom_conv2d(h_conv2_act, adjs[0], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv3_act = lrelu(h_conv3,alpha)
+            # [batch, N/16, 256]
+
+            # --- Central features ---
+
+            #DeConv3
+            dconv3, _ = custom_conv2d(h_conv3_act, adjs[0], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv3_act = lrelu(dconv3,alpha)
+            # [batch, N/16, 256]
+
+        with tf.variable_scope('Level1'):
+            upconv2, _ = custom_conv2d(dconv3_act, adjs[0], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            # [batch, N/4, 128]
+
+            #DeConv2
+            concat2 = tf.concat([upconv2, h_conv2_act], axis=-1)
+            # [batch, N/4, 256]
+            dconv2, _ = custom_conv2d(concat2, adjs[0], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv2_act = lrelu(dconv2,alpha)
+            # [batch, N/4, 128]
+
+        with tf.variable_scope('Level0'):
+            upconv1, _ = custom_conv2d(dconv2_act, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            # [batch, N, 64]
+
+            concat1 = tf.concat([upconv1, h_conv1_act], axis=-1)
+            # [batch, N, 128]
+
+            dconv1, _ = custom_conv2d(concat1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+            dconv1_act = lrelu(dconv1,alpha)
+            # [batch, N, 64]
+
+            # Lin(1024)
+            out_channels_fc1 = 1024
+            h_fc1 = lrelu(custom_lin(dconv1_act, out_channels_fc1),alpha)
+            
+            # Lin(3)
+            out_channels_reg = 3
+            y_conv = custom_lin(h_fc1, out_channels_reg)
+            return y_conv
+
+    if architecture == 30:      # Like 29, with cycle conv
+        alpha = 0.1
+        coarsening_steps = 2
+        _, _,in_channels = x.get_shape().as_list()
+        # x = tf.slice(x,[0,0,0],[-1,-1,3])
+        # pos0 = tf.slice(x,[0,0,in_channels-3],[-1,-1,-1])
+        # pos1 = custom_binary_tree_pooling(pos0, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+        # pos2 = custom_binary_tree_pooling(pos1, steps=coarsening_steps, pooltype='avg_ignore_zeros')
+        with tf.variable_scope('Level0'):
+            # Conv1
+            M_conv1 = 9
+            out_channels_conv1 = 32
+            h_conv1 = cycle_conv2d(x, adjs[0], out_channels_conv1, M_conv1, translation_invariance=bTransInvariant, rotation_invariance=bRotInvariant)
+            h_conv1_act = lrelu(h_conv1,alpha)
+            # [batch, N, 64]
+
+        with tf.variable_scope('Level1'):
+            # Conv2
+            M_conv2 = 9
+            out_channels_conv2 = 64
+            h_conv2 = cycle_conv2d(h_conv1_act, adjs[0], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+            h_conv2_act = lrelu(h_conv2,alpha)
+            # [batch, N/4, 128]
+
+        with tf.variable_scope('Level2'):
+            with tf.variable_scope('conv', reuse=False):
+                # Conv3
+                M_conv3 = 9
+                out_channels_conv3 = 128
+                h_conv3 = cycle_conv2d(h_conv2_act, adjs[0], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+                h_conv3_act = lrelu(h_conv3,alpha)
+                # [batch, N/16, 256]
+
+            # --- Central features ---
+            with tf.variable_scope('dconv', reuse=False):
+                #DeConv3
+                dconv3 = cycle_conv2d(h_conv3_act, adjs[0], out_channels_conv3, M_conv3,translation_invariance=bTransInvariant, rotation_invariance=False)
+                dconv3_act = lrelu(dconv3,alpha)
+                # [batch, N/16, 256]
+
+        with tf.variable_scope('Level1'):
+            with tf.variable_scope('dconv1', reuse=False):
+                upconv2 = cycle_conv2d(dconv3_act, adjs[0], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+                # [batch, N/4, 128]
+
+            #DeConv2
+            concat2 = tf.concat([upconv2, h_conv2_act], axis=-1)
+            # [batch, N/4, 256]
+            with tf.variable_scope('dconv2', reuse=False):
+                dconv2 = cycle_conv2d(concat2, adjs[0], out_channels_conv2, M_conv2,translation_invariance=bTransInvariant, rotation_invariance=False)
+                dconv2_act = lrelu(dconv2,alpha)
+                # [batch, N/4, 128]
+
+        with tf.variable_scope('Level0'):
+            with tf.variable_scope('dconv1', reuse=False):
+                upconv1 = cycle_conv2d(dconv2_act, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+                # [batch, N, 64]
+
+            concat1 = tf.concat([upconv1, h_conv1_act], axis=-1)
+            # [batch, N, 128]
+            with tf.variable_scope('dconv2', reuse=False):
+                dconv1 = cycle_conv2d(concat1, adjs[0], out_channels_conv1, M_conv1,translation_invariance=bTransInvariant, rotation_invariance=False)
+                dconv1_act = lrelu(dconv1,alpha)
+                # [batch, N, 64]
+
+            # Lin(1024)
+            out_channels_fc1 = 1024
+            h_fc1 = lrelu(custom_lin(dconv1_act, out_channels_fc1),alpha)
+            
+            # Lin(3)
+            out_channels_reg = 3
+            y_conv = custom_lin(h_fc1, out_channels_reg)
+            return y_conv
+
+
 
 # End
 
