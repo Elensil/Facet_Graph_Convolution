@@ -1516,51 +1516,8 @@ def charbonnierFaceNormalsLoss(fn, gt_fn):
     return loss
 
 
-def squareFaceNormalsLoss(fn,gt_fn):
-
-    #version 1
-    n_dt = tensorDotProduct(fn,gt_fn)
-    # [1, fnum]
-    #loss = tf.acos(n_dt-1e-5)    # So that it stays differentiable close to 1
-    close_to_one = 0.999999999
-    loss = tf.acos(tf.minimum(tf.maximum(n_dt,-close_to_one),close_to_one))    # So that it stays differentiable close to 1 and -1
-    gtfn_abs_sum = tf.reduce_sum(tf.abs(gt_fn),axis=2)
-    fakenodes = tf.less_equal(gtfn_abs_sum,10e-4)
-    #fakenodes = tf.reduce_all(fakenodes,axis=-1)
-
-    zeroVec = tf.zeros_like(loss)
-    oneVec = tf.ones_like(loss)
-    realnodes = tf.where(fakenodes,zeroVec,oneVec)
-    loss = tf.square(loss)
-    # loss = 180*loss/math.pi
-    # loss = 1 - n_d
-
-    #Set loss to zero for fake nodes
-    loss = tf.where(fakenodes,zeroVec,loss)
-    loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
-    #loss = tf.reduce_mean(loss)
-    return loss
 
 
-def mseLoss(prediction, gt, fakenodes):
-
-
-    # gt_abs_sum = tf.reduce_sum(tf.abs(gt),axis=-1)
-    # fakenodes = tf.less_equal(gt_abs_sum,10e-4)
-    
-    
-    
-    loss = tf.reduce_sum(tf.square(tf.subtract(gt,prediction)),axis=-1)
-
-    zeroVec = tf.zeros_like(loss)
-    oneVec = tf.ones_like(loss)
-    realnodes = tf.where(fakenodes,zeroVec,oneVec)
-
-    #Set loss to zero for fake nodes
-    loss = tf.where(fakenodes,zeroVec,loss)
-    loss = tf.reduce_sum(loss)/tf.reduce_sum(realnodes)
-
-    return loss
 
 # Loss defined as the average distance from points of P0 to point set P1
 def accuracyLoss(P0, P1, sample_ind):
@@ -2393,16 +2350,6 @@ def updateFacesCenterAndNormals(vertices, faces, coarsening_steps):
     return [fpos0, fpos1, fpos2], [N0, N1, N2]
 
 
-
-# Repickle all files in folder with protocol 2 for python 2
-def repickleFolder(sourceFolder, destFolder):
-
-    for filename in os.listdir(sourceFolder):
-        with open(sourceFolder+"/"+filename, 'rb') as fp:
-            pickleRick = pickle.load(fp)
-        with open(destFolder+"/"+filename, 'wb') as fp:
-                pickle.dump(pickleRick, fp, protocol=2)
-        print("pickle "+filename+": check")
 
 
 def getFolderAvgEdgeLength(folderPath, normalize=False):
