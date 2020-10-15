@@ -93,7 +93,7 @@ def tfComputeNormals(points, faces):
 
 
 
-def getEdgeMap(faces):
+def getEdgeMap(faces, maxEdges = 50):
 
     fnum = faces.shape[0]
     # First, generate edges
@@ -101,7 +101,7 @@ def getEdgeMap(faces):
     e_map -=1
     eind = 0
     vnum = np.amax(faces)+1
-    v_e_map = np.zeros([vnum,50],dtype=np.int32)
+    v_e_map = np.zeros([vnum,maxEdges],dtype=np.int32)
     v_e_map-=1
     v_e_map_ind = np.zeros([vnum],dtype=np.int32)
 
@@ -181,6 +181,9 @@ def getEdgeMap(faces):
             # Increment total edge count
             eind+=1
     e_map = e_map[:eind,:]
+
+    print("avg edge num = ",np.mean(v_e_map_ind))
+    print("max edge num = ",np.max(v_e_map_ind))
     # Edge map done!
     return e_map, v_e_map
 

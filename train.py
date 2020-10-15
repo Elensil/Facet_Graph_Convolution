@@ -17,9 +17,10 @@ from tensorflow.python import debug as tf_debug
 import random
 from lib.coarsening import *
 from settings import *
+from trainingSet import TrainingSet
 
 
-def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations,num_faces):
+def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations):
 
     with tf.Graph().as_default():
         # random_seed = 0
@@ -46,6 +47,7 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
         NUM_EDGES = edge_map.shape[1]
         K_faces = f_adj[0][0].shape[2]
         NUM_IN_CHANNELS = f_normals[0].shape[2]
+        patchNumber = len(f_normals)
 
         xp_ = tf.placeholder('float32', shape=(BATCH_SIZE, NUM_POINTS,3),name='xp_')
 
@@ -87,8 +89,17 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
             return
 
         # points shape should now be [NUM_POINTS, 3]
-        predicted_normals = np.zeros([num_faces,3])
-        for i in range(len(f_normals)):
+        
+        print("patch number = %i"%patchNumber)
+        if patchNumber>1:
+
+            # Get faces number
+            num_faces = 0
+            for patchInd in range(patchNumber):
+                num_faces = max(num_faces,np.max(patch_indices[patchInd])+1)
+            predicted_normals = np.zeros([num_faces,3])
+        
+        for i in range(patchNumber):
             print("Patch "+str(i+1)+" / "+str(len(f_normals)))
             random_R = rand_rotation_matrix()
             # print("Random R = "+str(random_R))
@@ -121,16 +132,16 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
                 outN = outN[temp_perm]
                 outN = outN[0:num_wofake_nodes[i]]
 
-
-            if len(patch_indices[i]) == 0:
+            if patchNumber==1:
+            # if len(patch_indices[i]) == 0:
                 predicted_normals = outN
             else:
-                for count in range(len(patch_indices[i])):
-                    predicted_normals[patch_indices[i][count]] = outN[count]
+                predicted_normals[patch_indices[i]] = outN
+
         #Update vertices position
         new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
         #refined_x = update_position(xp_,fadj, n_conv)
-        refined_x = update_position2(xp_, new_normals, e_map_, ve_map_, iter_num=60)
+        refined_x = update_position2(xp_, new_normals, e_map_, ve_map_, iter_num=60, max_edges = MAX_EDGES)
         # refined_x, x_update = update_position_with_depth(xp_, new_normals, e_map_, ve_map_, depth_dir, iter_num=200)
         points = tf.squeeze(refined_x)
         # points_update = tf.squeeze(x_update)
@@ -145,6 +156,11 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
         # print("x_disp sample: "+str(x_disp[:10,:]))
 
         return outPoints, predicted_normals
+
+
+
+
+
 
 
 def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new_to_old_f_list, num_points, num_faces, adjPerm_list, real_nodes_num_list):
@@ -1749,12 +1765,11 @@ def sampledAccuracyLoss(P0, P1):
 
 # Original update algorithm from Taubin (Linear anisotropic mesh filtering)
 # Copied from function above, which was my own adaptation of Taubin's algorithm with vertices normals 
-def update_position2(x, face_normals, edge_map, v_edges, iter_num=20):
+def update_position2(x, face_normals, edge_map, v_edges, iter_num=20, max_edges=20):
 
     lmbd = 1/18
 
     batch_size, num_points, space_dims = x.get_shape().as_list()
-    max_edges = 50
     _, num_edges, _ = edge_map.get_shape().as_list()
 
     # edge_map is a list of edges of the form [v1, v2, f1, f2]
@@ -2240,8 +2255,8 @@ def mainFunction():
     binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/Dump2_normals_c4/"
 
 
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OneLevel/"
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OrderedOneLevel/"
+    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OneLevel/"
+    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OrderedOneLevel/"
     # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/"
 
     # Coarsening parameters
@@ -2986,29 +3001,29 @@ def mainFunction():
 
 
 
-        # Reformat adj list, for binary dump without coarsening
-        new_adj_list = []
-        new_valid_adj_list = []
-        for p in range(examplesNum):
-            adj_p_list = []
-            adjP = f_adj_list[p]
-            adjPLength = len(adjP)
-            for i in range(adjPLength):
-                adjMat = adjP[i]
-                adj_p_list.append(adjMat[np.newaxis,:,:])
-            new_adj_list.append(adj_p_list)
+        # # Reformat adj list, for binary dump without coarsening
+        # new_adj_list = []
+        # new_valid_adj_list = []
+        # for p in range(examplesNum):
+        #     adj_p_list = []
+        #     adjP = f_adj_list[p]
+        #     adjPLength = len(adjP)
+        #     for i in range(adjPLength):
+        #         adjMat = adjP[i]
+        #         adj_p_list.append(adjMat[np.newaxis,:,:])
+        #     new_adj_list.append(adj_p_list)
 
-        for p in range(valid_examplesNum):
-            adj_p_list = []
-            adjP = valid_f_adj_list[p]
-            adjPLength = len(adjP)
-            for i in range(adjPLength):
-                adjMat = adjP[i]
-                adj_p_list.append(adjMat[np.newaxis,:,:])
-            new_valid_adj_list.append(adj_p_list)
+        # for p in range(valid_examplesNum):
+        #     adj_p_list = []
+        #     adjP = valid_f_adj_list[p]
+        #     adjPLength = len(adjP)
+        #     for i in range(adjPLength):
+        #         adjMat = adjP[i]
+        #         adj_p_list.append(adjMat[np.newaxis,:,:])
+        #     new_valid_adj_list.append(adj_p_list)
 
-        f_adj_list = new_adj_list
-        valid_f_adj_list = new_valid_adj_list
+        # f_adj_list = new_adj_list
+        # valid_f_adj_list = new_valid_adj_list
 
         for p in range(examplesNum):
 
@@ -3284,7 +3299,8 @@ def mainFunction():
         for noisyFile in os.listdir(noisyFolder):
 
 
-            if (not noisyFile.endswith("part_Lp_n2.obj")):
+            # if (not noisyFile.endswith("part_Lp_n2.obj")):
+            if (not noisyFile.endswith("bunny_hi_n2.obj")):
                 continue
             mesh_count = [0]
 
@@ -3313,9 +3329,14 @@ def mainFunction():
                     V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
                     f_normals0 = computeFacesNormals(V0, faces_noisy)
 
+                    edge_map, v_e_map = getEdgeMap(faces_noisy, maxEdges = 20)
+
                     print("Adding mesh "+noisyFile+"...")
                     t0 = time.clock()
-                    faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
+                    myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
+                    myTS.addMesh_TimeEfficient(noisyFolder, noisyFile)
+                    # faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
+
                     # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, [], f_adj_list, mesh_count)
                     # _, _, _, _, permutations, faces_num, patch_indices = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, [], [], [], f_normals_list, [], f_adj_list, [], mesh_count)
                         
@@ -3323,9 +3344,9 @@ def mainFunction():
                     # Now recover vertices positions and create Edge maps
 
                     
-                    print("f_adj_list length = %i"%len(f_adj_list))
-                    print("f_adj_list[0] length = %i"%len(f_adj_list[0]))
-                    print("f_adj_list[0][0] shape = ",f_adj_list[0][0].shape)
+                    print("f_adj_list length = %i"%len(myTS.adj_list))
+                    print("f_adj_list[0] length = %i"%len(myTS.adj_list[0]))
+                    print("f_adj_list[0][0] shape = ",myTS.adj_list[0][0].shape)
 
                     # # Reformat adj list, for binary dump without coarsening
                     # new_adj_list = []
@@ -3347,7 +3368,7 @@ def mainFunction():
                     V0 = np.expand_dims(V0, axis=0)
                     t0 = time.clock()
                     # _, edge_map, v_e_map = getFacesAdj(faces_noisy)
-                    edge_map, v_e_map = getEdgeMap(faces_noisy)
+                    
                     # f_adj = getFacesLargeAdj(faces_noisy,K_faces)
                     # print("WARNING!!!!! Hardcoded a change in faces adjacency")
                     # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
@@ -3355,13 +3376,22 @@ def mainFunction():
 
                     faces_noisy = np.array(faces_noisy).astype(np.int32)
                     faces = np.expand_dims(faces_noisy,axis=0)
-                    edge_map = np.expand_dims(edge_map, axis=0)
-                    v_e_map = np.expand_dims(v_e_map, axis=0)
+                    
 
                     print("Inference ...")
                     t0 = time.clock()
+
+                    print("facesNum = %i"%facesNum)
+                    # print("patch_indices length = %i"%len(myTS.patch_indices))
+                    # print("patch_indices[0] length = %i"%len(myTS.patch_indices[0]))
+                    # for patchInd in range(len(myTS.patch_indices)):
+                    #     print("patch %i"%patchInd)
+                    #     print("patch_indices shape = ",myTS.patch_indices[patchInd].shape)
+                    #     print("max patch_indices = %i"%np.max(myTS.patch_indices[patchInd]))
+
                     #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
-                    upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                    # upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                    upV0, upN0 = inferNetOld(myTS.V0, myTS.in_list, myTS.adj_list, myTS.edge_map, myTS.v_e_map,myTS.num_faces, myTS.patch_indices, myTS.permutations)
                     print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
 
                     write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)

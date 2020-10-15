@@ -1,0 +1,123 @@
+Running_mode:
+	0:
+		Load pickled data.
+		OR
+		Loop through folder, load meshes, pickle data 	(w/ "addMesh")
+		Call "TrainNet"
+	1:
+		Loop through folder, load meshes (w/ "addMeshWithVertices")
+		Call "InferNet"
+		Write denoised meshes (3 scales) + denoised normals (3 scales)
+	12:
+		Loop through folder, load meshes (w/ "addMesh_TimeEfficient" or "addMesh")
+		Call "InferNetOld"
+		Write denoised mesh + denoised normals
+	2:
+		Same as 12, w/ GT -> numerical results in array + new saved mesh(es)
+
+	4:
+		Load pickled data
+		OR
+		Loop through folder, load meshes, pickle data (w/ "AddMeshWithVertices")
+		Call "TrainDoubleLossNet"
+
+	7:
+		Compute Hausdorff distance between GT and denoised meshes. Save results in file
+	8:
+		Compute (more general?) stats between GT and denoised meshes. Save results in matlab file
+	9:
+		?? Useless? -> Very similar to 12: check
+	11:
+		addMeshWithVertices -> pickle data
+	17:
+
+
+
+
+AddMesh:
+
+addMeshTimeEfficient:
+	- no GT loading
+	- "smart" seeding
+	- different patch extraction (masking, don't compute unused variables, ... ?)
+
+addMeshWithVertices:
+	- FACE POS NORMALIZATION!!! (-> what should we do ?!)
+	- normalize point sets (noisy + GT)
+	- For patch extraction, separate cases :
+		if one-one points correspondence, direct access to patch GT points
+		else, slice space to get a set of GT points
+	- No saturation test when coarsening graph
+	- return additional lists (v, GTv, faces, v_faces, fOldInd, vOldInd)
+	- Have to keep track of faces (padding, patch extraction...)
+	- CoarseningLvlNum 1 not supported
+	- getVerticesFaces: list of faces per vertex? another list?
+
+
+
+Conclusion:
+	- GT needed for training. Not for inference.
+	- smart seeding + masking: good !
+	-> fuse addMesh and addMeshTimeEfficient w/ option for GT loading
+	- Manage border channel
+
+	- separate function for vertices -> need to factor common parts
+	- Class for training data?
+
+
+
+addMesh:
+	get mesh (v,f)
+	compute normals
+	compute adj
+	compute face pos (normalized)
+	compute border channel
+	load GT
+	compute GT face normals
+	if mesh too big:
+		until mesh is covered:
+			get graph patch
+			get patch normals
+			get GT patch normals
+			coarsen Adj
+			pad and reindex normals
+			pad and reindex GT normals
+			save patch size and ordering, save coarsening permutation
+			save normals, adj, and GT normals
+	else:
+		same thing but once
+
+
+addMeshWithVertices:
+	get mesh (v,f)
+	compute normals
+	compute adj
+	compute face pos (normalized)
+	compute border channel
+	compute face area (?)
+	load GT
+	compute GT face normals
+	Normalize point sets!
+	if mesh too big:
+		until mesh is covered:
+			get MESH patch
+			get patch normals
+			get GT patch normals
+			get BB of patch vertices
+			crop GT points
+			save patch vertices ordering
+			save patch faces ordering
+			coarsen graph
+			pad and reindex: normals, faces(=v inds), gt normals
+			save patch size and ordering (2), save coarseing permutation
+			change adj format
+
+
+
+
+
+
+
+
+ABANDON CLASSES!!!!!
+single trainingSet class?
