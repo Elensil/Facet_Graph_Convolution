@@ -125,11 +125,40 @@ addMeshWithVertices:
 			change adj format
 
 
-
-
-
-
-
-
 ABANDON CLASSES!!!!!
 single trainingSet class?
+
+
+if architecture == 0:       # Multi-scale, like in FeaStNet paper (figure 3)
+if architecture == 1:       # Multi-scale, w/ extra convolutions in encoder
+if architecture == 2:       # Like 0, with decoder weights preset by encoder. No skip-connections
+if architecture == 3:       # Like 0, but w/ pos for assignment
+if architecture == 4:       # Like 3, but w/ pos for assignment only for 1st convolution, to try and fine-tune archi 14 (non multi-scale)
+if architecture == 5:       # copy of archi 14, w/ extra pooling + conv + upsampling layer
+if architecture == 6:       # Like 0, w/ leaky ReLU
+if architecture == 7:       # Like 3, but w/ leaky ReLU
+if architecture == 8:       # Like 6, w/ 1 pooling only, and normals + pos
+if architecture == 9:       # Inspired by U-net. kind of like 7 w/ more weights, and extra conv after upsampling and before concatenating (no ReLU)
+if architecture == 10:      # Like 9, without the position for assignment
+if architecture == 11:      # Normals, conv16, conv32, pool4, conv64, conv32, upsamp4, Lin256, Lin3
+if architecture == 12:      # Branching out before 1st pooling, classification leading to 4 separate branches.
+if architecture == 13:      # Like 9, w/ fewer weights everywhere
+if architecture == 14:      # Like 9, with 3 coarsening steps between each level
+if architecture == 15:      # Like 14, but multi-scale estimation
+if architecture == 16:      # Like 15, w/ coarsening_steps=2
+if architecture == 17:      # Like 16, w/ dropout
+if architecture == 18:      # Like 17, w/ 2 extra convolutions at coarsest level
+if architecture == 19:      # Like 15, but 2 * 3-channels output
+if architecture == 20:      # Like 19, but no pos for assignment (and pos used as input for 1st layer)
+if architecture == 21:      # Like 20, but more convolutions, more filters, and less channels
+if architecture == 22:      # Like 10, with normals + pos as input
+if architecture == 23:       # Like 9, with only pos for assignment (and translation invariance)
+if architecture == 24:       # Like 9, w/ 1 extra layer in the middle
+if architecture == 25:      # Like 22, with multi-scale estimation
+if architecture == 26:      # Like 22, with one extra pooling/unpooling scale!
+if architecture == 27:      # Like 26, w/ less weights
+if architecture == 28:      # Like 22, with eLu
+if architecture == 29:      # Like 22, without pooling/upsampling
+if architecture == 30:      # Like 29, with cycle conv
+
+
