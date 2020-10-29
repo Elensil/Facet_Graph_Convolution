@@ -33,12 +33,12 @@ Running_mode:
 
 
 TODO:
-	- when pickling (mode -5), use class
-		-> add GT handling in class addMesh function
+
 	- loss on vertices !!! Everything remains to be done. -> loading (factorize) (or not), pickling, training, inference
 	- keep cleaning, remove all parameters.
 	- "Clean" other py files ?
 
+	- Separate files (pickle, train, infer)
 
 
 used archis :
