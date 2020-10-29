@@ -17,7 +17,7 @@ from tensorflow.python import debug as tf_debug
 import random
 from lib.coarsening import *
 from settings import *
-from trainingSet import TrainingSet
+from trainingSet import *
 
 
 def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations):
@@ -43,6 +43,7 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
 
         BATCH_SIZE=f_normals[0].shape[0]
         NUM_POINTS=in_points.shape[1]
+        print("v_e_map shape = ",v_e_map.shape)
         MAX_EDGES = v_e_map.shape[2]
         NUM_EDGES = edge_map.shape[1]
         K_faces = f_adj[0][0].shape[2]
@@ -72,7 +73,7 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
             fadjs = [fadj0,fadj1,fadj2]
         
         with tf.variable_scope("model"):
-            n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+            n_conv,_,_ = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 
         n_conv = normalizeTensor(n_conv)
 
@@ -98,7 +99,7 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
             for patchInd in range(patchNumber):
                 num_faces = max(num_faces,np.max(patch_indices[patchInd])+1)
             predicted_normals = np.zeros([num_faces,3])
-        
+            
         for i in range(patchNumber):
             print("Patch "+str(i+1)+" / "+str(len(f_normals)))
             random_R = rand_rotation_matrix()
@@ -136,8 +137,8 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
             # if len(patch_indices[i]) == 0:
                 predicted_normals = outN
             else:
-                predicted_normals[patch_indices[i]] = outN
-
+                predicted_normals[patch_indices[i]] = predicted_normals[patch_indices[i]] + outN
+                
         #Update vertices position
         new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
         #refined_x = update_position(xp_,fadj, n_conv)
@@ -146,6 +147,9 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
         points = tf.squeeze(refined_x)
         # points_update = tf.squeeze(x_update)
         points_update = points
+
+
+        predicted_normals = normalize(predicted_normals)
 
         update_feed_dict = {xp_:in_points, new_normals: [predicted_normals], e_map_: edge_map, ve_map_: v_e_map}
         outPoints, x_disp = sess.run([points, points_update],feed_dict=update_feed_dict)
@@ -641,11 +645,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     train_samp=0
 
     hasNan = False
-    forbidden_examples = []
 
     evalStepNum=50
-    # SAVEITER = 1000
-    SAVEITER = 5000
 
     with tf.device(DEVICE):
         lossArray = np.zeros([int(NUM_ITERATIONS/evalStepNum),2])
@@ -656,8 +657,6 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
             # Get random sample from training dictionary
             batch_num = random.randint(0,len(f_normals_list)-1)
 
-            while batch_num in forbidden_examples:
-                batch_num = random.randint(0,len(f_normals_list)-1)
             num_p = f_normals_list[batch_num].shape[1]
             # print("num_p = ",num_p)
             random_ind = np.random.randint(num_p,size=costSamplesNum)
@@ -961,7 +960,6 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     train_samp=0
 
     hasNan = False
-    forbidden_examples = []
 
     # with tf.device(DEVICE):
     # lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
@@ -983,8 +981,6 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
             num_vgt = GT_points_list[batch_num].shape[1]
 
 
-        while batch_num in forbidden_examples:
-            batch_num = random.randint(0,len(f_normals_list)-1)
         num_p = f_normals_list[batch_num].shape[1]
         num_v = in_points_list[batch_num].shape[1]
         num_vgt = GT_points_list[batch_num].shape[1]
@@ -1242,20 +1238,21 @@ def trainDoubleLossNet(in_points_list, GT_points_list, faces_list, f_normals_lis
     fadjs = [fadj0,fadj1,fadj2]
 
     with tf.variable_scope("model"):
-        # n_conv0, n_conv1, n_conv2 = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
-        n_conv0 = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
+        n_conv0, n_conv1, n_conv2 = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
+        # n_conv0 = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
 
 
     n_conv0 = normalizeTensor(n_conv0)
-    # n_conv1 = normalizeTensor(n_conv1)
-    # n_conv2 = normalizeTensor(n_conv2)
+    n_conv1 = normalizeTensor(n_conv1)
+    n_conv2 = normalizeTensor(n_conv2)
 
-    # n_conv_list = [n_conv0, n_conv1, n_conv2]
-    n_conv_list = [n_conv0]
+    n_conv_list = [n_conv0, n_conv1, n_conv2]
+    # n_conv_list = [n_conv0]
     # isNanNConv = tf.reduce_any(tf.is_nan(n_conv), name="isNanNConv")
     # isFullNanNConv = tf.reduce_all(tf.is_nan(n_conv), name="isNanNConv")
 
-    refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS, iter_num_list=[80])
+    # refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS, iter_num_list=[80])
+    refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS, iter_num_list=[80,20,20])
 
     
     # samp_x = tf.transpose(refined_x,[1,0,2])
@@ -1294,7 +1291,6 @@ def trainDoubleLossNet(in_points_list, GT_points_list, faces_list, f_normals_lis
     train_samp=0
 
     hasNan = False
-    forbidden_examples = []
 
     # with tf.device(DEVICE):
     # lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
@@ -1315,9 +1311,6 @@ def trainDoubleLossNet(in_points_list, GT_points_list, faces_list, f_normals_lis
             batch_num = random.randint(0,len(f_normals_list)-1)
             num_vgt = GT_points_list[batch_num].shape[1]
 
-
-        while batch_num in forbidden_examples:
-            batch_num = random.randint(0,len(f_normals_list)-1)
         num_p = f_normals_list[batch_num].shape[1]
         num_v = in_points_list[batch_num].shape[1]
         num_vgt = GT_points_list[batch_num].shape[1]
@@ -1586,144 +1579,6 @@ def fullLoss(P0, P1, sample_ind0, sample_ind1):
 
     return avg_precision
 
-
-# Loss defined as the average distance from points of P0 to point set P1
-def fullLossWNormals(P0, P1, N1, sample_ind0, sample_ind1):
-
-    accuracyThreshold = 5      # Completely empirical
-    compThreshold = 0.05
-    with tf.variable_scope('accuracyLoss'):
-    # P0 shape: [batch, numP0, 3]
-    # P1 shape: [batch, numP1, 3]
-
-        # Take only a few selected points
-        sP0 = tf.transpose(P0,[1,0,2])
-        sP0 = tf.gather(sP0,sample_ind0)
-        sP0 = tf.transpose(sP0,[1,0,2])
-
-        sP1 = tf.transpose(P1,[1,0,2])
-        sP1 = tf.gather(sP1,sample_ind1)
-        sP1 = tf.transpose(sP1,[1,0,2])
-
-        numsP0 = sP0.shape[1]
-        numP0 = P0.shape[1]
-        numP1 = P1.shape[1]
-        numsP1 = sP1.shape[1]
-
-        eP0 = tf.expand_dims(P0,axis=2)
-        eP1 = tf.expand_dims(P1,axis=1)
-        esP0 = tf.expand_dims(sP0,axis=2)
-        esP1 = tf.expand_dims(sP1,axis=1)
-
-        diff0 = esP0 - eP1
-        diff1 = eP0 - esP1
-        # [batch, numP0, numP1, 3]
-
-        dist0 = tf.norm(diff0, axis=-1, name = 'norm')
-        # [batch ,numsP0, numP1]
-        dist1 = tf.norm(diff1, axis=-1, name = 'norm')
-        # [batch ,numP0, numsP1]
-
-        precision = tf.reduce_min(dist0,axis=2, name = 'min_point_set')
-        # [batch, numP0]
-        completeness = tf.reduce_min(dist1,axis=1, name = 'completeness')
-        # [batch, numP1]
-
-        keptPoints = tf.less_equal(precision,accuracyThreshold)
-        zeroVec = tf.zeros_like(precision)
-        precision = tf.where(keptPoints,precision,zeroVec)
-
-        keptPointsC = tf.less_equal(completeness,compThreshold)
-        zeroVecC = tf.zeros_like(completeness)
-        completeness = tf.where(keptPointsC,completeness,zeroVecC)
-
-        avg_precision = 1000*(tf.reduce_mean(precision,name='avg_precision')+tf.reduce_mean(completeness, name='avg_completeness'))
-
-    return avg_precision
-
-
-def AwesomeLoss(P0, P1, N1, sample_ind0, sample_ind1):
-
-    accuracyThreshold = 5      # Completely empirical
-    compThreshold = 0.05
-    with tf.variable_scope('accuracyLoss'):
-    # P0 shape: [batch, numP0, 3]
-    # P1 shape: [batch, numP1, 3]
-
-        # Take only a few selected points
-        sP0 = tf.transpose(P0,[1,0,2])
-        sP0 = tf.gather(sP0,sample_ind0)
-        sP0 = tf.transpose(sP0,[1,0,2])
-
-        sP1 = tf.transpose(P1,[1,0,2])
-        sP1 = tf.gather(sP1,sample_ind1)
-        sP1 = tf.transpose(sP1,[1,0,2])
-
-        numsP0 = sP0.shape[1]
-        numP0 = P0.shape[1]
-        numP1 = P1.shape[1]
-        numsP1 = sP1.shape[1]
-
-        eP0 = tf.expand_dims(P0,axis=2)
-        eP1 = tf.expand_dims(P1,axis=1)
-        esP0 = tf.expand_dims(sP0,axis=2)
-        esP1 = tf.expand_dims(sP1,axis=1)
-
-        diff0 = esP0 - eP1
-        diff1 = eP0 - esP1
-        # [batch, numP0, numP1, 3]
-
-        dist0 = tf.norm(diff0, axis=-1, name = 'norm')
-        # [batch ,numsP0, numP1]
-        dist1 = tf.norm(diff1, axis=-1, name = 'norm')
-        # [batch ,numP0, numsP1]
-
-        precision = tf.reduce_min(dist0,axis=2, name = 'min_point_set')
-        # [batch, numP0]
-        completeness = tf.reduce_min(dist1,axis=1, name = 'completeness')
-        # [batch, numP1]
-
-        keptPoints = tf.less_equal(precision,accuracyThreshold)
-        zeroVec = tf.zeros_like(precision)
-        precision = tf.where(keptPoints,precision,zeroVec)
-
-        keptPointsC = tf.less_equal(completeness,compThreshold)
-        zeroVecC = tf.zeros_like(completeness)
-        completeness = tf.where(keptPointsC,completeness,zeroVecC)
-
-        avg_precision = 1000*(tf.reduce_mean(precision,name='avg_precision')+tf.reduce_mean(completeness, name='avg_completeness'))
-
-    return avg_precision
-
-
-def connectivityRegularizer(x,faces, v_faces, sample_ind):
-
-
-    x = tf.reshape(x,[-1,3])
-    _, _, K = v_faces.get_shape().as_list()
-
-    new_fpos = updateFacesCenter(x,faces,1)
-    face_pos = new_fpos[0]
-    face_pos = tf.reshape(face_pos,[-1,3])
-    v_faces = tf.squeeze(v_faces)
-
-    # Add fake face with null normal and switch to 1-indexing for v_faces
-    v_faces = v_faces+1
-    face_pos = tf.concat((tf.constant([[0,0,0]], dtype=tf.float32),face_pos),axis=0)
-    v_c = tf.gather(face_pos,v_faces)
-
-    xm = tf.expand_dims(x,axis=1)
-    xm = tf.tile(xm,[1,K,1])
-
-    e = v_c-xm
-
-    dist = tf.norm(e,axis=-1, name='norm')
-    dist = tf.multiply(dist,dist)
-    dist = tf.gather(dist,sample_ind)
-
-    cost = 1000 * tf.reduce_mean(dist)
-
-    return cost
 
 # Loss defined as the average distance from points of P0 to point set P1
 def sampledAccuracyLoss(P0, P1):
@@ -2100,76 +1955,6 @@ def updateFacesCenter(vertices, faces, coarsening_steps):
 
 
 
-def getFolderAvgEdgeLength(folderPath, normalize=False):
-    tot_weight=0
-    tot_el=0
-    for filename in os.listdir(folderPath):
-
-        print("loading "+filename)
-        V0,_,_, faces0, _ = load_mesh(folderPath, filename, 0, False)
-
-        cur_el, cur_tot = getAverageEdgeLength(V0, faces0, normalize)
-
-        tot_weight += cur_tot
-        tot_el += cur_el*cur_tot
-
-    tot_el /= tot_weight
-    # print("edge length = "+str(tot_el))
-    return tot_el
-
-
-
-def pickleFND(folderPath, binDumpPath):
-    sigma_r_list = [0.1,0.2,0.35,0.5,-1]
-    # sigma_r_list = [-1]
-    sigma_s_list = [AVG_EDGE_LENGTH,2*AVG_EDGE_LENGTH]
-
-    for filename in os.listdir(folderPath):
-
-        # if filename.startswith("dragon"):
-        #     continue
-
-        if not os.path.isfile(binDumpPath+filename+'FND'):
-            print("loading "+filename)
-            V0,_,_, faces0, _ = load_mesh(folderPath, filename, 0, False)
-
-            my_el, _ = getAverageEdgeLength(V0, faces0)
-            print("avg edge length = "+str(my_el))
-            cur_sigma_s_list = [my_el, 2*my_el]
-            # Compute normals
-            f_normals0 = computeFacesNormals(V0, faces0)
-            # Get faces position
-            f_pos0 = getTrianglesBarycenter(V0, faces0)
-
-            f_area0 = getTrianglesArea(V0,faces0)
-
-            
-            f_FND = FND(f_pos0, f_normals0, f_area0, cur_sigma_s_list, sigma_r_list)
-            
-            with open(binDumpPath+filename+'FND', 'wb') as fp:
-                pickle.dump(f_FND, fp)
-
-
-
-
-def checkFND(filePath, filename):
-
-    V0,_,_, faces_noisy, _ = load_mesh(filePath, filename, 0, False)
-
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/FND_el_c4/"
-    with open(binDumpPath+filename+'FND', 'rb') as fp:
-        fnd = pickle.load(fp)
-
-    for fil in range(10):
-
-        cur_n = fnd[:,3*fil:3*fil+3]
-
-        colormap = (cur_n+1)/2
-        newV, newF = getColoredMesh(V0, faces_noisy, colormap)
-        
-        write_mesh(newV, newF, RESULTS_PATH+filename[:-4]+"_FND_"+str(fil)+".obj")
-
-
 
 def getDepthDirection():
 
@@ -2237,32 +2022,17 @@ def getDepthDirection():
 
 def mainFunction():
 
-
-    pickleLoad = True
-    pickleSave = True
-
-
-    maxSize = 4000 #30000 #35000
-    patchSize = 4000 #30000 #15000
+    maxSize = MAX_PATCH_SIZE
+    patchSize = MAX_PATCH_SIZE
 
     training_meshes_num = [0]
     valid_meshes_num = [0]
 
 
-    empiricMax = 30.0
-
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/normals_c4/"
-    binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/Dump2_normals_c4/"
-
-
-    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OneLevel/"
-    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/OrderedOneLevel/"
-    # binDumpPath = "/morpheo-nas2/marmando/DeepMeshRefinement/CycleConvExp/BinDump/Synthetic/"
-
     # Coarsening parameters
     # coarseningLvlNum = 3
     coarseningStepNum = COARSENING_STEPS
-    coarseningLvlNum = 3
+    coarseningLvlNum = COARSENING_LVLS
 
 
     binDumpPath = BINARY_DUMP_PATH
@@ -2339,8 +2109,8 @@ def mainFunction():
 
         faceCheck = np.zeros(facesNum)
         faceRange = np.arange(facesNum)
-        if facesNum>maxSize:
-            print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
+        if facesNum>MAX_PATCH_SIZE:
+            print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,MAX_PATCH_SIZE))
             patchNum = 0
             while(np.any(faceCheck==0)):
                 toBeProcessed = faceRange[faceCheck==0]
@@ -2485,206 +2255,6 @@ def mainFunction():
         return num_faces, patch_indices, new_to_old_permutations_list
 
     #Takes the path to noisy and GT meshes as input, and add data to the lists fed to tensroflow graph, with the right format
-    def addMesh_TimeEfficient(inputFilePath,filename, in_list, adj_list, mesh_count_list):
-        patch_indices = []
-        new_to_old_permutations_list = []
-        num_faces = []
-
-        # --- Load mesh ---
-        t0 = time.clock()
-        V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
-        t1 = time.clock()
-        print("mesh loaded ("+str(1000*(t1-t0))+"ms)")
-
-        # print("faces0 shape: "+str(faces0.shape))
-        # Compute normals
-        f_normals0 = computeFacesNormals(V0, faces0)
-        t2 = time.clock()
-        print("normals computed ("+str(1000*(t2-t1))+"ms)")
-        
-        # Get adjacency
-        f_adj0 = getFacesLargeAdj(faces0,K_faces)
-        # f_adj0 = getFacesOrderedAdj(faces0,K_faces)
-        t3 = time.clock()
-        print("Adj computed ("+str(1000*(t3-t2))+"ms)")
-        # Get faces position
-        f_pos0 = getTrianglesBarycenter(V0, faces0)
-        t4 = time.clock()
-        print("faces barycenters computed ("+str(1000*(t4-t3))+"ms)")
-
-
-        # print("WARNING!!! hard-coded change in data loading: FND instead of normals")
-        # with open("/morpheo-nas2/marmando/DeepMeshRefinement/Synthetic/BinaryDump/Dump2_FND_el/"+filename+"FND", 'rb') as fp:
-        #     f_FND = pickle.load(fp)
-        # f_normals_pos = np.concatenate((f_FND, f_pos0), axis=1)
-        f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
-
-        t7 = time.clock()
-
-
-        # Get patches if mesh is too big
-        facesNum = faces0.shape[0]
-
-        faceCheck = np.zeros(facesNum)
-        faceRange = np.arange(facesNum)
-        if facesNum>maxSize:
-            print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
-            patchNum = 0
-            nextSeed = -1
-            while(np.any(faceCheck==0)):
-                toBeProcessed = faceRange[faceCheck==0]
-                if nextSeed==-1:
-                    faceSeed = np.random.randint(toBeProcessed.shape[0])
-                    faceSeed = toBeProcessed[faceSeed]
-                else:
-                    faceSeed = nextSeed
-                    if faceCheck[faceSeed]==1:
-                        print("ERROR: Bad seed returned!!")
-                        return
-                tp0 = time.clock()
-
-                # testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
-                testPatchAdj, fOldInd, nextSeed = getGraphPatch_wMask(f_adj0, patchSize, faceSeed, faceCheck)
-                # coo_adj, fOldInd, nextSeed = getSparseGraphPatch_wMask(f_adj0,f_pos0, f_normals0, patchSize, faceSeed, faceCheck)
-                tp1 = time.clock()
-                print("\nMesh patch extracted ("+str(1000*(tp1-tp0))+"ms)")
-                # print("Patch size = %i"%testPatchAdj.shape[0])
-                faceCheck[fOldInd]=1
-                print("Total added faces = %i"%np.sum(faceCheck==1))
-
-                patchFNormals = f_normals_pos[fOldInd]
-
-                old_N = patchFNormals.shape[0]
-
-                # Don't add small disjoint components
-                if old_N<100:
-                    continue
-
-                if coarseningLvlNum>1:
-                    # Convert to sparse matrix and coarsen graph
-                    # tls0 = time.clock()
-                    coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
-                    # print("list to sparse conversion ("+str(1000*(time.clock()-tls0))+"ms)")
-                    has_sat = True
-
-                    while has_sat:
-                        print("Coarsening...")
-                        tc0 = time.clock()
-                        adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
-                        tc1 = time.clock()
-                        print("Coarsening complete ("+str(1000*(tc1-tc0))+"ms)")
-                        has_sat = False
-                        # Change adj format
-                        fAdjs = []
-                        for lvl in range(coarseningLvlNum):
-                            tsl0 = time.clock()
-                            fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
-                            print("sparse to list conversion ("+str(1000*(time.clock()-tsl0))+"ms)")
-                            fadj = np.expand_dims(fadj, axis=0)
-                            fAdjs.append(fadj)
-                            has_sat = has_sat or has_sat_temp
-
-
-
-                    # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
-                    new_N = len(newToOld)
-                    
-                    padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
-                    # padding6 =np.zeros((new_N-old_N,33))
-                    padding3 =np.zeros((new_N-old_N,3))
-                    patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
-                    # Reorder nodes
-                    patchFNormals = patchFNormals[newToOld]
-
-                else:   # One level only: no coarsening
-                    fAdjs = []
-                    fAdjs.append(testPatchAdj[np.newaxis,:,:])
-
-
-                ##### Save number of triangles and patch new_to_old permutation #####
-                num_faces.append(old_N)
-                patch_indices.append(fOldInd)
-                if coarseningLvlNum>1:
-                    new_to_old_permutations_list.append(inv_perm(newToOld))
-                #####################################################################
-
-                # Expand dimensions
-                f_normals = np.expand_dims(patchFNormals, axis=0)
-                #f_adj = np.expand_dims(testPatchAdj, axis=0)
-
-                in_list.append(f_normals)
-                adj_list.append(fAdjs)
-
-                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(mesh_count_list[0]) + ")")
-                mesh_count_list[0]+=1
-                patchNum+=1
-        else:       #Small mesh case
-            old_N = facesNum
-
-            if coarseningLvlNum>1:
-                # Convert to sparse matrix and coarsen graph
-                # print("f_adj0 shape: "+str(f_adj0.shape))
-                # print("f_pos0 shape: "+str(f_pos0.shape))
-                coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
-                
-                has_sat = True
-
-                while has_sat:
-                    print("Coarsening...")
-                    adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
-                    has_sat = False
-
-                    # Change adj format
-                    fAdjs = []
-                    for lvl in range(coarseningLvlNum):
-                        fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
-                        fadj = np.expand_dims(fadj, axis=0)
-                        fAdjs.append(fadj)
-                        has_sat = has_sat or has_sat_temp
-
-                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
-                new_N = len(newToOld)
-                
-                padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
-                padding3 =np.zeros((new_N-old_N,3))
-                f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
-                # GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
-
-                # Reorder nodes
-                f_normals_pos = f_normals_pos[newToOld]
-                # GTf_normals0 = GTf_normals0[newToOld]
-
-            else:
-                fAdjs = []
-                fAdjs.append(f_adj0[np.newaxis,:,:])
-
-            ##### Save number of triangles and patch new_to_old permutation #####
-            num_faces.append(old_N) # Keep track of fake nodes
-            patch_indices.append([])
-            if coarseningLvlNum>1:
-                new_to_old_permutations_list.append(inv_perm(newToOld)) # Nothing to append here, faces are already correctly ordered
-            #####################################################################
-
-            
-
-            
-
-            # Expand dimensions
-            f_normals = np.expand_dims(f_normals_pos, axis=0)
-            #f_adj = np.expand_dims(f_adj0, axis=0)
-            # GTf_normals = np.expand_dims(GTf_normals0, axis=0)
-
-            in_list.append(f_normals)
-            adj_list.append(fAdjs)
-            # gt_list.append(GTf_normals)
-        
-            # print("Added training mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
-
-            mesh_count_list[0]+=1
-
-        return num_faces, patch_indices, new_to_old_permutations_list
-    
-    #Takes the path to noisy and GT meshes as input, and add data to the lists fed to tensroflow graph, with the right format
     def addMeshWithVertices(inputFilePath,filename, gtFilePath, gtfilename, v_list, gtv_list, faces_list, n_list, gtn_list, adj_list, v_faces_list, mesh_count_list):
         patch_indices = []
         new_to_old_permutations_list = []
@@ -2729,6 +2299,8 @@ def mainFunction():
         facesNum = faces0.shape[0]
         faceCheck = np.zeros(facesNum)
         faceRange = np.arange(facesNum)
+        print("faces num = %i"%facesNum)
+        print("maxSize = %i"%maxSize)
         if facesNum>maxSize:
             patchNum = 0
             # while((np.any(faceCheck==0))and(patchNum<3)):
@@ -2805,6 +2377,9 @@ def mainFunction():
 
                 v_faces = getVerticesFaces(testPatchF,25,testPatchV.shape[0])
 
+                print("mesh size:")
+                print("faces: %i"%patchFNormals.shape[0])
+                print("vertices: %i"%testPatchV.shape[0])
                 # Expand dimensions
                 f_normals = np.expand_dims(patchFNormals, axis=0)
                 v_pos = np.expand_dims(testPatchV,axis=0)
@@ -2898,96 +2473,62 @@ def mainFunction():
 
         return vOldInd_list, fOldInd_list, vNum, facesNum, new_to_old_permutations_list, num_faces, patch_indices
 
+    
+    if RUNNING_MODE == -5: # PICKLEEEEEEEEEEE
+        
+        myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
+        # Training set
+        for filename in os.listdir(TRAINING_DATA_PATH):
+            # if training_meshes_num[0]>10:
+            #     break
+
+            if (filename.endswith(".obj")):
+                print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
+                gtfilename = getGTFilename(filename)
+                for it in range(TRAINING_DATA_REDUNDANCY):
+                    myTS.addMeshWithGT(TRAINING_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
+
+        with open(binDumpPath+'f_normals_list', 'wb') as fp:
+            pickle.dump(myTS.in_list, fp)
+        with open(binDumpPath+'GTfn_list', 'wb') as fp:
+            pickle.dump(myTS.gt_list, fp)
+        with open(binDumpPath+'f_adj_list', 'wb') as fp:
+            pickle.dump(myTS.adj_list, fp)
+
+
+        myValidTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
+        # Validation set
+        for filename in os.listdir(VALID_DATA_PATH):
+            if (filename.endswith(".obj")):
+                gtfilename = getGTFilename(filename)
+                myValidTS.addMeshWithGT(VALID_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
+
+        # Validation
+        with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
+            pickle.dump(myValidTS.in_list, fp)
+        with open(binDumpPath+'valid_GTfn_list', 'wb') as fp:
+            pickle.dump(myValidTS.gt_list, fp)
+        with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
+            pickle.dump(myValidTS.adj_list, fp)
+
     # Train network
     if running_mode == 0:
 
         
-        f_normals_list = []
-        f_adj_list = []
-        GTfn_list = []
-
-        valid_f_normals_list = []
-        valid_f_adj_list = []
-        valid_GTfn_list = []
-
-
-        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
-        gtnameoffset = 7
-
-
-        if pickleLoad:
-            # Training
-            with open(binDumpPath+'f_normals_list', 'rb') as fp:
-                f_normals_list = pickle.load(fp)
-            with open(binDumpPath+'GTfn_list', 'rb') as fp:
-                GTfn_list = pickle.load(fp)
-            with open(binDumpPath+'f_adj_list', 'rb') as fp:
-                f_adj_list = pickle.load(fp)
-            # Validation
-            with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
-                valid_f_normals_list = pickle.load(fp)
-            with open(binDumpPath+'valid_GTfn_list', 'rb') as fp:
-                valid_GTfn_list = pickle.load(fp)
-            with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
-                valid_f_adj_list = pickle.load(fp)
-
-
-        else:
-            # Training set
-            for filename in os.listdir(inputFilePath):
-                #print("training_meshes_num start_iter " + str(training_meshes_num))
-                if training_meshes_num[0]>1000:
-                    break
-                #if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
-                #if (filename.endswith(".obj") and not(filename.startswith("buste"))):
-                if (filename.endswith(".obj")):
-
-
-                    #For FAUST
-                    fileNumStr = filename[5:8]
-                    # if int(fileNumStr)>2:
-                    #     continue
-                    # gtfilename = 'M'+fileNumStr+'/Ground_Truth/000.obj'
-                    print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
-                    gtfilename = filename[:-gtnameoffset]+".obj"
-                    # addMeshTransposeNormals(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-                    addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-                    # print("WARNING!! Adding each mesh twice! For diversity in the graph coarsening step")
-                    # addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-                    # addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-                    # addMesh(inputFilePath, filename, gtFilePath, gtfilename, f_normals_list, GTfn_list, f_adj_list, training_meshes_num)
-
-            if pickleSave:
-                # Training
-                with open(binDumpPath+'f_normals_list', 'wb') as fp:
-                    pickle.dump(f_normals_list, fp)
-                with open(binDumpPath+'GTfn_list', 'wb') as fp:
-                    pickle.dump(GTfn_list, fp)
-                with open(binDumpPath+'f_adj_list', 'wb') as fp:
-                    pickle.dump(f_adj_list, fp)
-
-            # Validation set
-            for filename in os.listdir(validFilePath):
-                if (filename.endswith(".obj")):
-                    # gtfilename = filename[:-gtnameoffset]+".obj"
-                    #For FAUST
-                    fileNumStr = filename[5:8]
-                    # gtfilename = 'M'+fileNumStr+'/Ground_Truth/000.obj'
-                    gtfilename = filename[:-gtnameoffset]+".obj"
-                    # addMeshTransposeNormals(validFilePath, filename, gtFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_meshes_num)
-                    addMesh(validFilePath, filename, gtFilePath, gtfilename, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list, valid_meshes_num)
-
-                #print("training_meshes_num end_iter " + str(training_meshes_num))
-            if pickleSave:
-                # Validation
-                with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
-                    pickle.dump(valid_f_normals_list, fp)
-                with open(binDumpPath+'valid_GTfn_list', 'wb') as fp:
-                    pickle.dump(valid_GTfn_list, fp)
-                with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
-                    pickle.dump(valid_f_adj_list, fp)
+        # Training
+        with open(binDumpPath+'f_normals_list', 'rb') as fp:
+            f_normals_list = pickle.load(fp)
+        with open(binDumpPath+'GTfn_list', 'rb') as fp:
+            GTfn_list = pickle.load(fp)
+        with open(binDumpPath+'f_adj_list', 'rb') as fp:
+            f_adj_list = pickle.load(fp)
+        # Validation
+        with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
+            valid_f_normals_list = pickle.load(fp)
+        with open(binDumpPath+'valid_GTfn_list', 'rb') as fp:
+            valid_GTfn_list = pickle.load(fp)
+        with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
+            valid_f_adj_list = pickle.load(fp)
 
 
         examplesNum = len(f_normals_list)
@@ -2999,32 +2540,6 @@ def mainFunction():
         print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
 
 
-
-
-        # # Reformat adj list, for binary dump without coarsening
-        # new_adj_list = []
-        # new_valid_adj_list = []
-        # for p in range(examplesNum):
-        #     adj_p_list = []
-        #     adjP = f_adj_list[p]
-        #     adjPLength = len(adjP)
-        #     for i in range(adjPLength):
-        #         adjMat = adjP[i]
-        #         adj_p_list.append(adjMat[np.newaxis,:,:])
-        #     new_adj_list.append(adj_p_list)
-
-        # for p in range(valid_examplesNum):
-        #     adj_p_list = []
-        #     adjP = valid_f_adj_list[p]
-        #     adjPLength = len(adjP)
-        #     for i in range(adjPLength):
-        #         adjMat = adjP[i]
-        #         adj_p_list.append(adjMat[np.newaxis,:,:])
-        #     new_valid_adj_list.append(adj_p_list)
-
-        # f_adj_list = new_adj_list
-        # valid_f_adj_list = new_valid_adj_list
-
         for p in range(examplesNum):
 
             # First, filter flipped faces for GT normals:
@@ -3032,19 +2547,6 @@ def mainFunction():
             myN = normalize(myN)
             myAdj = f_adj_list[p][0][0]
 
-            if (p==0):
-                test0 = f_adj_list[0]
-                print("f_adj_list[0] length = ",len(test0))
-                test1 = test0[0]
-                print("f_adj_list[0][0] length = ",len(test1))
-                print("f_adj_list[0][0] shape = ",test1.shape)
-                print("f_adj_list[0][0][0] shape = ",f_adj_list[0][0][0].shape)
-                print("myAdj shape = ",myAdj.shape)
-
-
-            # print("WARNING!!!!!!!!!!!!!!!!!")
-            # myAdj = f_adj_list[p][0]
-            # print("myAdj shape = ",myAdj.shape)
             filteredN = filterFlippedFaces(myN, myAdj, printAdjShape=(p==0))
             GTfn_list[p] = filteredN[np.newaxis,:,:]
 
@@ -3063,8 +2565,7 @@ def mainFunction():
             myN = valid_GTfn_list[p][0]
             myN = normalize(myN)
             myAdj = valid_f_adj_list[p][0][0]
-            # print("WARNING!!!!!!!!!!!!!!!!!")
-            # myAdj = valid_f_adj_list[p][0]
+            
             filteredN = filterFlippedFaces(myN, myAdj)
             valid_GTfn_list[p] = filteredN[np.newaxis,:,:]
 
@@ -3079,10 +2580,6 @@ def mainFunction():
 
     # Simple inference, no GT mesh involved
     elif running_mode == 1:
-        
-        maxSize = 100000
-        patchSize = 100000
-
         # noisyFolder = "/morpheo-nas2/vincent/DTU_Robot_Image_Dataset/Surface/furu/"
 
 
@@ -3107,6 +2604,7 @@ def mainFunction():
         # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/noisy/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/KickTest/"
+        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
@@ -3146,144 +2644,161 @@ def mainFunction():
                 faceMeshFile1 = noisyFile[:-4]+"_face_mesh1.obj"
                 faceMeshFile2 = noisyFile[:-4]+"_face_mesh2.obj"
 
-                if not os.path.isfile(RESULTS_PATH+denoizedFile):
-                # if True:
 
-                    f_normals_list = []
-                    GTfn_list = []
-                    f_adj_list = []
-                    faces_list = []
-                    v_faces_list = []
-                    v_list = []
-                    gtv_list = []
+                if os.path.isfile(RESULTS_PATH+denoizedFile):
+                    if B_OVERWRITE_RESULT:
+                        print("Warning: %s will be overwritten. (To deactivate overwriting, change parameter in settings.py)"%denoizedFile)
+                    else:
+                        print("Skipping %s. File already exists. (For automatic overwriting, change parameter in settings.py)"%denoizedFile)
+                        continue
 
 
-                    V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
-                    f_normals0 = computeFacesNormals(V0, faces_noisy)
+                f_normals_list = []
+                gt_f_normals_list = []
+                GTfn_list = []
+                f_adj_list = []
+                faces_list = []
+                v_faces_list = []
+                v_list = []
+                gtv_list = []
 
-                    print("Adding mesh "+noisyFile+"...")
-                    t0 = time.clock()
-                    # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, faces_list, f_normals_list, GTfn_list, f_adj_list, mesh_count)
-                    vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list, = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, v_list, gtv_list, faces_list, f_normals_list, f_adj_list, v_faces_list, mesh_count)
-                    print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
-                    # Now recover vertices positions and create Edge maps
 
-                    # with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/adj3lvl.pkl", 'wb') as fp:
-                    #     pickle.dump(f_adj_list[0], fp)
-                    # with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/perm3lvl.pkl", 'wb') as fp:
-                    #     pickle.dump(inv_perm(adjPerm_list[0]), fp) 
+                V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
+                f_normals0 = computeFacesNormals(V0, faces_noisy)
 
-                    # return
-                    V0 = np.expand_dims(V0, axis=0)
+                print("Adding mesh "+noisyFile+"...")
+                t0 = time.clock()
+                # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, faces_list, f_normals_list, GTfn_list, f_adj_list, mesh_count)
+                # vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list, = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, v_list, gtv_list, faces_list, f_normals_list, f_adj_list, v_faces_list, mesh_count)
+                vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list, _ = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, v_list, gtv_list, faces_list, f_normals_list, gt_f_normals_list, f_adj_list, v_faces_list, mesh_count)
+                print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                # Now recover vertices positions and create Edge maps
 
-                    # print("WARNING!!!!! Hardcoded a change in faces adjacency")
-                    # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
-                    
 
-                    faces_noisy = np.array(faces_noisy).astype(np.int32)
-                    faces = np.expand_dims(faces_noisy,axis=0)
-
-                    # v_faces = getVerticesFaces(np.squeeze(faces_list[0]), 15, V0.shape[1])
-                    # v_faces = np.expand_dims(v_faces,axis=0)
-
-                    print("Inference ...")
-                    t0 = time.clock()
-                    #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
-                    # upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, faces_num, patch_indices, permutations,facesNum)
-                    # upV0, upN0, upN1, upN2, upN3, upN4, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                    upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                    
-                    # upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                    print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
-
-                    # write_mesh(np.concatenate((upV0,np.zeros_like(upV0)),axis=-1), faces[0,:,:], RESULTS_PATH+denoizedFile)
-                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
-                    write_mesh(upV0mid, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_d_mid.obj")
-                    write_mesh(upV0coarse, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_d_coarse.obj")
-                    # write_mesh(V0, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_test.obj")
-
-                    # testP = upP0
-                    # testN = upN0
-                    # # testP = f_normals_list[0][:,:,3:]
-                    # # testP = np.squeeze(testP)
-                    # testAdj = f_adj_list[0][0]
-                    # testAdj = np.squeeze(testAdj)
-                    # # testN = f_normals_list[0][:,:,:3]
-                    # # testN = np.squeeze(testN)
-                    # faceMeshV, faceMeshF = makeFacesMesh(testAdj,testP,testN)
-
-                    # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile)
-                    
-                    # testP1 = upP1
-                    # testN1 = upN1
-                    # testAdj1 = f_adj_list[0][1]
-                    # testAdj1 = np.squeeze(testAdj1)
-                    # faceMeshV, faceMeshF = makeFacesMesh(testAdj1,testP1,testN1)
-
-                    # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile1)
-
-                    # testP2 = upP2
-                    # testN2 = upN2
-                    # testAdj2 = f_adj_list[0][2]
-                    # testAdj2 = np.squeeze(testAdj2)
-                    # faceMeshV, faceMeshF = makeFacesMesh(testAdj2,testP2,testN2)
-
-                    # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile2)
-
-                    # continue
+                for i in range(len(vOldInd_list)):
+                    curVOldInd = vOldInd_list[i]
+                    curFOldInd = fOldInd_list[i]
+                    curV = v_list[i]
+                    curF = faces_list[i]
+                    curN = f_normals_list[i]
+                    # print("shape curVOldInd = ",curVOldInd.shape)
+                    # print("shape curFOldInd = ",curFOldInd.shape)
+                    # print("shape curV = ",curV.shape)
+                    # print("shape curF = ",curF.shape)
+                    print("shape curN = ",curN.shape)
 
 
 
-                    angColor0 = (upN0+1)/2
-                    angColor1 = (upN1+1)/2
-                    angColor2 = (upN2+1)/2
-                    # angColor3 = (upN3+1)/2
-                    # angColor4 = (upN4+1)/2
+                # with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/adj3lvl.pkl", 'wb') as fp:
+                #     pickle.dump(f_adj_list[0], fp)
+                # with open("/morpheo-nas2/marmando/ShapeRegression/BinaryDump/perm3lvl.pkl", 'wb') as fp:
+                #     pickle.dump(inv_perm(adjPerm_list[0]), fp) 
 
-                    # f_normals0 = np.squeeze(f_normals_list[0])
-                    # print("f_normals0 shape: "+str(f_normals0.shape))
-                    # f_normals0 = f_normals0[:,:3]
-                    # print("f_normals0 shape: "+str(f_normals0.shape))
-                    angColorNoisy = (f_normals0+1)/2
-                    
-                    print("faces_noisy shape: "+str(faces_noisy.shape))
+                # return
+                V0 = np.expand_dims(V0, axis=0)
 
-                    print("angColor0 shape: "+str(angColor0.shape))
-                    print("angColor1 shape: "+str(angColor1.shape))
-                    print("angColor2 shape: "+str(angColor2.shape))
-                    print("V0 shape: "+str(V0.shape))
-                    # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
-                    newVn0, newFn0 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor0)
-                    newVn1, newFn1 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor1)
-                    newVn2, newFn2 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor2)
-                    # newVn3, newFn3 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor3)
-                    # newVn4, newFn4 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor4)
-                    
+                # print("WARNING!!!!! Hardcoded a change in faces adjacency")
+                # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
+                
 
-                    # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                    write_mesh(newVn0, newFn0, RESULTS_PATH+noisyFileWInferredColor0)
-                    write_mesh(newVn1, newFn1, RESULTS_PATH+noisyFileWInferredColor1)
-                    write_mesh(newVn2, newFn2, RESULTS_PATH+noisyFileWInferredColor2)
-                    # write_mesh(newVn3, newFn3, RESULTS_PATH+noisyFileWInferredColor3)
-                    # write_mesh(newVn4, newFn4, RESULTS_PATH+noisyFileWInferredColor4)
+                faces_noisy = np.array(faces_noisy).astype(np.int32)
+                faces = np.expand_dims(faces_noisy,axis=0)
 
-                    print("angColorNoisy shape: "+str(angColorNoisy.shape))
-                    newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
-                    write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+                # v_faces = getVerticesFaces(np.squeeze(faces_list[0]), 15, V0.shape[1])
+                # v_faces = np.expand_dims(v_faces,axis=0)
 
-                    # return
+                print("Inference ...")
+                t0 = time.clock()
+                #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                # upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, faces_num, patch_indices, permutations,facesNum)
+                # upV0, upN0, upN1, upN2, upN3, upN4, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
+                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
+                
+                # upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
+                print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
+
+                # write_mesh(np.concatenate((upV0,np.zeros_like(upV0)),axis=-1), faces[0,:,:], RESULTS_PATH+denoizedFile)
+                write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
+                write_mesh(upV0mid, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_d_mid.obj")
+                write_mesh(upV0coarse, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_d_coarse.obj")
+                # write_mesh(V0, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_test.obj")
+
+                # testP = upP0
+                # testN = upN0
+                # # testP = f_normals_list[0][:,:,3:]
+                # # testP = np.squeeze(testP)
+                # testAdj = f_adj_list[0][0]
+                # testAdj = np.squeeze(testAdj)
+                # # testN = f_normals_list[0][:,:,:3]
+                # # testN = np.squeeze(testN)
+                # faceMeshV, faceMeshF = makeFacesMesh(testAdj,testP,testN)
+
+                # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile)
+                
+                # testP1 = upP1
+                # testN1 = upN1
+                # testAdj1 = f_adj_list[0][1]
+                # testAdj1 = np.squeeze(testAdj1)
+                # faceMeshV, faceMeshF = makeFacesMesh(testAdj1,testP1,testN1)
+
+                # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile1)
+
+                # testP2 = upP2
+                # testN2 = upN2
+                # testAdj2 = f_adj_list[0][2]
+                # testAdj2 = np.squeeze(testAdj2)
+                # faceMeshV, faceMeshF = makeFacesMesh(testAdj2,testP2,testN2)
+
+                # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile2)
+
+                # continue
+
+
+
+                angColor0 = (upN0+1)/2
+                angColor1 = (upN1+1)/2
+                angColor2 = (upN2+1)/2
+                # angColor3 = (upN3+1)/2
+                # angColor4 = (upN4+1)/2
+
+                # f_normals0 = np.squeeze(f_normals_list[0])
+                # print("f_normals0 shape: "+str(f_normals0.shape))
+                # f_normals0 = f_normals0[:,:3]
+                # print("f_normals0 shape: "+str(f_normals0.shape))
+                angColorNoisy = (f_normals0+1)/2
+                
+                print("faces_noisy shape: "+str(faces_noisy.shape))
+
+                print("angColor0 shape: "+str(angColor0.shape))
+                print("angColor1 shape: "+str(angColor1.shape))
+                print("angColor2 shape: "+str(angColor2.shape))
+                print("V0 shape: "+str(V0.shape))
+                # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
+                newVn0, newFn0 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor0)
+                newVn1, newFn1 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor1)
+                newVn2, newFn2 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor2)
+                # newVn3, newFn3 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor3)
+                # newVn4, newFn4 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor4)
+                
+
+                # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+                write_mesh(newVn0, newFn0, RESULTS_PATH+noisyFileWInferredColor0)
+                write_mesh(newVn1, newFn1, RESULTS_PATH+noisyFileWInferredColor1)
+                write_mesh(newVn2, newFn2, RESULTS_PATH+noisyFileWInferredColor2)
+                # write_mesh(newVn3, newFn3, RESULTS_PATH+noisyFileWInferredColor3)
+                # write_mesh(newVn4, newFn4, RESULTS_PATH+noisyFileWInferredColor4)
+
+                print("angColorNoisy shape: "+str(angColorNoisy.shape))
+                newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
+                write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+
+                # return
 
     # master branch inference (old school, w/o multi-scale vertex update)
     elif running_mode == 12:
         
-        # maxSize = 100000
-        # patchSize = 100000
-
-        maxSize = 10000
-        patchSize = 10000
-
-        # noisyFolder = "/morpheo-nas2/vincent/DTU_Robot_Image_Dataset/Surface/furu/"
-
+        maxSize = MAX_PATCH_SIZE
+        patchSize = MAX_PATCH_SIZE
 
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/test_bits/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/test/"
@@ -3298,15 +2813,9 @@ def mainFunction():
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
-
-            # if (not noisyFile.endswith("part_Lp_n2.obj")):
-            if (not noisyFile.endswith("bunny_hi_n2.obj")):
-                continue
             mesh_count = [0]
 
-
             denoizedFile = noisyFile[:-4]+"_denoised_gray.obj"
-
 
             noisyFilesList = [noisyFile]
             denoizedFilesList = [denoizedFile]
@@ -3319,94 +2828,53 @@ def mainFunction():
                 noisyFileWColor = noisyFile[:-4]+"_original_normals.obj"
                 denoizedFileWColor = noisyFile[:-4]+"_denoised_color.obj"
 
-                if not os.path.isfile(RESULTS_PATH+denoizedFile+'aa'):
+                if not denoizedFile.startswith("bunny"):
+                    continue
+
+                if os.path.isfile(RESULTS_PATH+denoizedFile):
+                    if B_OVERWRITE_RESULT:
+                        print("Warning: %s will be overwritten. (To deactivate overwriting, change parameter in settings.py)"%denoizedFile)
+                    else:
+                        print("Skipping %s. File already exists. (For automatic overwriting, change parameter in settings.py)"%denoizedFile)
+                        continue
+
+                
+                print("Adding mesh "+noisyFile+"...")
+                t0 = time.clock()
+                myTS = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
+                myTS.addMesh(noisyFolder, noisyFile)
+                # faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
+                # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, [], f_adj_list, mesh_count)
+                
+                # _, _, _, _, permutations, faces_num, patch_indices = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, [], [], [], f_normals_list, [], f_adj_list, [], mesh_count)
                     
+                print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                
 
-                    f_normals_list = []
-                    GTfn_list = []
-                    f_adj_list = []
+                print("Inference ...")
+                t0 = time.clock()
 
-                    V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
-                    f_normals0 = computeFacesNormals(V0, faces_noisy)
+                #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
+                # upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations)
+                upV0, upN0 = inferNetOld(myTS.vertices, myTS.in_list, myTS.adj_list, myTS.edge_map, myTS.v_e_map,myTS.num_faces, myTS.patch_indices, myTS.permutations)
+                print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
 
-                    edge_map, v_e_map = getEdgeMap(faces_noisy, maxEdges = 20)
+                write_mesh(upV0, myTS.faces, RESULTS_PATH+denoizedFile)
 
-                    print("Adding mesh "+noisyFile+"...")
-                    t0 = time.clock()
-                    myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
-                    myTS.addMesh_TimeEfficient(noisyFolder, noisyFile)
-                    # faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
+                angColor = (upN0+1)/2
 
-                    # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, [], f_adj_list, mesh_count)
-                    # _, _, _, _, permutations, faces_num, patch_indices = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, [], [], [], f_normals_list, [], f_adj_list, [], mesh_count)
-                        
-                    print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
-                    # Now recover vertices positions and create Edge maps
+                angColorNoisy = (myTS.normals+1)/2
+                
+                faces_noisy = myTS.faces
+                V0 = myTS.vertices
+                # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
+                newVn, newFn = getColoredMesh(np.squeeze(V0), faces_noisy, angColor)
+                newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
 
-                    
-                    print("f_adj_list length = %i"%len(myTS.adj_list))
-                    print("f_adj_list[0] length = %i"%len(myTS.adj_list[0]))
-                    print("f_adj_list[0][0] shape = ",myTS.adj_list[0][0].shape)
-
-                    # # Reformat adj list, for binary dump without coarsening
-                    # new_adj_list = []
-                    # for p in range(examplesNum):
-                    #     adj_p_list = []
-                    #     adjP = f_adj_list[p]
-                    #     adjPLength = len(adjP)
-                    #     for i in range(adjPLength):
-                    #         adjMat = adjP[i]
-                    #         adj_p_list.append(adjMat[np.newaxis,:,:])
-                    #     new_adj_list.append(adj_p_list)
-
-
-
-
-
-
-                    facesNum = faces_noisy.shape[0]
-                    V0 = np.expand_dims(V0, axis=0)
-                    t0 = time.clock()
-                    # _, edge_map, v_e_map = getFacesAdj(faces_noisy)
-                    
-                    # f_adj = getFacesLargeAdj(faces_noisy,K_faces)
-                    # print("WARNING!!!!! Hardcoded a change in faces adjacency")
-                    # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
-                    print("edge map computed ("+str(1000*(time.clock()-t0))+"ms)")
-
-                    faces_noisy = np.array(faces_noisy).astype(np.int32)
-                    faces = np.expand_dims(faces_noisy,axis=0)
-                    
-
-                    print("Inference ...")
-                    t0 = time.clock()
-
-                    print("facesNum = %i"%facesNum)
-                    # print("patch_indices length = %i"%len(myTS.patch_indices))
-                    # print("patch_indices[0] length = %i"%len(myTS.patch_indices[0]))
-                    # for patchInd in range(len(myTS.patch_indices)):
-                    #     print("patch %i"%patchInd)
-                    #     print("patch_indices shape = ",myTS.patch_indices[patchInd].shape)
-                    #     print("max patch_indices = %i"%np.max(myTS.patch_indices[patchInd]))
-
-                    #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
-                    # upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
-                    upV0, upN0 = inferNetOld(myTS.V0, myTS.in_list, myTS.adj_list, myTS.edge_map, myTS.v_e_map,myTS.num_faces, myTS.patch_indices, myTS.permutations)
-                    print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
-
-                    write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
-
-                    angColor = (upN0+1)/2
-
-                    angColorNoisy = (f_normals0+1)/2
-                    
-                    # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
-                    newVn, newFn = getColoredMesh(np.squeeze(V0), faces_noisy, angColor)
-                    newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
-
-                    # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                    write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
-                    write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+                # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+                write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
+                write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
+                return
 
     # Inference: Denoise set, save meshes (colored with heatmap), compute metrics
     elif running_mode == 2:
@@ -3606,7 +3074,7 @@ def mainFunction():
 
                         angDict[noisyFile[:-4]] = angDistVec
                          # --- heatmap ---
-                        angColor = angDistVec / empiricMax
+                        angColor = angDistVec / HEATMAP_MAX_ANGLE
 
                         angColor = 1 - angColor
                         angColor = np.maximum(angColor, np.zeros_like(angColor))
@@ -3686,236 +3154,74 @@ def mainFunction():
     elif running_mode == 4:
 
 
-        gtnameoffset = 7
-        f_normals_list = []
-        f_adj_list = []
-        v_pos_list = []
-        gtv_pos_list = []
-        faces_list = []
-        v_faces_list = []
-        gtf_normals_list = []
+        # gtnameoffset = 7
+        # f_normals_list = []
+        # f_adj_list = []
+        # v_pos_list = []
+        # gtv_pos_list = []
+        # faces_list = []
+        # v_faces_list = []
+        # gtf_normals_list = []
 
-        valid_f_normals_list = []
-        valid_f_adj_list = []
-        valid_v_pos_list = []
-        valid_gtv_pos_list = []
-        valid_faces_list = []
-        valid_v_faces_list = []
-        valid_gtf_normals_list = []
+        # valid_f_normals_list = []
+        # valid_f_adj_list = []
+        # valid_v_pos_list = []
+        # valid_gtv_pos_list = []
+        # valid_faces_list = []
+        # valid_v_faces_list = []
+        # valid_gtf_normals_list = []
 
-        f_normals_list_temp = []
-        f_adj_list_temp = []
-        v_pos_list_temp = []
-        gtv_pos_list_temp = []
-        faces_list_temp = []
-        v_faces_list_temp = []
-        gtf_normals_list_temp = []
+        # f_normals_list_temp = []
+        # f_adj_list_temp = []
+        # v_pos_list_temp = []
+        # gtv_pos_list_temp = []
+        # faces_list_temp = []
+        # v_faces_list_temp = []
+        # gtf_normals_list_temp = []
 
-        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/train2/"
-        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/valid/"
-        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
+        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
+        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid/"
 
+        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
 
-        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/train/"
-        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/tola/valid/"
-        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
+        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
+        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
+        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
 
-        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/train_cleaned/"
-        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid_cleaned/"
-        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
-        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid/"
+        # # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/noisy/"
+        # # validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/valid/"
+        # # gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/original/"
 
-        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
+        # # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/noisy/"
+        # # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/valid/"
+        # # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/original/"
 
-        inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-        validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
+        # gtnameoffset = 7 #10
 
-        # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/noisy/"
-        # validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/valid/"
-        # gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/original/"
-
-        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/noisy/"
-        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/valid/"
-        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/original/"
-
-        gtnameoffset = 7 #10
-        
-        #print("training_meshes_num 0 " + str(training_meshes_num))
-        if pickleLoad:
-
-            # Training
-            pickleNum=0
-            while os.path.isfile(binDumpPath+'f_normals_list'+str(pickleNum)):
-                with open(binDumpPath+'f_normals_list'+str(pickleNum), 'rb') as fp:
-                    # f_normals_list_temp = pickle.load(fp, encoding='latin1')
-                    f_normals_list_temp = pickle.load(fp)
-                with open(binDumpPath+'f_adj_list'+str(pickleNum), 'rb') as fp:
-                    # f_adj_list_temp = pickle.load(fp, encoding='latin1')
-                    f_adj_list_temp = pickle.load(fp)
-                with open(binDumpPath+'v_pos_list'+str(pickleNum), 'rb') as fp:
-                    # v_pos_list_temp = pickle.load(fp, encoding='latin1')
-                    v_pos_list_temp = pickle.load(fp)
-                with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'rb') as fp:
-                    # gtv_pos_list_temp = pickle.load(fp, encoding='latin1')
-                    gtv_pos_list_temp = pickle.load(fp)
-                with open(binDumpPath+'faces_list'+str(pickleNum), 'rb') as fp:
-                    # faces_list_temp = pickle.load(fp, encoding='latin1')
-                    faces_list_temp = pickle.load(fp)
-                with open(binDumpPath+'v_faces_list'+str(pickleNum), 'rb') as fp:
-                    # v_faces_list_temp = pickle.load(fp, encoding='latin1')
-                    v_faces_list_temp = pickle.load(fp)
-                with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'rb') as fp:
-                    # f_normals_list_temp = pickle.load(fp, encoding='latin1')
-                    gtf_normals_list_temp = pickle.load(fp)
-
-                if pickleNum==0:
-                    f_normals_list = f_normals_list_temp
-                    f_adj_list = f_adj_list_temp
-                    v_pos_list = v_pos_list_temp
-                    gtv_pos_list = gtv_pos_list_temp
-                    faces_list = faces_list_temp
-                    v_faces_list = v_faces_list_temp
-                    gtf_normals_list = gtf_normals_list_temp
-                else:
-
-                    f_normals_list+=f_normals_list_temp
-                    f_adj_list+=f_adj_list_temp
-                    v_pos_list+=v_pos_list_temp
-                    gtv_pos_list+=gtv_pos_list_temp
-                    faces_list+=faces_list_temp
-                    v_faces_list+=v_faces_list_temp
-                    gtf_normals_list+=gtf_normals_list_temp
-
-
-                print("loaded training pickle "+str(pickleNum))
-                pickleNum+=1
-
-
-            # Validation
-            with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
-                # valid_f_normals_list = pickle.load(fp, encoding='latin1')
-                valid_f_normals_list = pickle.load(fp)
-            with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
-                # valid_f_adj_list = pickle.load(fp, encoding='latin1')
-                valid_f_adj_list = pickle.load(fp)
-            with open(binDumpPath+'valid_v_pos_list', 'rb') as fp:
-                # valid_v_pos_list = pickle.load(fp, encoding='latin1')
-                valid_v_pos_list = pickle.load(fp)
-            with open(binDumpPath+'valid_gtv_pos_list', 'rb') as fp:
-                # valid_gtv_pos_list = pickle.load(fp, encoding='latin1')
-                valid_gtv_pos_list = pickle.load(fp)
-            with open(binDumpPath+'valid_faces_list', 'rb') as fp:
-                # valid_faces_list = pickle.load(fp, encoding='latin1')
-                valid_faces_list = pickle.load(fp)
-            with open(binDumpPath+'valid_v_faces_list', 'rb') as fp:
-                # valid_v_faces_list = pickle.load(fp, encoding='latin1')
-                valid_v_faces_list = pickle.load(fp)
-            with open(binDumpPath+'valid_gtf_normals_list', 'rb') as fp:
-                # valid_f_normals_list = pickle.load(fp, encoding='latin1')
-                valid_gtf_normals_list = pickle.load(fp)
-
-
-        else:
-
-            pickleNum=0
-            # Training set
-            for filename in os.listdir(inputFilePath):
-                #print("training_meshes_num start_iter " + str(training_meshes_num))
-                if training_meshes_num[0]>1000:
-                    break
-                #if (filename.endswith("noisy.obj")and not(filename.startswith("raptor_f"))and not(filename.startswith("olivier"))and not(filename.startswith("red_box"))and not(filename.startswith("bunny"))):
-                #if (filename.endswith(".obj") and not(filename.startswith("buste"))):
-                if (filename.endswith(".obj")):
-                    if filename.startswith("aaaaaaaaaaaaaaa") or filename.startswith("aaaaaaaaaaaaaaab"):
-                        continue
-                    print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
-
-                    # # For DTU
-                    # fileNumStr = filename[4:7]
-                    # gtfilename = 'stl'+fileNumStr+'_total.obj'
-
-                    # For CNR dataset
-                    gtfilename = filename[:-gtnameoffset]+".obj"
-
-                    # #For FAUST
-                    # fileNumStr = filename[5:8]
-                    # # if int(fileNumStr)>2:
-                    # #     continue
-                    # gtfilename = 'gt'+fileNumStr+'.obj'
-
-                    # addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
-                    # print("WARNING!! Adding each mesh three times! For diversity in the graph coarsening step")
-                    # addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
-                    # addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
-
-                    addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, gtf_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
-                    print("WARNING!! Adding each mesh three times! For diversity in the graph coarsening step")
-                    addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, gtf_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
-                    addMeshWithVertices(inputFilePath, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, gtf_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
-                    
-
-                    # Save batches of meshes/patches (for training only)
-                    if training_meshes_num[0]>30:
-                        if pickleSave:
-                            # Training
-                            with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(f_normals_list_temp, fp)
-                            with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(f_adj_list_temp, fp)
-                            with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(v_pos_list_temp, fp)
-                            with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(gtv_pos_list_temp, fp)
-                            with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(faces_list_temp, fp)
-                            with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(v_faces_list_temp, fp)
-                            with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'wb') as fp:
-                                pickle.dump(gtf_normals_list_temp, fp)
-                        if pickleNum==0:
-                            f_normals_list = f_normals_list_temp
-                            f_adj_list = f_adj_list_temp
-                            v_pos_list = v_pos_list_temp
-                            gtv_pos_list = gtv_pos_list_temp
-                            faces_list = faces_list_temp
-                            v_faces_list = v_faces_list_temp
-                            gtf_normals_list = gtf_normals_list_temp
-                        else:
-                            f_normals_list+=f_normals_list_temp
-                            f_adj_list+=f_adj_list_temp
-                            v_pos_list+=v_pos_list_temp
-                            gtv_pos_list+=gtv_pos_list_temp
-                            faces_list+=faces_list_temp
-                            v_faces_list+=v_faces_list_temp
-                            gtf_normals_list+=gtf_normals_list_temp
-
-                        pickleNum+=1
-                        f_normals_list_temp = []
-                        f_adj_list_temp = []
-                        v_pos_list_temp = []
-                        gtv_pos_list_temp = []
-                        faces_list_temp = []
-                        v_faces_list_temp = []
-                        gtf_normals_list_temp = []
-                        training_meshes_num[0] = 0
-
-            if (pickleSave) and training_meshes_num[0]>0:
-                # Training
-                with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(f_normals_list_temp, fp)
-                with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(f_adj_list_temp, fp)
-                with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(v_pos_list_temp, fp)
-                with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(gtv_pos_list_temp, fp)
-                with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(faces_list_temp, fp)
-                with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(v_faces_list_temp, fp)
-                with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'wb') as fp:
-                    pickle.dump(gtf_normals_list_temp, fp)
+        # Training
+        pickleNum=0
+        while os.path.isfile(binDumpPath+'f_normals_list'+str(pickleNum)):
+            with open(binDumpPath+'f_normals_list'+str(pickleNum), 'rb') as fp:
+                # f_normals_list_temp = pickle.load(fp, encoding='latin1')
+                f_normals_list_temp = pickle.load(fp)
+            with open(binDumpPath+'f_adj_list'+str(pickleNum), 'rb') as fp:
+                # f_adj_list_temp = pickle.load(fp, encoding='latin1')
+                f_adj_list_temp = pickle.load(fp)
+            with open(binDumpPath+'v_pos_list'+str(pickleNum), 'rb') as fp:
+                # v_pos_list_temp = pickle.load(fp, encoding='latin1')
+                v_pos_list_temp = pickle.load(fp)
+            with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'rb') as fp:
+                # gtv_pos_list_temp = pickle.load(fp, encoding='latin1')
+                gtv_pos_list_temp = pickle.load(fp)
+            with open(binDumpPath+'faces_list'+str(pickleNum), 'rb') as fp:
+                # faces_list_temp = pickle.load(fp, encoding='latin1')
+                faces_list_temp = pickle.load(fp)
+            with open(binDumpPath+'v_faces_list'+str(pickleNum), 'rb') as fp:
+                # v_faces_list_temp = pickle.load(fp, encoding='latin1')
+                v_faces_list_temp = pickle.load(fp)
+            with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'rb') as fp:
+                # f_normals_list_temp = pickle.load(fp, encoding='latin1')
+                gtf_normals_list_temp = pickle.load(fp)
 
             if pickleNum==0:
                 f_normals_list = f_normals_list_temp
@@ -3926,6 +3232,7 @@ def mainFunction():
                 v_faces_list = v_faces_list_temp
                 gtf_normals_list = gtf_normals_list_temp
             else:
+
                 f_normals_list+=f_normals_list_temp
                 f_adj_list+=f_adj_list_temp
                 v_pos_list+=v_pos_list_temp
@@ -3934,43 +3241,33 @@ def mainFunction():
                 v_faces_list+=v_faces_list_temp
                 gtf_normals_list+=gtf_normals_list_temp
 
-            # Validation set
-            for filename in os.listdir(validFilePath):
-                if (filename.endswith(".obj")):
-                    if valid_meshes_num[0]>200:
-                        break
-                    # # For DTU
-                    # fileNumStr = filename[4:7]
-                    # gtfilename = 'stl'+fileNumStr+'_total.obj'
 
-                    # For CNR dataset
-                    gtfilename = filename[:-gtnameoffset]+".obj"
+            print("loaded training pickle "+str(pickleNum))
+            pickleNum+=1
 
-                    # #For FAUST
-                    # fileNumStr = filename[5:8]
-                    # gtfilename = 'gt'+fileNumStr+'.obj'
 
-                    addMeshWithVertices(validFilePath, filename, gtFilePath, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_gtf_normals_list, valid_f_adj_list, valid_v_faces_list, valid_meshes_num)
-                    
-
-                #print("training_meshes_num end_iter " + str(training_meshes_num))
-            
-            if pickleSave:
-                # Validation
-                with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
-                    pickle.dump(valid_f_normals_list, fp)
-                with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
-                    pickle.dump(valid_f_adj_list, fp)
-                with open(binDumpPath+'valid_v_pos_list', 'wb') as fp:
-                    pickle.dump(valid_v_pos_list, fp)
-                with open(binDumpPath+'valid_gtv_pos_list', 'wb') as fp:
-                    pickle.dump(valid_gtv_pos_list, fp)
-                with open(binDumpPath+'valid_faces_list', 'wb') as fp:
-                    pickle.dump(valid_faces_list, fp)
-                with open(binDumpPath+'valid_v_faces_list', 'wb') as fp:
-                    pickle.dump(valid_v_faces_list, fp)
-                with open(binDumpPath+'valid_gtf_normals_list', 'wb') as fp:
-                    pickle.dump(valid_gtf_normals_list, fp)
+        # Validation
+        with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
+            # valid_f_normals_list = pickle.load(fp, encoding='latin1')
+            valid_f_normals_list = pickle.load(fp)
+        with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
+            # valid_f_adj_list = pickle.load(fp, encoding='latin1')
+            valid_f_adj_list = pickle.load(fp)
+        with open(binDumpPath+'valid_v_pos_list', 'rb') as fp:
+            # valid_v_pos_list = pickle.load(fp, encoding='latin1')
+            valid_v_pos_list = pickle.load(fp)
+        with open(binDumpPath+'valid_gtv_pos_list', 'rb') as fp:
+            # valid_gtv_pos_list = pickle.load(fp, encoding='latin1')
+            valid_gtv_pos_list = pickle.load(fp)
+        with open(binDumpPath+'valid_faces_list', 'rb') as fp:
+            # valid_faces_list = pickle.load(fp, encoding='latin1')
+            valid_faces_list = pickle.load(fp)
+        with open(binDumpPath+'valid_v_faces_list', 'rb') as fp:
+            # valid_v_faces_list = pickle.load(fp, encoding='latin1')
+            valid_v_faces_list = pickle.load(fp)
+        with open(binDumpPath+'valid_gtf_normals_list', 'rb') as fp:
+            # valid_f_normals_list = pickle.load(fp, encoding='latin1')
+            valid_gtf_normals_list = pickle.load(fp)
 
         print("f_normals_list length = ",len(f_normals_list))
         print("gtf_normals_list length = ",len(gtf_normals_list))
@@ -4089,9 +3386,7 @@ def mainFunction():
         #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
         #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
 
-
-
-
+    
     elif running_mode == 7:
 
         # Take the opportunity to generate array of metrics on reconstructions
@@ -4358,7 +3653,7 @@ def mainFunction():
                     dictLabel = dictLabel.replace('-','_')
                     angDict[dictLabel] = angDistVec
                     # --- Test heatmap ---
-                    angColor = angDistVec / empiricMax
+                    angColor = angDistVec / HEATMAP_MAX_ANGLE
                     angColor = 1 - angColor
                     angColor = np.maximum(angColor, np.zeros_like(angColor))
 
@@ -4566,25 +3861,26 @@ def mainFunction():
     # Load and pickle training data.
     elif running_mode == 11:
 
-        f_normals_list_temp = []
-        f_adj_list_temp = []
-        v_pos_list_temp = []
-        gtv_pos_list_temp = []
-        e_map_list_temp = []
-        v_emap_list_temp = []
-
         valid_f_normals_list = []
         valid_f_adj_list = []
         valid_v_pos_list = []
         valid_gtv_pos_list = []
-        valid_e_map_list = []
-        valid_v_emap_list = []
+        valid_faces_list = []
+        valid_v_faces_list = []
+        valid_gtf_normals_list = []
 
-        
+        f_normals_list_temp = []
+        f_adj_list_temp = []
+        v_pos_list_temp = []
+        gtv_pos_list_temp = []
+        faces_list_temp = []
+        v_faces_list_temp = []
+        gtf_normals_list_temp = []
         
         gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
 
         pickleNum=0
+
         # Training set
         for filename in os.listdir(TRAINING_DATA_PATH):
             #print("training_meshes_num start_iter " + str(training_meshes_num))
@@ -4593,7 +3889,8 @@ def mainFunction():
             if (filename.endswith(".obj")):
                 print("Adding %s (%i)"%(filename, training_meshes_num[0]))
                 gtfilename = getGTFilename(filename)
-                addMeshWithVertices(TRAINING_DATA_PATH, filename, gtFilePath, gtfilename, v_pos_list_temp, gtv_pos_list_temp, f_normals_list_temp, f_adj_list_temp, e_map_list_temp, v_emap_list_temp, training_meshes_num)
+                # addMeshWithVertices(TRAINING_DATA_PATH, filename, GT_DATA_PATH, gtfilename, v_pos_list_temp, gtv_pos_list_temp, f_normals_list_temp, f_adj_list_temp, e_map_list_temp, v_emap_list_temp, training_meshes_num)
+                addMeshWithVertices(TRAINING_DATA_PATH, filename, GT_DATA_PATH, gtfilename, v_pos_list_temp, gtv_pos_list_temp, faces_list_temp, f_normals_list_temp, gtf_normals_list_temp, f_adj_list_temp, v_faces_list_temp, training_meshes_num)
 
                 # Save batches of meshes/patches (for training only)
                 if training_meshes_num[0]>30:
@@ -4606,18 +3903,21 @@ def mainFunction():
                         pickle.dump(v_pos_list_temp, fp)
                     with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
                         pickle.dump(gtv_pos_list_temp, fp)
-                    with open(binDumpPath+'e_map_list'+str(pickleNum), 'wb') as fp:
-                        pickle.dump(e_map_list_temp, fp)
-                    with open(binDumpPath+'v_emap_list'+str(pickleNum), 'wb') as fp:
-                        pickle.dump(v_emap_list_temp, fp)
-
+                    with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
+                        pickle.dump(faces_list_temp, fp)
+                    with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
+                        pickle.dump(v_faces_list_temp, fp)
+                    with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'wb') as fp:
+                        pickle.dump(gtf_normals_list_temp, fp)
                     pickleNum+=1
+
                     f_normals_list_temp = []
                     f_adj_list_temp = []
                     v_pos_list_temp = []
                     gtv_pos_list_temp = []
-                    e_map_list_temp = []
-                    v_emap_list_temp = []
+                    faces_list_temp = []
+                    v_faces_list_temp = []
+                    gtf_normals_list_temp = []
                     training_meshes_num[0] = 0
 
         if training_meshes_num[0]>0:
@@ -4630,17 +3930,19 @@ def mainFunction():
                 pickle.dump(v_pos_list_temp, fp)
             with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
                 pickle.dump(gtv_pos_list_temp, fp)
-            with open(binDumpPath+'e_map_list'+str(pickleNum), 'wb') as fp:
-                pickle.dump(e_map_list_temp, fp)
-            with open(binDumpPath+'v_emap_list'+str(pickleNum), 'wb') as fp:
-                pickle.dump(v_emap_list_temp, fp)
+            with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
+                pickle.dump(faces_list_temp, fp)
+            with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
+                pickle.dump(v_faces_list_temp, fp)
+            with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'wb') as fp:
+                pickle.dump(gtf_normals_list_temp, fp)
 
         # Validation set
-        for filename in os.listdir(validFilePath):
+        for filename in os.listdir(VALID_DATA_PATH):
             if (filename.endswith(".obj")):
                 gtfilename = getGTFilename(filename)
-                addMeshWithVertices(validFilePath, filename, gtFilePath, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_f_normals_list, valid_f_adj_list, valid_e_map_list, valid_v_emap_list, valid_meshes_num)
-                
+                # addMeshWithVertices(VALID_DATA_PATH, filename, GT_DATA_PATH, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_f_normals_list, valid_f_adj_list, valid_e_map_list, valid_v_emap_list, valid_meshes_num)
+                addMeshWithVertices(VALID_DATA_PATH, filename, GT_DATA_PATH, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_gtf_normals_list, valid_f_adj_list, valid_v_faces_list, valid_meshes_num)
         # Validation
         with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
             pickle.dump(valid_f_normals_list, fp)
@@ -4650,10 +3952,12 @@ def mainFunction():
             pickle.dump(valid_v_pos_list, fp)
         with open(binDumpPath+'valid_gtv_pos_list', 'wb') as fp:
             pickle.dump(valid_gtv_pos_list, fp)
-        with open(binDumpPath+'valid_e_map_list', 'wb') as fp:
-            pickle.dump(valid_e_map_list, fp)
-        with open(binDumpPath+'valid_v_emap_list', 'wb') as fp:
-            pickle.dump(valid_v_emap_list, fp)
+        with open(binDumpPath+'valid_faces_list', 'wb') as fp:
+            pickle.dump(valid_faces_list, fp)
+        with open(binDumpPath+'valid_v_faces_list', 'wb') as fp:
+            pickle.dump(valid_v_faces_list, fp)
+        with open(binDumpPath+'valid_gtf_normals_list', 'wb') as fp:
+            pickle.dump(valid_gtf_normals_list, fp)
 
 
 
@@ -4682,8 +3986,8 @@ if __name__ == "__main__":
 
     ARCHITECTURE = FLAGS.architecture
     #DATASET_PATH = FLAGS.dataset_path
-    RESULTS_PATH = FLAGS.results_path
-    NETWORK_PATH = FLAGS.network_path
+    # RESULTS_PATH = FLAGS.results_path
+    # NETWORK_PATH = FLAGS.network_path
     NUM_ITERATIONS = FLAGS.num_iterations
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name

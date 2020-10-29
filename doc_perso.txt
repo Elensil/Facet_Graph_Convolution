@@ -26,11 +26,18 @@ Running_mode:
 	8:
 		Compute (more general?) stats between GT and denoised meshes. Save results in matlab file
 	9:
-		?? Useless? -> Very similar to 12: check
+		Very similar to 2: different stuff saved
 	11:
 		addMeshWithVertices -> pickle data
 	17:
 
+
+TODO:
+	- when pickling (mode -5), use class
+		-> add GT handling in class addMesh function
+	- loss on vertices !!! Everything remains to be done. -> loading (factorize) (or not), pickling, training, inference
+	- keep cleaning, remove all parameters.
+	- "Clean" other py files ?
 
 
 

@@ -87,7 +87,7 @@ class myGenData():
         self.coarseningStepNum = coarseningStepNum
         self.coarseningLvlNum = coarseningLvlNum
 
-class PreprocessedData():
+class PreprocessedData(object):
     def __init__(self, maxSize, coarseningStepNum, coarseningLvlNum):
         self.in_list = []
         self.gt_list = []
@@ -100,48 +100,58 @@ class PreprocessedData():
         self.patchSize = maxSize
         self.coarseningStepNum = coarseningStepNum
         self.coarseningLvlNum = coarseningLvlNum
+        self.minPatchSize = MIN_PATCH_SIZE
+
+        # Additional lists for vertices stuff
+        self.vOldInd_list = []
+        self.fOldInd_list = []
+        self.v_list = []
+        self.gtv_list = []
 
 
-    def addMeshNew(inputFilePath, filename, gtFilePath, gtFileName):
+    # def addMeshNew(inputFilePath, filename, gtFilePath, gtFileName):
 
-        myMesh = MeshPair(inputFilePath, filename, gtFilePath, gtFileName)
+    #     myMesh = MeshPair(inputFilePath, filename, gtFilePath, gtFileName)
 
-        faceCheck = np.zeros(facesNum)
-        faceRange = np.arange(facesNum)
-        if facesNum>self.maxSize:
-            print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
-            patchNum = 0
-            nextSeed = -1
-            while(np.any(faceCheck==0)):
-                toBeProcessed = faceRange[faceCheck==0]
-                if nextSeed==-1:
-                    faceSeed = np.random.randint(toBeProcessed.shape[0])
-                    faceSeed = toBeProcessed[faceSeed]
-                else:
-                    faceSeed = nextSeed
-                    if faceCheck[faceSeed]==1:
-                        print("ERROR: Bad seed returned!!")
-                        return
+    #     faceCheck = np.zeros(facesNum)
+    #     faceRange = np.arange(facesNum)
+    #     if facesNum>self.maxSize:
+    #         print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
+    #         patchNum = 0
+    #         nextSeed = -1
+    #         while(np.any(faceCheck==0)):
+    #             toBeProcessed = faceRange[faceCheck==0]
+    #             if nextSeed==-1:
+    #                 faceSeed = np.random.randint(toBeProcessed.shape[0])
+    #                 faceSeed = toBeProcessed[faceSeed]
+    #             else:
+    #                 faceSeed = nextSeed
+    #                 if faceCheck[faceSeed]==1:
+    #                     print("ERROR: Bad seed returned!!")
+    #                     return
 
-                curPatch = Patch(myMesh, patchSize, faceSeed, faceCheck)
+    #             curPatch = Patch(myMesh, patchSize, faceSeed, faceCheck)
 
-                faceCheck[curPatch.faceInd] = 1
+    #             faceCheck[curPatch.faceInd] = 1
 
-                if curPatch.size<100:
-                    continue
+    #             if curPatch.size<100:
+    #                 continue
 
-                if coarseningLvlNum>1:
-                    curPatch.coarsen(self.coarseningLvlNum, self.coarseningStepNum)
+    #             if coarseningLvlNum>1:
+    #                 curPatch.coarsen(self.coarseningLvlNum, self.coarseningStepNum)
 
 
+    def addMesh(self, inputFilePath, filename):
+        V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
+        self.addMesh_TimeEfficient(V,faces)
 
-    def addMesh_TimeEfficient(self, inputFilePath,filename):
 
+    def addMesh_TimeEfficient(self, V0, faces0, GTV=None):
+        addGT = False
+        if GTV is not None:
+            addGT = True
         # --- Load mesh ---
         t0 = time.clock()
-        V0,_,_, faces0, _ = load_mesh(inputFilePath, filename, 0, False)
-        self.V0 = V0[np.newaxis,:,:]
-
         self.edge_map, self.v_e_map = getEdgeMap(faces0, maxEdges = 20)
         self.edge_map = np.expand_dims(self.edge_map, axis=0)
         self.v_e_map = np.expand_dims(self.v_e_map, axis=0)
@@ -149,9 +159,10 @@ class PreprocessedData():
         t1 = time.clock()
         print("mesh loaded ("+str(1000*(t1-t0))+"ms)")
 
-        # print("faces0 shape: "+str(faces0.shape))
         # Compute normals
         f_normals0 = computeFacesNormals(V0, faces0)
+
+        # self.normals = f_normals0
         t2 = time.clock()
         print("normals computed ("+str(1000*(t2-t1))+"ms)")
         
@@ -169,13 +180,11 @@ class PreprocessedData():
 
         t7 = time.clock()
 
-
         # Get patches if mesh is too big
         facesNum = faces0.shape[0]
 
-        # Load GT
-        # GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
-        # GTf_normals0 = computeFacesNormals(GT0, faces0)
+        if addGT:
+            GTf_normals0 = computeFacesNormals(GTV, faces0)
 
         faceCheck = np.zeros(facesNum)
         faceRange = np.arange(facesNum)
@@ -195,18 +204,16 @@ class PreprocessedData():
                         return
                 tp0 = time.clock()
 
-                # testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
-
-                testPatchAdj, fOldInd, nextSeed = getGraphPatch_wMask(f_adj0, self.patchSize, faceSeed, faceCheck)
-                # coo_adj, fOldInd, nextSeed = getSparseGraphPatch_wMask(f_adj0,f_pos0, f_normals0, patchSize, faceSeed, faceCheck)
+                testPatchAdj, fOldInd, nextSeed = getGraphPatch_wMask(f_adj0, self.patchSize, faceSeed, faceCheck, self.minPatchSize)
                 tp1 = time.clock()
                 print("\nMesh patch extracted ("+str(1000*(tp1-tp0))+"ms)")
-                # print("Patch size = %i"%testPatchAdj.shape[0])
+
                 faceCheck[fOldInd]=1
                 print("Total added faces = %i"%np.sum(faceCheck==1))
 
                 patchFNormals = f_normals_pos[fOldInd]
-                # patchGTFNormals = GTf_normals0[fOldInd]
+                if addGT:
+                    patchGTFNormals = GTf_normals0[fOldInd]
 
                 old_N = patchFNormals.shape[0]
 
@@ -244,13 +251,14 @@ class PreprocessedData():
                     new_N = len(newToOld)
                     
                     padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
-                    # padding6 =np.zeros((new_N-old_N,33))
                     padding3 =np.zeros((new_N-old_N,3))
                     patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
-                    # patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
                     # Reorder nodes
                     patchFNormals = patchFNormals[newToOld]
-                    # patchGTFNormals = patchGTFNormals[newToOld]
+                    
+                    if addGT:
+                        patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+                        patchGTFNormals = patchGTFNormals[newToOld]
 
                 else:   # One level only: no coarsening
                     fAdjs = []
@@ -266,23 +274,20 @@ class PreprocessedData():
 
                 # Expand dimensions
                 f_normals = np.expand_dims(patchFNormals, axis=0)
-                #f_adj = np.expand_dims(testPatchAdj, axis=0)
-                # GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
 
                 self.in_list.append(f_normals)
                 self.adj_list.append(fAdjs)
-                # self.gt_list.append(GTf_normals)
+                if addGT:
+                    GTf_normals = np.expand_dims(patchGTFNormals, axis=0)
+                    self.gt_list.append(GTf_normals)
 
-                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
+                # print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
                 self.mesh_count+=1
                 patchNum+=1
         else:       #Small mesh case
             old_N = facesNum
 
             if self.coarseningLvlNum>1:
-                # Convert to sparse matrix and coarsen graph
-                # print("f_adj0 shape: "+str(f_adj0.shape))
-                # print("f_pos0 shape: "+str(f_pos0.shape))
                 coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
                 
                 has_sat = True
@@ -306,11 +311,12 @@ class PreprocessedData():
                 padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
                 padding3 =np.zeros((new_N-old_N,3))
                 f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
-                # GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
-
                 # Reorder nodes
                 f_normals_pos = f_normals_pos[newToOld]
-                # GTf_normals0 = GTf_normals0[newToOld]
+
+                if addGT:
+                    GTf_normals0 = np.concatenate((GTf_normals0, padding3),axis=0)
+                    GTf_normals0 = GTf_normals0[newToOld]
 
             else:
                 fAdjs = []
@@ -329,16 +335,258 @@ class PreprocessedData():
 
             # Expand dimensions
             f_normals = np.expand_dims(f_normals_pos, axis=0)
-            #f_adj = np.expand_dims(f_adj0, axis=0)
-            # GTf_normals = np.expand_dims(GTf_normals0, axis=0)
+            
 
             self.in_list.append(f_normals)
             self.adj_list.append(fAdjs)
-            # self.gt_list.append(GTf_normals)
+
+            if addGT:
+                GTf_normals = np.expand_dims(GTf_normals0, axis=0)
+                self.gt_list.append(GTf_normals)
         
             
             self.mesh_count+=1
 
 
+    # def addMeshWithVertices(inputFilePath,filename, gtFilePath, gtfilename, faces_list, n_list, gtn_list, adj_list, v_faces_list, mesh_count_list):
+    def addMeshWithVertices(self, V0, faces0, GTV=None):
+
+        vNum = V0.shape[0]
+        # Compute normals
+        f_normals0 = computeFacesNormals(V0, faces0)
+        # Get adjacency
+        f_adj0 = getFacesLargeAdj(faces0,K_faces)
+        # Get faces position
+        # print("WARNING: temp change to face position normalization!! TO BE REMOVED!!!")
+        f_pos0 = getTrianglesBarycenter(V0, faces0, normalize=True)
+        # f_pos0 = np.reshape(f_pos0,(-1,3))
+
+        f_area0 = np.expand_dims(getTrianglesArea(V0,faces0, normalize=True), axis=1)
+
+        f_borderCh0 = np.expand_dims(getBorderFaces(faces0),axis=1)
+
+        # print("WARNING!!! Added area channel and binary channel for border faces")
+        # f_normals_pos = np.concatenate((f_normals0, f_area0, f_borderCh0, f_pos0), axis=1)
+        # print("WARNING!!! Added binary channel for border faces")
+        # f_normals_pos = np.concatenate((f_normals0, f_borderCh0, f_pos0), axis=1)
+        f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
+
+        # Load GT
+        GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
+
+        gtf_normals0 = computeFacesNormals(GT0, faces0)
+
+        # Normalize vertices
+        V0, GT0 = normalizePointSets(V0,GT0)
+
+
+        # Get patches if mesh is too big
+        facesNum = faces0.shape[0]
+        faceCheck = np.zeros(facesNum)
+        faceRange = np.arange(facesNum)
+        if facesNum>maxSize:
+            patchNum = 0
+            # while((np.any(faceCheck==0))and(patchNum<3)):
+            while(np.any(faceCheck==0)):
+                toBeProcessed = faceRange[faceCheck==0]
+                faceSeed = np.random.randint(toBeProcessed.shape[0])
+                faceSeed = toBeProcessed[faceSeed]
+
+                testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
+                faceCheck[fOldInd]+=1
+
+                patchFNormals = f_normals_pos[fOldInd]
+                patchGTFNormals = gtf_normals0[fOldInd]
+
+                old_N = patchFNormals.shape[0]
+
+                # Don't add small disjoint components
+                if old_N<100:
+                    continue
+                
+                # For CNR dataset: one-one correspondence between vertices
+                # patchGTV = GT0[vOldInd]
+
+                # For DTU: take slice of GT points
+                patchBB = getBoundingBox(testPatchV)
+                patchGTV = takePointSetSlice(GT0,patchBB)
+                
+                # If no GT in the window, skip this patch (fake surface)
+                if patchGTV.shape[0]<testPatchV.shape[0]:
+                    continue
+
+
+                self.vOldInd_list.append(vOldInd)
+                self.fOldInd_list.append(fOldInd)
+
+                # Convert to sparse matrix and coarsen graph
+                coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
+                adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+
+                # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+                new_N = len(newToOld)
+                
+                # padding6 =np.zeros((new_N-old_N,6))
+                padding6 =np.zeros((new_N-old_N,patchFNormals.shape[1]))
+                padding3 =np.zeros((new_N-old_N,3))
+                minusPadding3 = padding3-1
+                patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
+                testPatchF = np.concatenate((testPatchF,minusPadding3),axis=0)
+                patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+                # Reorder nodes
+                patchFNormals = patchFNormals[newToOld]
+                testPatchF = testPatchF[newToOld]
+                patchGTFNormals = patchGTFNormals[newToOld]
+
+                oldToNew = inv_perm(newToOld)
+
+
+                ##### Save number of triangles and patch new_to_old permutation #####
+                self.num_faces.append(old_N)
+                self.patch_indices.append(fOldInd)
+
+                self.permutations.append(oldToNew)
+                #####################################################################
+
+                # Change adj format
+                fAdjs = []
+                for lvl in range(coarseningLvlNum):
+                    fadj, _ = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                    fadj = np.expand_dims(fadj, axis=0)
+                    fAdjs.append(fadj)
+                        # fAdjs = []
+                        # f_adj = np.expand_dims(testPatchAdj, axis=0)
+                        # fAdjs.append(f_adj)
+
+                v_faces = getVerticesFaces(testPatchF,25,testPatchV.shape[0])
+
+                # Expand dimensions
+                f_normals = np.expand_dims(patchFNormals, axis=0)
+                v_pos = np.expand_dims(testPatchV,axis=0)
+                faces = np.expand_dims(testPatchF, axis=0)
+                gtv_pos = np.expand_dims(patchGTV,axis=0)
+                v_faces = np.expand_dims(v_faces,axis=0)
+                gtf_normals = np.expand_dims(patchGTFNormals, axis=0)
+
+                self.v_list.append(v_pos)
+                self.gtv_list.append(gtv_pos)
+                n_list.append(f_normals)
+                adj_list.append(fAdjs)
+                faces_list.append(faces)
+                v_faces_list.append(v_faces)
+                gtn_list.append(gtf_normals)
+
+                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(mesh_count_list[0]) + ")")
+                mesh_count_list[0]+=1
+                patchNum+=1
+        else:       #Small mesh case
+
+            # Convert to sparse matrix and coarsen graph
+            coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
+            adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+            # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
+            new_N = len(newToOld)
+            old_N = facesNum
+            # padding6 =np.zeros((new_N-old_N,6))
+            padding6 =np.zeros((new_N-old_N,f_normals_pos.shape[1]))
+            padding3 =np.zeros((new_N-old_N,3))
+            minusPadding3 = padding3-1
+            minusPadding3 = minusPadding3.astype(int)
+
+            faces0 = np.concatenate((faces0,minusPadding3),axis=0)
+
+            f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
+            gtf_normals = np.concatenate((gtf_normals0, padding3),axis=0)
+
+            oldToNew = inv_perm(newToOld)
+
+            ##### Save number of triangles and patch new_to_old permutation #####
+            self.num_faces.append(old_N) # Keep track of fake nodes
+            self.patch_indices.append([])
+            self.permutations.append(oldToNew)
+            self.fOldInd_list.append([])
+            self.vOldInd_list.append([])
+            #####################################################################
+
+            # Reorder nodes
+            f_normals_pos = f_normals_pos[newToOld]
+            faces0 = faces0[newToOld]
+            gtf_normals = gtf_normals[newToOld]
+            
+
+            # Change adj format
+            fAdjs = []
+            for lvl in range(coarseningLvlNum):
+                fadj, _ = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                fadj = np.expand_dims(fadj, axis=0)
+                fAdjs.append(fadj)
+
+
+            # fadj = sparseToList(adjs[4],K_faces)
+            # fadj = np.expand_dims(fadj, axis=0)
+            # fAdjs.append(fadj)
+            # fadj = sparseToList(adjs[5],K_faces)
+            # fadj = np.expand_dims(fadj, axis=0)
+            # fAdjs.append(fadj)
+
+            v_faces = getVerticesFaces(faces0,25,V0.shape[0])
+
+            # Expand dimensions
+            f_normals = np.expand_dims(f_normals_pos, axis=0)
+            v_pos = np.expand_dims(V0,axis=0)
+            gtv_pos = np.expand_dims(GT0,axis=0)
+            faces = np.expand_dims(faces0, axis=0)
+            v_faces = np.expand_dims(v_faces,axis=0)
+            gtf_normals = np.expand_dims(gtf_normals,axis=0)
+
+            self.v_list.append(v_pos)
+            self.gtv_list.append(gtv_pos)
+            self.in_list.append(f_normals)
+            self.adj_list.append(fAdjs)
+            faces_list.append(faces)
+            v_faces_list.append(v_faces)
+            self.gt_list.append(gtf_normals)
+        
+            print("Added training mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
+
+            mesh_count_list[0]+=1
+
+        return vNum, facesNum
+
+
+
+
+'''
+Changes from PreprocessedData:
+    - minimum patch size is set equal to max patch size instead of global parameter MIN_PATCH_SIZE
+    - new method addMeshWithGT : just like addMesh, but with GT loading (no way!)
+'''
+
 class TrainingSet(PreprocessedData):
-    pass
+    
+    # Override constructor
+    def __init__(self, maxSize, coarseningStepNum, coarseningLvlNum):
+        # Call parent constructor
+        super(TrainingSet,self).__init__(maxSize, coarseningStepNum, coarseningLvlNum)
+        # But edit min patch size
+        self.minPatchSize = self.patchSize
+
+
+    def addMeshWithGT(self, inputFilePath, filename, gtFilePath, gtfilename):
+        V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
+        GTV,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
+
+        self.addMesh_TimeEfficient(V,faces, GTV=GTV)
+    
+
+# This class is meant to load one mesh only (though it can separate it in different patches)
+class InferenceMesh(PreprocessedData):
+
+    # Override parent method in order to set whole mesh data (vertices, faces, normals)
+    def addMesh(self, inputFilePath, filename):
+        V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
+        self.addMesh_TimeEfficient(V,faces)
+
+        self.vertices = V[np.newaxis,:,:]
+        self.faces = faces
+        self.normals = computeFacesNormals(V, faces)
