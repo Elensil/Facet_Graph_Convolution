@@ -12,7 +12,7 @@ import scipy.sparse
 import itertools
 
 from halfedge_mesh_Matt import *
-
+from settings import *
 #import h5py
 
 def one_hot_encoding_batch_per_point(y, num_classes):
@@ -38,10 +38,16 @@ def one_hot_encoding(y, num_classes):
 # ---				GEOMETRY FUNCTIONS						---
 # -------------------------------------------------------------
 
-def normalize(a):
+def normalizeOnce(a):
+    aShape = a.shape
+    a = np.reshape(a,[-1,aShape[-1]])
     norms = np.sqrt((a * a).sum(1))[:,np.newaxis]+0.00000001
-    return a * (1 / norms)
+    aNormalized = a * (1 / norms)
+    return np.reshape(aNormalized,aShape)
 
+def normalize(a):
+    n1 = normalizeOnce(a)
+    return normalizeOnce(n1)
 
 def tensorDotProduct(x,y, name=None):
     if name==None:
@@ -1556,7 +1562,7 @@ def getMeshPatch(vIn,fIn,fAdjIn,faceNum,seed):
 def getGraphPatch(fAdjIn,nodesNum,seed):
 
     K = fAdjIn.shape[1]
-    fAdjOut = np.zeros((nodesNum+K,K),dtype=int)
+    fAdjOut = np.zeros((nodesNum+K,K),dtype=int)-1
 
     nodesNewInd = np.zeros(fAdjIn.shape[0],dtype=int)  # Array of correspondence between old nodes indices and new ones
     nodesNewInd -= 1
@@ -1644,10 +1650,10 @@ def getGraphPatch(fAdjIn,nodesNum,seed):
 
 # This function takes a graph as input, and returns a subgraph, which is a patch of given size, by growing around the input seed
 # Doesnt grow into masked areas
-def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask):
+def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask, minPatchSize):
 
     K = fAdjIn.shape[1]
-    fAdjOut = np.zeros((nodesNum+K,K),dtype=int)
+    fAdjOut = np.zeros((nodesNum+K,K),dtype=int)-1
 
     nodesNewInd = np.zeros(fAdjIn.shape[0],dtype=int)  # Array of correspondence between old nodes indices and new ones
     nodesNewInd -= 1
@@ -1669,6 +1675,7 @@ def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask):
     nQueue = queue.Queue()          # Queue of nodes to be added
     nQueue.put(seed)                # Add seed to start the process
     borderQueue = queue.Queue()
+
     #print("fQueue: "+str(fQueue.empty()))
 
     addNode(seed)
@@ -1704,9 +1711,74 @@ def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask):
 
     nextSeed = -1
 
-    # We've reached the count.
-    # Now, fill adjacency graph for remaining nodes in the queue
+    # We've reached the count OR filled that region of the graph.
 
+    # The following code makes sure patches have a minimum size 
+    if nIt[0]<minPatchSize:
+        # In this case, ignore mask and just keep growing until the desired size is reached.
+        # First, empty border queue, and keep going normally with standard nQueue.
+        print("Local region complete. Keep growing patch for context")
+        print("(current patch size = %i"%nIt[0])
+
+        while (nIt[0]<minPatchSize):    # Keep growing until we reach desired count
+            if borderQueue.empty():
+                break
+
+
+            curN = borderQueue.get()             # Get current node index
+            newNInd = nodesNewInd[curN]     # Get its new index
+            # current node should already be added
+
+
+            fAdjOut[newNInd,0] = newNInd  #Add itself first.
+
+            # Process neighbours
+            for neigh in range(1,K):    # Skip first entry, its the current face
+                
+                curNei = fAdjIn[curN,neigh]
+
+                if curNei==-1:    # We've reached the last neighbour
+                    break
+
+                if(nodesNewInd[curNei]==-1):  # If face not processed, add it to faces list and add it to queue
+                    addNode(curNei)
+                    nQueue.put(curNei)
+
+                fAdjOut[newNInd,neigh] = nodesNewInd[curNei]    #fill new adj graph
+
+        while (nIt[0]<minPatchSize):    # Keep growing until we reach desired count
+            if nQueue.empty():
+                break
+
+
+            curN = nQueue.get()             # Get current node index
+            newNInd = nodesNewInd[curN]     # Get its new index
+            # current node should already be added
+
+
+            fAdjOut[newNInd,0] = newNInd  #Add itself first.
+
+            # Process neighbours
+            for neigh in range(1,K):    # Skip first entry, its the current face
+                
+                curNei = fAdjIn[curN,neigh]
+
+                if curNei==-1:    # We've reached the last neighbour
+                    break
+
+                if(nodesNewInd[curNei]==-1):  # If face not processed, add it to faces list and add it to queue
+                    addNode(curNei)
+                    nQueue.put(curNei)
+
+                fAdjOut[newNInd,neigh] = nodesNewInd[curNei]    #fill new adj graph
+
+
+
+    # Now, the patch has reached the desired size either way.
+    # We just need to complete adjacency matrix for all border nodes.
+
+    print("patch filled up. Processing remaining nodes in queue")
+    # Now, fill adjacency graph for remaining nodes in the queue
     while not nQueue.empty():
         curN = nQueue.get()         # Get current face index
         
@@ -1731,7 +1803,7 @@ def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask):
             fAdjOut[newNInd,neighCount] = nodesNewInd[curNei]    #fill new adj graph
             neighCount += 1
 
-    
+
     # Do the same thing with border queue
     while not borderQueue.empty():
         curN = borderQueue.get()         # Get current face index
@@ -1756,6 +1828,9 @@ def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask):
 
             fAdjOut[newNInd,neighCount] = nodesNewInd[curNei]    #fill new adj graph
             neighCount += 1
+
+        
+
 
 
     fAdjOut = fAdjOut[:nIt[0],:]
@@ -1764,168 +1839,6 @@ def getGraphPatch_wMask(fAdjIn,nodesNum,seed, mask):
     fAdjOut = fAdjOut+1     # Switch back to one-indexing
 
     return fAdjOut, nodesOldInd, nextSeed    # return nodesOldInd as well
-
-
-# This function takes a graph as input, and returns a subgraph, which is a patch of given size, by growing around the input seed
-# Doesnt grow into masked areas
-def getSparseGraphPatch_wMask(fAdjIn, nodes_pos, nodes_normals, nodesNum,seed, mask):
-
-    N,K = fAdjIn.shape
-    
-    row_ind = np.zeros((nodesNum+20)*K,dtype = np.int32)
-    col_ind = np.zeros((nodesNum+20)*K,dtype = np.int32)
-    values = np.zeros((nodesNum+20)*K,dtype = np.float32)
-    cur_sparse_ind = 0
-    sigma = 0.001
-    sig_den = 1.0/2*sigma*sigma
-
-    nodesNewInd = np.zeros(N,dtype=int)  # Array of correspondence between old nodes indices and new ones
-    nodesNewInd -= 1
-    nodesOldInd = np.zeros(N,dtype=int)      # Array of correspondence between new nodes indices and old ones
-    nodesOldInd -= 1
-
-
-    nIt = [0]   # Using list as a dirty trick for namespace reasons for inner functions
-
-    fAdjIn = fAdjIn-1   # Switch to zero-indexing
-
-
-    # Update correspondance tables
-    def addNode(nind):
-        nodesNewInd[nind] = nIt[0]
-        nodesOldInd[nIt[0]] = nind
-        nIt[0] += 1
-
-    nQueue = queue.Queue()          # Queue of nodes to be added
-    nQueue.put(seed)                # Add seed to start the process
-    borderQueue = queue.Queue()
-    #print("fQueue: "+str(fQueue.empty()))
-
-    addNode(seed)
-
-    while (nIt[0]<nodesNum):    # Keep growing until we reach desired count
-        if nQueue.empty():
-            break
-
-
-        curN = nQueue.get()             # Get current node index
-        newNInd = nodesNewInd[curN]     # Get its new index
-        # current node should already be added
-
-        n_pos = nodes_pos[curN,:]
-        n_norm = nodes_normals[curN,:]
-
-        # Process neighbours
-        for neigh in range(1,K):    # Skip first entry, its the current face
-            
-            curNei = fAdjIn[curN,neigh]
-
-            if curNei==-1:    # We've reached the last neighbour
-                break
-
-            if(nodesNewInd[curNei]==-1):  # If face not processed, add it to faces list and add it to queue
-                addNode(curNei)
-                if mask[curNei]==1:
-                    borderQueue.put(curNei)
-                else:
-                    nQueue.put(curNei)
-                # if mask[curNei]==1:
-                #     continue
-                # addNode(curNei)
-                # nQueue.put(curNei)
-
-
-            nnode_pos = nodes_pos[curNei,:]
-            nnode_norm = nodes_normals[curNei,:]
-
-            row_ind[cur_sparse_ind] = newNInd
-            col_ind[cur_sparse_ind] = nodesNewInd[curNei]
-            dp = np.sum(np.multiply(n_norm,nnode_norm),axis=-1)
-            values[cur_sparse_ind] = max(dp*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)*sig_den),0.001)
-            cur_sparse_ind+=1
-
-
-    nextSeed = -1
-
-    # We've reached the count.
-    # Now, fill adjacency graph for remaining nodes in the queue
-
-    while not nQueue.empty():
-        curN = nQueue.get()         # Get current face index
-        
-        newNInd = nodesNewInd[curN]     # Get its new index
-        n_pos = nodes_pos[curN,:]
-        n_norm = nodes_normals[curN,:]
-
-        neighCount = 1
-        # Process neighbours
-        for neigh in range(1,K):    # Skip first entry, its the current face
-            
-            curNei = fAdjIn[curN,neigh]
-
-            if curNei==-1:    # We've reached the last neighbour
-                break
-
-            if(nodesNewInd[curNei]==-1):  # If face not in the graph, skip it
-                if(mask[curNei]==0):
-                    nextSeed = curNei 
-                continue
-
-            nnode_pos = nodes_pos[curNei,:]
-            nnode_norm = nodes_normals[curNei,:]
-
-            row_ind[cur_sparse_ind] = newNInd
-            col_ind[cur_sparse_ind] = nodesNewInd[curNei]
-            dp = np.sum(np.multiply(n_norm,nnode_norm),axis=-1)
-            values[cur_sparse_ind] = max(dp*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)*sig_den),0.001)
-            cur_sparse_ind+=1
-            neighCount += 1
-
-    
-    # Do the same thing with border queue
-    while not borderQueue.empty():
-        curN = borderQueue.get()         # Get current face index
-        
-        newNInd = nodesNewInd[curN]     # Get its new index
-
-        n_pos = nodes_pos[curN,:]
-        n_norm = nodes_normals[curN,:]
-
-        neighCount = 1
-        # Process neighbours
-        for neigh in range(1,K):    # Skip first entry, its the current face
-            
-            curNei = fAdjIn[curN,neigh]
-
-            if curNei==-1:    # We've reached the last neighbour
-                break
-
-            if(nodesNewInd[curNei]==-1):  # If face not in the graph, skip it
-                if(mask[curNei]==0):
-                    nextSeed = curNei 
-                continue
-
-            nnode_pos = nodes_pos[curNei,:]
-            nnode_norm = nodes_normals[curNei,:]
-
-            row_ind[cur_sparse_ind] = newNInd
-            col_ind[cur_sparse_ind] = nodesNewInd[curNei]
-            dp = np.sum(np.multiply(n_norm,nnode_norm),axis=-1)
-            values[cur_sparse_ind] = max(dp*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)*sig_den),0.001)
-            cur_sparse_ind+=1
-            neighCount += 1
-
-
-    nodesOldInd = nodesOldInd[:nIt[0]]
-
-    print("cur_sparse_ind = %i"%cur_sparse_ind)
-    row_ind = row_ind[:cur_sparse_ind]
-    col_ind = col_ind[:cur_sparse_ind]
-    values = values[:cur_sparse_ind]
-
-    coo = scipy.sparse.coo_matrix((values,(row_ind,col_ind)),shape=(nIt[0],nIt[0]))
-    print("coo shape = ",coo.shape)
-    return coo, nodesOldInd, nextSeed    # return nodesOldInd as well
 
 
 
@@ -2060,9 +1973,7 @@ def sparseToList(Adj, K):
     # return listAdj
 
 def inv_perm(perm):
-
     inv_size = max(len(perm),np.amax(perm)+1)
-    print("Inv size = ",inv_size)
     inverse = [0] * inv_size
     for i, p in enumerate(perm):
         inverse[p] = i
@@ -2516,7 +2427,7 @@ def filterFlippedFaces(faceNormals, adj, printAdjShape=False):
     minDP = np.amin(dp,axis=-1)
     adjNeigh = adj[:,1:]
     neighNum = np.sum((adjNeigh>-1),axis=-1)
-    avgDP = np.sum(dp,axis=-1) / neighNum
+    avgDP = np.sum(dp,axis=-1) / np.maximum(neighNum,1)
     # [N]
 
     # print("min dp samp = ",minDP[samp])
