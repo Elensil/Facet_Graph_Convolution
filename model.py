@@ -23,10 +23,6 @@ Id_tensor = tf.constant([0,0,1,0,1,0,1,0,0],shape=[3,3], dtype=tf.float32)
 
 ref_axis = tf.constant([0,0,1],dtype=tf.float32)
 
-def broadcast(tensor, shape):
-    return tensor + tf.zeros(shape, dtype=tensor.dtype)
-
-
 def weight_variable(shape):
         initial = tf.random_normal(shape, stddev=std_dev)
         #initial = tf.truncated_normal(shape, stddev=0.1, seed=random_seed)
@@ -250,60 +246,8 @@ def get_weight_assigments_rotation_invariance_with_area(x, adj, u, c):
         xn = tf.slice(x,[0,0,0],[-1,-1,3])
 
 
-
-        ref_axis_t = tf.reshape(ref_axis,[1,1,3])
-        print("ref_axis_t shape: "+str(ref_axis_t.shape))
-        # [batch, N, 3]
-        print("batch_size = "+str(batch_size))
-        print("num_points = "+str(num_points))
-        #ref_axes = tf.tile(ref_axes,[batch_size,num_points,1])
-        #ref_axes = broadcast(ref_axes,x.shape)
-
-        ref_axes = tf.zeros_like(xn)
-        ref_axes = ref_axes + ref_axis_t
-
-        print("ref_axes shape: "+str(ref_axes.shape))
-        # [batch, N, 3]
-        ref_cross = tf.cross(xn,ref_axes)
-        # [batch, N, 1]
-        ref_sin = tf.norm(ref_cross)
-        # [batch, N, 1]
-        ref_cos = tensorDotProduct(ref_axis,xn)
-
-        # [batch, N, 3, 1]
-        ref_cross = tf.expand_dims(ref_cross,-1)
-        # [batch, N, 3, 3, 1]
-        ref_cross = tf.tile(tf.expand_dims(ref_cross,2),[1,1,3,1,1])
-        # [1, 1, 3, 3, 3]
-        LC = tf.reshape(LC_tensor, [1,1,3,3,3])
-        # [batch, N, 3, 3, 1]
-        temp_zero = tf.zeros_like(ref_cross)
-        # [batch, N, 3, 3, 3]
-        temp_zero = tf.tile(temp_zero,[1,1,1,1,3])
-
-
-        # [batch, N, 3, 3, 3]
-        LC = LC + temp_zero
-        #LC = tf.tile(LC,[batch_size,num_points,1,1,1])
-
-        # [batch, N, 3, 3, 1]
-        ssm = tf.matmul(LC,ref_cross)
-        # [batch, N, 3, 3]
-        ssm = tf.squeeze(ssm)
-
-        # [batch, N, 1]
-        rot_coef = tf.divide(tf.subtract(1.0,ref_cos), tf.multiply(ref_sin,ref_sin))
-        # [batch, N, 3, 3]
-        rot_coef = tf.tile(tf.reshape(rot_coef,[batch_size,-1,1,1]),[1,1,3,3])
-        # [1, 1, 3, 3]
-        Idmat = tf.reshape(Id_tensor,[1,1,3,3])
-        # [batch, N, 3, 3]
-        Idmat = Idmat + tf.zeros_like(rot_coef)
-        #Idmat = tf.tile(Idmat,[batch_size,num_points,1,1])
-
-
-        # [batch, N, 3, 3]
-        rot = Idmat + ssm + tf.multiply(tf.matmul(ssm,ssm), rot_coef)
+        rot = getRotationToAxis(xn)
+                    
         # [batch, N, K, 3, 3]
         rot = tf.tile(tf.expand_dims(rot,axis=2),[1,1,K,1,1])
         # rot gives a (3,3) rotation matrix for every face
@@ -375,59 +319,6 @@ def get_weight_assigments_rotation_invariance_with_position(x, adj, u, c):
 
         rot = getRotationToAxis(xn)
 
-                            # ref_axis_t = tf.reshape(ref_axis,[1,1,3])
-                            # print("ref_axis_t shape: "+str(ref_axis_t.shape))
-                            # # [batch, N, 3]
-                            # print("batch_size = "+str(batch_size))
-                            # print("num_points = "+str(num_points))
-                            # #ref_axes = tf.tile(ref_axes,[batch_size,num_points,1])
-                            # #ref_axes = broadcast(ref_axes,x.shape)
-
-                            # ref_axes = tf.zeros_like(xn)
-                            # ref_axes = ref_axes + ref_axis_t
-
-                            # print("ref_axes shape: "+str(ref_axes.shape))
-                            # # [batch, N, 3]
-                            # ref_cross = tf.cross(xn,ref_axes)
-                            # # [batch, N, 1]
-                            # ref_sin = tf.norm(ref_cross)
-                            # # [batch, N, 1]
-                            # ref_cos = tensorDotProduct(ref_axis,xn)
-
-                            # # [batch, N, 3, 1]
-                            # ref_cross = tf.expand_dims(ref_cross,-1)
-                            # # [batch, N, 3, 3, 1]
-                            # ref_cross = tf.tile(tf.expand_dims(ref_cross,2),[1,1,3,1,1])
-                            # # [1, 1, 3, 3, 3]
-                            # LC = tf.reshape(LC_tensor, [1,1,3,3,3])
-                            # # [batch, N, 3, 3, 1]
-                            # temp_zero = tf.zeros_like(ref_cross)
-                            # # [batch, N, 3, 3, 3]
-                            # temp_zero = tf.tile(temp_zero,[1,1,1,1,3])
-
-
-                            # # [batch, N, 3, 3, 3]
-                            # LC = LC + temp_zero
-                            # #LC = tf.tile(LC,[batch_size,num_points,1,1,1])
-
-                            # # [batch, N, 3, 3, 1]
-                            # ssm = tf.matmul(LC,ref_cross)
-                            # # [batch, N, 3, 3]
-                            # ssm = tf.squeeze(ssm)
-
-                            # # [batch, N, 1]
-                            # rot_coef = tf.divide(tf.subtract(1.0,ref_cos), tf.multiply(ref_sin,ref_sin))
-                            # # [batch, N, 3, 3]
-                            # rot_coef = tf.tile(tf.reshape(rot_coef,[batch_size,-1,1,1]),[1,1,3,3])
-                            # # [1, 1, 3, 3]
-                            # Idmat = tf.reshape(Id_tensor,[1,1,3,3])
-                            # # [batch, N, 3, 3]
-                            # Idmat = Idmat + tf.zeros_like(rot_coef)
-                            # #Idmat = tf.tile(Idmat,[batch_size,num_points,1,1])
-
-
-                            # # [batch, N, 3, 3]
-                            # rot = Idmat + ssm + tf.multiply(tf.matmul(ssm,ssm), rot_coef)
         # [batch, N, K, 3, 3]
         rot = tf.tile(tf.expand_dims(rot,axis=2),[1,1,K,1,1])
         # rot gives a (3,3) rotation matrix for every face
@@ -529,7 +420,7 @@ def batch_norm(x, fullNorm=True):
 
 
 def custom_conv2d(x, adj, out_channels, M, biasMask = True, translation_invariance=False, rotation_invariance=False):
-    # with tf.variable_scope('Conv'):
+    with tf.variable_scope('Conv'):
         batch_size, input_size, in_channels = x.get_shape().as_list()
         W0 = weight_variable([M, out_channels, in_channels])
         b = bias_variable([out_channels])
@@ -711,81 +602,6 @@ def getRotInvPatches(x, adj):
 
 
 
-def custom_conv2d_norm_pos(x, adj, out_channels, M, translation_invariance=False, rotation_invariance=False):
-        
-        batch_size, input_size, in_channels = x.get_shape().as_list()
-        W0 = weight_variable([M, out_channels, in_channels])
-        b = bias_variable([out_channels])
-        u = assignment_variable([M, in_channels])
-        c = assignment_variable([M])
-        batch_size, input_size, K = adj.get_shape().as_list()
-        # Calculate neighbourhood size for each input - [batch_size, input_size, neighbours]
-        adj_size = tf.count_nonzero(adj, 2)
-        #deal with unconnected points: replace NaN with 0
-        non_zeros = tf.not_equal(adj_size, 0)
-        adj_size = tf.cast(adj_size, tf.float32)
-        adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
-        # [batch_size, input_size, 1, 1]
-        #adj_size = tf.reshape(adj_size, [batch_size, input_size, 1, 1])
-        adj_size = tf.reshape(adj_size, [batch_size, -1, 1, 1])
-        
-        # [batch, N, K, in_ch]
-        rotInvPatches = getRotInvPatches(x, adj)
-
-        if (translation_invariance == False) and (rotation_invariance == False):
-            v = assignment_variable([M, in_channels])
-        elif translation_invariance == True:
-            print("Translation-invariant\n")
-            # [batch_size, input_size, K, M]
-            q = get_weight_assigments_translation_invariance(x, adj, u, c)
-        elif rotation_invariance == True:
-            print("Rotation-invariant\n")
-            # [batch_size, input_size, K, M]
-            if in_channels==3:
-                q = get_weight_assigments_rotation_invariance(x, adj, u, c)
-            elif in_channels==4:
-                q = get_weight_assigments_rotation_invariance_with_area(x, adj, u, c)
-            elif in_channels==6:
-                q = get_weight_assigments_rotation_invariance_with_position(x, adj, u, c)
-
-
-        # [batch, in_ch, N*K]
-        rotInvPatches = tf.reshape(rotInvPatches, [batch_size,in_channels, -1])
-
-        W = tf.reshape(W0, [M*out_channels, in_channels])
-        # Multiple w and rotInvPatches -> [batch_size, M*out_channels, N*K]
-        wx = tf.map_fn(lambda x: tf.matmul(W, x), rotInvPatches)
-        # Reshape and transpose wx into [batch_size, N*K, M*out_channels]
-        wx = tf.transpose(wx, [0, 2, 1])
-
-        patches = tf.reshape(wx,[batch_size,-1,K,M*out_channels])
-        
-
-        if (translation_invariance == False) and (rotation_invariance == False):
-            q = get_weight_assigments(x, adj, u, v, c)
-            # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
-        else:
-            #q = get_weight_assigments_translation_invariance(x, adj, u, c)
-            # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
-            pass
-
-        #patches = tf.reshape(patches, [batch_size, input_size, K, M, out_channels])
-        patches = tf.reshape(patches, [batch_size, -1, K, M, out_channels])
-        # [out, batch_size, input_size, K, M]
-        patches = tf.transpose(patches, [4, 0, 1, 2, 3])
-        patches = tf.multiply(q, patches)
-        patches = tf.transpose(patches, [1, 2, 3, 4, 0])
-        # Add all the elements for all neighbours for a particular m sum_{j in N_i} qwx -- [batch_size, input_size, M, out]
-        patches = tf.reduce_sum(patches, axis=2)
-        patches = tf.multiply(adj_size, patches)
-        # Add add elements for all m
-        patches = tf.reduce_sum(patches, axis=2)
-        # [batch_size, input_size, out]
-        print("Your patches shape is "+str(patches.shape))
-        patches = patches + b
-        return patches, W0
-
-
 def custom_conv2d_pos_for_assignment(x, adj, out_channels, M, biasMask = True, translation_invariance=False, rotation_invariance=False):
         
         batch_size, input_size, in_channels_ass = x.get_shape().as_list()
@@ -938,70 +754,6 @@ def custom_conv2d_only_pos_for_assignment(x, adj, out_channels, M, translation_i
         patches = patches + b
         return patches, W0
 
-def decoding_layer(x, adj, W, translation_invariance=False):
-
-        batch_size, input_size, in_channels = x.get_shape().as_list()
-        M, out_channels, in_channels = W.get_shape().as_list()
-
-        #W = weight_variable([M, out_channels, in_channels])
-        b = bias_variable([out_channels])
-        u = assignment_variable([M, in_channels])
-        c = assignment_variable([M])
-        batch_size, input_size, K = adj.get_shape().as_list()
-        # Calculate neighbourhood size for each input - [batch_size, input_size, neighbours]
-        adj_size = tf.count_nonzero(adj, 2)
-        #deal with unconnected points: replace NaN with 0
-        non_zeros = tf.not_equal(adj_size, 0)
-        adj_size = tf.cast(adj_size, tf.float32)
-        adj_size = tf.where(non_zeros,tf.reciprocal(adj_size),tf.zeros_like(adj_size))
-        # [batch_size, input_size, 1, 1]
-        #adj_size = tf.reshape(adj_size, [batch_size, input_size, 1, 1])
-        adj_size = tf.reshape(adj_size, [batch_size, -1, 1, 1])
-        
-
-        if translation_invariance == False:
-            v = assignment_variable([M, in_channels])
-        else:
-            print("Translation-invariant\n")
-            # [batch_size, input_size, K, M]
-            q = get_weight_assigments_translation_invariance(x, adj, u, c)
-
-        # [batch_size, in_channels, input_size]
-        x = tf.transpose(x, [0, 2, 1])
-        W = tf.reshape(W, [M*out_channels, in_channels])
-        # Multiple w and x -> [batch_size, M*out_channels, input_size]
-        wx = tf.map_fn(lambda x: tf.matmul(W, x), x)
-        # Reshape and transpose wx into [batch_size, input_size, M*out_channels]
-        wx = tf.transpose(wx, [0, 2, 1])
-        # Get patches from wx - [batch_size, input_size, K(neighbours-here input_size), M*out_channels]
-        patches = get_patches(wx, adj)
-        # [batch_size, input_size, K, M]
-
-        if translation_invariance == False:
-            q = get_weight_assigments(x, adj, u, v, c)
-            # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
-        else:
-            #q = get_weight_assigments_translation_invariance(x, adj, u, c)
-            # Element wise multiplication of q and patches for each input -- [batch_size, input_size, K, M, out]
-            pass
-
-        #patches = tf.reshape(patches, [batch_size, input_size, K, M, out_channels])
-        patches = tf.reshape(patches, [batch_size, -1, K, M, out_channels])
-        # [out, batch_size, input_size, K, M]
-        patches = tf.transpose(patches, [4, 0, 1, 2, 3])
-        patches = tf.multiply(q, patches)
-        patches = tf.transpose(patches, [1, 2, 3, 4, 0])
-        # Add all the elements for all neighbours for a particular m sum_{j in N_i} qwx -- [batch_size, input_size, M, out]
-        patches = tf.reduce_sum(patches, axis=2)
-        patches = tf.multiply(adj_size, patches)
-        # Add add elements for all m
-        patches = tf.reduce_sum(patches, axis=2)
-        # [batch_size, input_size, out]
-        print("Your patches shape is "+str(patches.shape))
-        patches = patches + b
-        return patches
-        
-
 
 def custom_lin(input, out_channels):
     with tf.variable_scope('MLP'):
@@ -1042,8 +794,8 @@ def custom_binary_tree_pooling(x, steps=1, pooltype='max'):
                 z0 = tf.equal(line0,0)
                 z1 = tf.equal(line1,0)
 
-                z0 = tf.reduce_all(z0,axis=-1,keep_dims=True)
-                z1 = tf.reduce_all(z1,axis=-1,keep_dims=True)
+                z0 = tf.reduce_all(z0,axis=-1,keepdims=True)
+                z1 = tf.reduce_all(z1,axis=-1,keepdims=True)
 
                 z0 = tf.tile(z0,[1,1,1,channels])
                 z1 = tf.tile(z1,[1,1,1,channels])
@@ -1071,9 +823,6 @@ def custom_upsampling(x, steps=1):
 def lrelu(x, alpha):
     with tf.variable_scope('lReLU'):
         return tf.nn.relu(x) - alpha * tf.nn.relu(-x)
-
-def lrelu6(x, alpha):
-  return tf.nn.relu6(x) - alpha * tf.nn.relu6(-x)
 
 
 
