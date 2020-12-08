@@ -23,12 +23,16 @@ Please, bear in mind this is a research project, and we are currently working on
 
 ## Usage
 
-- All parameters are grouped in a single file settings.py. You might need to tweak some of them. More details in the file.
-- To train a model: run .... First, you need to preprocess your training data and save them in the data folder.
-- To preprocess your training data, run .... Pickled data will be saved in /this/path/
+- Before you start, have a look have the settings.py file and set the path parameters. Make sure the specified folders exist. You can have a look at all the parameters, and you can tweak some of them once you are familiar with the whole program. You may have to if you have some memory issues.
+- Raw mesh data need to be preprocessed before training. Run ... to preprocess your training dataset. This might take some time depending on your amount of data. By default, data will be saved to /this/path/
+- Once you have binary dump files of your preprocessed training set, run ... to train a model.
+
 - For inference, run infer.py --model --input_path --output_path ??
 
 
+## Tips
+
+- If you run out of memory at runtime, try to lower the value for MAX_PATCH_SIZE in settings.py. For training, you will have to re-generate training binaries with the new parameter, for it to take effect.
 
 ## Citation
 If you use this code, please cite the following:
@@ -57,7 +61,7 @@ Please check the [license terms](https://gitlab.inria.fr/marmando/deep-mesh-deno
 
 ## Acknowledgements
 
-The texturing code was originally built on top of the [FeaStNet](https://github.com/nitika-verma/FeaStNet) project. As such, some bits were written by [Nitika Verma](https://nitika-verma.github.io/).
+The GCN code was originally built on top of the [FeaStNet](https://github.com/nitika-verma/FeaStNet) project. As such, some bits were written by [Nitika Verma](https://nitika-verma.github.io/).
 
 
 ## TODO
