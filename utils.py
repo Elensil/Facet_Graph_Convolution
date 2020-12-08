@@ -14,6 +14,12 @@ import itertools
 from halfedge_mesh_Matt import *
 from settings import *
 #import h5py
+TF_VERSION = int(tf.__version__[0])
+if TF_VERSION==2:
+    import tensorflow.compat.v1 as tf
+else:
+    import tensorflow as tf
+
 
 def one_hot_encoding_batch_per_point(y, num_classes):
 	y_one_hot = np.zeros((y.shape[0], y.shape[1], num_classes))

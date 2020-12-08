@@ -19,9 +19,14 @@ from lib.coarsening import *
 from settings import *
 from trainingSet import *
 
+TF_VERSION = int(tf.__version__[0])
+if TF_VERSION==2:
+    import tensorflow.compat.v1 as tf
+else:
+    import tensorflow as tf
 
 def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations):
-
+    
     with tf.Graph().as_default():
         # random_seed = 0
         # np.random.seed(random_seed)
@@ -73,7 +78,8 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
             fadjs = [fadj0,fadj1,fadj2]
         
         with tf.variable_scope("model"):
-            n_conv,_,_ = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+            # n_conv,_,_ = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
+            n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
 
         n_conv = normalizeTensor(n_conv)
 
@@ -163,10 +169,6 @@ def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,
 
 
 
-
-
-
-
 def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new_to_old_f_list, num_points, num_faces, adjPerm_list, real_nodes_num_list):
 
     with tf.Graph().as_default():
@@ -178,8 +180,7 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
 
-        if not os.path.exists(RESULTS_PATH):
-                os.makedirs(RESULTS_PATH)
+        
 
         """
         Load dataset
@@ -463,7 +464,8 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
 
 
 def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
-    
+    if TF_VERSION==2:
+        tf.disable_eager_execution()
     # random_seed = 0
     # np.random.seed(random_seed)
 
@@ -584,7 +586,6 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
     # n_conv = tf.matmul(tf.transpose(rotTens,[0,1,3,2]),n_conv)
     # n_conv = tf.reshape(n_conv,[BATCH_SIZE,-1,3])
     # n_conv = tf.slice(fn_,[0,0,0],[-1,-1,3])+n_conv
-
     # print("WARNING!!!! Removed normalization of network output for training!!!")
     n_conv = normalizeTensor(n_conv)
 
@@ -1956,71 +1957,12 @@ def updateFacesCenter(vertices, faces, coarsening_steps):
 
 
 
-def getDepthDirection():
-
-    noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/noisy/"
-    gtFolder = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/test/original/"
-
-    noisyFile = "boy_01_noisy.obj"
-    gtFile = "boy_01.obj"
-
-    # Load GT
-    GT0,_,_,_,_ = load_mesh(gtFolder, gtFile, 0, False)
-    V0,_,_,_,_ = load_mesh(noisyFolder, noisyFile, 0, False)
-
-    print("V0 shape = "+str(V0.shape))
-
-    VDiff = V0-GT0
-
-    VDiffN = normalize(VDiff)
-
-    print("Test: "+str(VDiffN[:10,:]))
-
-    VDiffN_p = VDiffN[VDiffN[:,0]>0]
-
-    std_p = np.std(VDiffN_p, axis=0)
-    mean_p = np.mean(VDiffN_p, axis=0)
-
-    dev_p = ((VDiffN_p[:,0]-mean_p[0])**2)
-    std_p = np.std(VDiffN_p, axis=0)
-    max_std = np.argmax(dev_p, axis=0)
-    print("mean VDiffN_p = "+str(mean_p))
-    print("std VDiffN_p = "+str(std_p))
-
-    print("max dev: "+str(VDiffN_p[max_std,:]))
-
-    norm_VDiff = np.linalg.norm(VDiff,axis=-1)
-
-    arg_max_diff = np.argmax(norm_VDiff)
-
-    print("Max diff = "+str(VDiff[arg_max_diff,:]))
-    print("dir: "+str(VDiffN[arg_max_diff,:]))
-
-    VDiff_p = VDiff[VDiff[:,0]>0]
-
-    print("mean norm_VDiff = "+str(np.mean(norm_VDiff)))
-    print("max norm_VDiff = "+str(np.max(norm_VDiff)))
-
-    my_th = 0.000001*np.mean(norm_VDiff) + 0.999999*np.max(norm_VDiff)
-
-    testDiffN = VDiffN[norm_VDiff>my_th]
-
-    print("testDiffN shape = "+str(testDiffN.shape))
-
-    print("testDiffN = "+str(testDiffN))
-
-    testDiffN_p = testDiffN[testDiffN[:,0]>0]
-
-    print("mean testDiffN_p = "+str(np.mean(testDiffN_p,axis=0)))
-
-    testDiffN_n = testDiffN[testDiffN[:,0]<0]
-
-    print("mean testDiffN_n = "+str(np.mean(testDiffN_n,axis=0)))
-
-    return
-
-
 def mainFunction():
+
+    if not os.path.exists(RESULTS_PATH):
+        os.makedirs(RESULTS_PATH)
+    if not os.path.exists(BINARY_DUMP_PATH):
+        os.makedirs(BINARY_DUMP_PATH)
 
     maxSize = MAX_PATCH_SIZE
     patchSize = MAX_PATCH_SIZE
@@ -2479,11 +2421,11 @@ def mainFunction():
         myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
         # Training set
         for filename in os.listdir(TRAINING_DATA_PATH):
-            # if training_meshes_num[0]>10:
+            # if myTS.mesh_count>10:
             #     break
 
             if (filename.endswith(".obj")):
-                print("Adding " + filename + " (" + str(training_meshes_num[0]) + ")")
+                print("Adding " + filename + " (" + str(myTS.mesh_count) + ")")
                 gtfilename = getGTFilename(filename)
                 for it in range(TRAINING_DATA_REDUNDANCY):
                     myTS.addMeshWithGT(TRAINING_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
@@ -2605,6 +2547,7 @@ def mainFunction():
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/test/noisy/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/KickTest/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
+        noisyFolder = VALID_DATA_PATH
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
@@ -2667,11 +2610,11 @@ def mainFunction():
                 f_normals0 = computeFacesNormals(V0, faces_noisy)
 
                 print("Adding mesh "+noisyFile+"...")
-                t0 = time.clock()
+                t0 = time.time()
                 # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, faces_list, f_normals_list, GTfn_list, f_adj_list, mesh_count)
                 # vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list, = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, v_list, gtv_list, faces_list, f_normals_list, f_adj_list, v_faces_list, mesh_count)
                 vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list, _ = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, v_list, gtv_list, faces_list, f_normals_list, gt_f_normals_list, f_adj_list, v_faces_list, mesh_count)
-                print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
                 # Now recover vertices positions and create Edge maps
 
 
@@ -2708,14 +2651,14 @@ def mainFunction():
                 # v_faces = np.expand_dims(v_faces,axis=0)
 
                 print("Inference ...")
-                t0 = time.clock()
+                t0 = time.time()
                 #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                 # upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, faces_num, patch_indices, permutations,facesNum)
                 # upV0, upN0, upN1, upN2, upN3, upN4, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                 upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                 
                 # upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
+                print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
                 # write_mesh(np.concatenate((upV0,np.zeros_like(upV0)),axis=-1), faces[0,:,:], RESULTS_PATH+denoizedFile)
                 write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
@@ -2810,6 +2753,7 @@ def mainFunction():
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/GMNF/original/"
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/nice_stuff/kendo/"
+        # noisyFolder = VALID_DATA_PATH
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
@@ -2828,8 +2772,8 @@ def mainFunction():
                 noisyFileWColor = noisyFile[:-4]+"_original_normals.obj"
                 denoizedFileWColor = noisyFile[:-4]+"_denoised_color.obj"
 
-                if not denoizedFile.startswith("bunny"):
-                    continue
+                # if not denoizedFile.startswith("bunny"):
+                #     continue
 
                 if os.path.isfile(RESULTS_PATH+denoizedFile):
                     if B_OVERWRITE_RESULT:
@@ -2840,7 +2784,7 @@ def mainFunction():
 
                 
                 print("Adding mesh "+noisyFile+"...")
-                t0 = time.clock()
+                t0 = time.time()
                 myTS = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
                 myTS.addMesh(noisyFolder, noisyFile)
                 # faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
@@ -2848,16 +2792,16 @@ def mainFunction():
                 
                 # _, _, _, _, permutations, faces_num, patch_indices = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, [], [], [], f_normals_list, [], f_adj_list, [], mesh_count)
                     
-                print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
                 
 
                 print("Inference ...")
-                t0 = time.clock()
+                t0 = time.time()
 
                 #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                 # upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations)
                 upV0, upN0 = inferNetOld(myTS.vertices, myTS.in_list, myTS.adj_list, myTS.edge_map, myTS.v_e_map,myTS.num_faces, myTS.patch_indices, myTS.permutations)
-                print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
+                print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
                 write_mesh(upV0, myTS.faces, RESULTS_PATH+denoizedFile)
 
@@ -3016,11 +2960,11 @@ def mainFunction():
                         v_faces_list = []
 
                         print("Adding mesh "+noisyFile+"...")
-                        t0 = time.clock()
+                        t0 = time.time()
                         faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, gtFolder, gtFileName, f_normals_list, GTfn_list, f_adj_list, mesh_count)
                         # vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list, = addMeshWithVertices(noisyFolder, noisyFile, gtFolder, gtFileName, v_list, gtv_list, faces_list, f_normals_list, f_adj_list, v_faces_list, mesh_count)
                         
-                        print("mesh added ("+str(1000*(time.clock()-t0))+"ms)")
+                        print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
                         # Now recover vertices positions and create Edge maps
                         V0,_,_, _, _ = load_mesh(noisyFolder, noisyFile, 0, False)
 
@@ -3031,15 +2975,15 @@ def mainFunction():
                         depth_dir = normalize(depth_diff)
 
                         # print("Inference ...")
-                        t0 = time.clock()
+                        t0 = time.time()
                         #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                         # upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                         # upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                         upV0, upN0 = inferNetOld(V0exp, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum, depth_dir)
-                        print("Inference complete ("+str(1000*(time.clock()-t0))+"ms)")
+                        print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
                         # print("computing Hausdorff "+str(fileNum+1)+"...")
-                        t0 = time.clock()
+                        t0 = time.time()
                         # haus_dist0, avg_dist0 = oneSidedHausdorff(upV0, GT)
                         denseGT = getDensePC(GT, faces_gt, res=1)
                         
@@ -3051,7 +2995,7 @@ def mainFunction():
                         
                         # print("Hausdorff complete ("+str(1000*(time.clock()-t0))+"ms)")
                         # print("computing Angular diff "+str(fileNum+1)+"...")
-                        t0 = time.clock()
+                        t0 = time.time()
                         angDistVec = angularDiffVec(upN0, GTf_normals)
 
                         borderF = getBorderFaces(faces_gt)
@@ -3080,16 +3024,16 @@ def mainFunction():
                         angColor = np.maximum(angColor, np.zeros_like(angColor))
 
                         # print("getting colormap "+str(fileNum+1)+"...")
-                        t0 = time.clock()
+                        t0 = time.time()
                         colormap = getHeatMapColor(1-angColor)
                         # print("colormap shape: "+str(colormap.shape))
                         newV, newF = getColoredMesh(upV0, faces_gt, colormap)
                         # print("colormap complete ("+str(1000*(time.clock()-t0))+"ms)")
                         #newV, newF = getHeatMapMesh(upV0, faces_gt, angColor)
                         # print("writing mesh...")
-                        t0 = time.clock()
+                        t0 = time.time()
                         write_mesh(newV, newF, RESULTS_PATH+denoizedHeatmap)
-                        print("mesh written ("+str(1000*(time.clock()-t0))+"ms)")
+                        print("mesh written ("+str(1000*(time.time()-t0))+"ms)")
                         
 
                         write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
@@ -3967,10 +3911,12 @@ def mainFunction():
 
 if __name__ == "__main__":
     
+    print("Tensorflow version = ", tf.__version__)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--architecture', type=int, default=0)
     #parser.add_argument('--dataset_path')
-    parser.add_argument('--results_path', type=str)
+    parser.add_argument('--results_path', type=str, default=None)
     parser.add_argument('--network_path', type=str)
     parser.add_argument('--num_iterations', type=int, default=20000)
     parser.add_argument('--debug', type=bool, default=False)
@@ -3986,13 +3932,19 @@ if __name__ == "__main__":
 
     ARCHITECTURE = FLAGS.architecture
     #DATASET_PATH = FLAGS.dataset_path
-    # RESULTS_PATH = FLAGS.results_path
-    # NETWORK_PATH = FLAGS.network_path
+    
+    # Override default results path if specified as command parameter
+    if not FLAGS.results_path is None:
+        RESULTS_PATH = FLAGS.results_path
+
+    if not FLAGS.network_path is None:
+        NETWORK_PATH = FLAGS.network_path
+
     NUM_ITERATIONS = FLAGS.num_iterations
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode
-    COARSENING_STEPS = FLAGS.coarsening_steps
+    # COARSENING_STEPS = FLAGS.coarsening_steps
 
     # Experimental value on synthetic dataset:
     AVG_EDGE_LENGTH = 0.005959746586165783

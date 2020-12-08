@@ -6,6 +6,11 @@ import time
 from utils import *
 from settings import *
 #import h5py
+TF_VERSION = int(tf.__version__[0])
+if TF_VERSION==2:
+    import tensorflow.compat.v1 as tf
+else:
+    import tensorflow as tf
 
 random_seed=0
 # For meshes
