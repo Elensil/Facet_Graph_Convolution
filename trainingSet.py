@@ -477,8 +477,8 @@ class PreprocessedData(object):
 
                 self.v_list.append(v_pos)
                 
-                n_list.append(f_normals)
-                adj_list.append(fAdjs)
+                self.in_list.append(f_normals)
+                self.adj_list.append(fAdjs)
                 self.faces_list.append(faces)
                 self.v_faces_list.append(v_faces)
                 
@@ -488,7 +488,7 @@ class PreprocessedData(object):
                     gtf_normals = np.expand_dims(patchGTFNormals, axis=0)
                     gtn_list.append(gtf_normals)
 
-                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
+                # print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
                 self.mesh_count+=1
                 patchNum+=1
         else:       #Small mesh case
@@ -566,7 +566,7 @@ class PreprocessedData(object):
                 gtf_normals = np.expand_dims(gtf_normals,axis=0)
                 self.gt_list.append(gtf_normals)
         
-            print("Added training mesh " + filename + " (" + str(self.mesh_count) + ")")
+            # print("Added training mesh " + filename + " (" + str(self.mesh_count) + ")")
 
             self.mesh_count+=1
 

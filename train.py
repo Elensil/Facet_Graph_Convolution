@@ -2701,7 +2701,7 @@ def mainFunction():
                 # upV0, upN0, upN1, upN2, upN3, upN4, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                 
                 # upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(myTS.v_list, self.faces_list, self.in_list, self.adj_list, self.v_faces_list, self.vOldInd_list, self.fOldInd_list, self.vNum, self.fNum, self.permutations, self.num_faces)
+                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(myTS.v_list, myTS.faces_list, myTS.in_list, myTS.adj_list, myTS.v_faces_list, myTS.vOldInd_list, myTS.fOldInd_list, myTS.vNum, myTS.fNum, myTS.permutations, myTS.num_faces)
                 
 
 
