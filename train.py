@@ -594,8 +594,8 @@ def trainNet(trainSet, validSet):
 
     with tf.variable_scope("model"):
         # n_conv = get_model_reg(fn_, fadj0, ARCHITECTURE, keep_prob)
-        n_conv,_,_ = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
-        # n_conv = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
+        # n_conv,_,_ = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
+        n_conv = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
 
 
     # n_conv = normalizeTensor(n_conv)
@@ -2657,18 +2657,22 @@ def mainFunction():
                 print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
                 # Now recover vertices positions and create Edge maps
 
+                myTS = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
+                myTS.addMeshWithVertices(noisyFolder, noisyFile)
 
-                for i in range(len(vOldInd_list)):
-                    curVOldInd = vOldInd_list[i]
-                    curFOldInd = fOldInd_list[i]
-                    curV = v_list[i]
-                    curF = faces_list[i]
-                    curN = f_normals_list[i]
-                    # print("shape curVOldInd = ",curVOldInd.shape)
-                    # print("shape curFOldInd = ",curFOldInd.shape)
-                    # print("shape curV = ",curV.shape)
-                    # print("shape curF = ",curF.shape)
-                    print("shape curN = ",curN.shape)
+
+
+                # for i in range(len(vOldInd_list)):
+                #     curVOldInd = vOldInd_list[i]
+                #     curFOldInd = fOldInd_list[i]
+                #     curV = v_list[i]
+                #     curF = faces_list[i]
+                #     curN = f_normals_list[i]
+                #     # print("shape curVOldInd = ",curVOldInd.shape)
+                #     # print("shape curFOldInd = ",curFOldInd.shape)
+                #     # print("shape curV = ",curV.shape)
+                #     # print("shape curF = ",curF.shape)
+                #     print("shape curN = ",curN.shape)
 
 
 
@@ -2695,8 +2699,13 @@ def mainFunction():
                 #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
                 # upV0, upN0 = inferNet(V0, f_normals_list, f_adj_list, faces_num, patch_indices, permutations,facesNum)
                 # upV0, upN0, upN1, upN2, upN3, upN4, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                 
+                # upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
+                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(myTS.v_list, self.faces_list, self.in_list, self.adj_list, self.v_faces_list, self.vOldInd_list, self.fOldInd_list, self.vNum, self.fNum, self.permutations, self.num_faces)
+                
+
+
+
                 # upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                 print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
