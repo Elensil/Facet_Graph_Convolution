@@ -107,6 +107,8 @@ class PreprocessedData(object):
         self.fOldInd_list = []
         self.v_list = []
         self.gtv_list = []
+        self.faces_list = []
+        self.v_faces_list = []
 
 
     # def addMeshNew(inputFilePath, filename, gtFilePath, gtFileName):
@@ -348,7 +350,6 @@ class PreprocessedData(object):
             self.mesh_count+=1
 
 
-    # def addMeshWithVertices(inputFilePath,filename, gtFilePath, gtfilename, faces_list, n_list, gtn_list, adj_list, v_faces_list, mesh_count_list):
     def addMeshWithVertices(self, V0, faces0, GTV=None):
 
         vNum = V0.shape[0]
@@ -472,12 +473,12 @@ class PreprocessedData(object):
                 self.gtv_list.append(gtv_pos)
                 n_list.append(f_normals)
                 adj_list.append(fAdjs)
-                faces_list.append(faces)
-                v_faces_list.append(v_faces)
+                self.faces_list.append(faces)
+                self.v_faces_list.append(v_faces)
                 gtn_list.append(gtf_normals)
 
-                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(mesh_count_list[0]) + ")")
-                mesh_count_list[0]+=1
+                print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
+                self.mesh_count+=1
                 patchNum+=1
         else:       #Small mesh case
 
@@ -543,13 +544,13 @@ class PreprocessedData(object):
             self.gtv_list.append(gtv_pos)
             self.in_list.append(f_normals)
             self.adj_list.append(fAdjs)
-            faces_list.append(faces)
-            v_faces_list.append(v_faces)
+            self.faces_list.append(faces)
+            self.v_faces_list.append(v_faces)
             self.gt_list.append(gtf_normals)
         
-            print("Added training mesh " + filename + " (" + str(mesh_count_list[0]) + ")")
+            print("Added training mesh " + filename + " (" + str(self.mesh_count) + ")")
 
-            mesh_count_list[0]+=1
+            self.mesh_count+=1
 
         return vNum, facesNum
 
@@ -587,6 +588,16 @@ class InferenceMesh(PreprocessedData):
         V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
         self.addMesh_TimeEfficient(V,faces)
 
+        self.vertices = V[np.newaxis,:,:]
+        self.faces = faces
+        self.normals = computeFacesNormals(V, faces)
+
+    # Override parent method in order to set whole mesh data (vertices, faces, normals)
+    def addMeshWithVertices(self, inputFilePath, filename):
+        V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
+        self.fNum = faces.shape[0]
+        self.vNum = V.shape[0]
+        super(InferenceMesh,self).addMeshWithVertices(V, faces)
         self.vertices = V[np.newaxis,:,:]
         self.faces = faces
         self.normals = computeFacesNormals(V, faces)
