@@ -6,6 +6,7 @@ import time
 #import h5py
 import argparse
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import pickle
 try:
     import scipy.io
@@ -25,8 +26,15 @@ if TF_VERSION==2:
 else:
     import tensorflow as tf
 
-def inferNetOld(in_points, f_normals, f_adj, edge_map, v_e_map,num_wofake_nodes,patch_indices,old_to_new_permutations):
-    
+def inferNetOld(myTS):
+    in_points = myTS.vertices
+    f_normals = myTS.in_list
+    f_adj = myTS.adj_list
+    edge_map = myTS.edge_map
+    v_e_map = myTS.v_e_map
+    num_wofake_nodes = myTS.num_faces
+    patch_indices = myTS.patch_indices
+    old_to_new_permutations = myTS.permutations
     with tf.Graph().as_default():
         # random_seed = 0
         # np.random.seed(random_seed)
@@ -577,8 +585,8 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
 
     with tf.variable_scope("model"):
         # n_conv = get_model_reg(fn_, fadj0, ARCHITECTURE, keep_prob)
-        # n_conv,_,_ = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
-        n_conv = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
+        n_conv,_,_ = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
+        # n_conv = get_model_reg_multi_scale(fn_rot, fadjs, ARCHITECTURE, keep_prob)
 
 
     # n_conv = normalizeTensor(n_conv)
@@ -2743,16 +2751,6 @@ def mainFunction():
         maxSize = MAX_PATCH_SIZE
         patchSize = MAX_PATCH_SIZE
 
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/noisy/furu/test_bits/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/test/"
-        # noisyFolder = "/morpheo-nas/marmando/DeepMeshRefinement/TestFolder/Kinovis/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/valid/"
-        noisyFolder = "/morpheo-nas2/marmando/MPI-FAUST/training/registrations/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/KickTest/Manifold/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/ModelsENVT/noisy/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/Data/GMNF/original/"
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
-        # noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/nice_stuff/kendo/"
         # noisyFolder = VALID_DATA_PATH
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
@@ -2787,20 +2785,14 @@ def mainFunction():
                 t0 = time.time()
                 myTS = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
                 myTS.addMesh(noisyFolder, noisyFile)
-                # faces_num, patch_indices, permutations = addMesh_TimeEfficient(noisyFolder, noisyFile, f_normals_list, f_adj_list, mesh_count)
-                # faces_num, patch_indices, permutations = addMesh(noisyFolder, noisyFile, noisyFolder, noisyFile, f_normals_list, [], f_adj_list, mesh_count)
-                
-                # _, _, _, _, permutations, faces_num, patch_indices = addMeshWithVertices(noisyFolder, noisyFile, noisyFolder, noisyFile, [], [], [], f_normals_list, [], f_adj_list, [], mesh_count)
-                    
+
                 print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
                 
 
                 print("Inference ...")
                 t0 = time.time()
 
-                #upV0, upN0 = inferNet(V0, GTfn_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations,facesNum)
-                # upV0, upN0 = inferNetOld(V0, f_normals_list, f_adj_list, edge_map, v_e_map,faces_num, patch_indices, permutations)
-                upV0, upN0 = inferNetOld(myTS.vertices, myTS.in_list, myTS.adj_list, myTS.edge_map, myTS.v_e_map,myTS.num_faces, myTS.patch_indices, myTS.permutations)
+                upV0, upN0 = inferNetOld(myTS)
                 print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
                 write_mesh(upV0, myTS.faces, RESULTS_PATH+denoizedFile)
