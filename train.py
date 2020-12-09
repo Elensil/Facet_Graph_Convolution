@@ -3036,131 +3036,86 @@ def mainFunction():
     # Train network with accuracy loss on point sets (rather than normals angular loss)
     elif running_mode == 4:
 
+        # # Training
+        # pickleNum=0
+        # while os.path.isfile(binDumpPath+'f_normals_list'+str(pickleNum)):
+        #     with open(binDumpPath+'f_normals_list'+str(pickleNum), 'rb') as fp:
+        #         # f_normals_list_temp = pickle.load(fp, encoding='latin1')
+        #         f_normals_list_temp = pickle.load(fp)
+        #     with open(binDumpPath+'f_adj_list'+str(pickleNum), 'rb') as fp:
+        #         # f_adj_list_temp = pickle.load(fp, encoding='latin1')
+        #         f_adj_list_temp = pickle.load(fp)
+        #     with open(binDumpPath+'v_pos_list'+str(pickleNum), 'rb') as fp:
+        #         # v_pos_list_temp = pickle.load(fp, encoding='latin1')
+        #         v_pos_list_temp = pickle.load(fp)
+        #     with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'rb') as fp:
+        #         # gtv_pos_list_temp = pickle.load(fp, encoding='latin1')
+        #         gtv_pos_list_temp = pickle.load(fp)
+        #     with open(binDumpPath+'faces_list'+str(pickleNum), 'rb') as fp:
+        #         # faces_list_temp = pickle.load(fp, encoding='latin1')
+        #         faces_list_temp = pickle.load(fp)
+        #     with open(binDumpPath+'v_faces_list'+str(pickleNum), 'rb') as fp:
+        #         # v_faces_list_temp = pickle.load(fp, encoding='latin1')
+        #         v_faces_list_temp = pickle.load(fp)
+        #     with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'rb') as fp:
+        #         # f_normals_list_temp = pickle.load(fp, encoding='latin1')
+        #         gtf_normals_list_temp = pickle.load(fp)
 
-        # gtnameoffset = 7
-        # f_normals_list = []
-        # f_adj_list = []
-        # v_pos_list = []
-        # gtv_pos_list = []
-        # faces_list = []
-        # v_faces_list = []
-        # gtf_normals_list = []
+        #     if pickleNum==0:
+        #         f_normals_list = f_normals_list_temp
+        #         f_adj_list = f_adj_list_temp
+        #         v_pos_list = v_pos_list_temp
+        #         gtv_pos_list = gtv_pos_list_temp
+        #         faces_list = faces_list_temp
+        #         v_faces_list = v_faces_list_temp
+        #         gtf_normals_list = gtf_normals_list_temp
+        #     else:
 
-        # valid_f_normals_list = []
-        # valid_f_adj_list = []
-        # valid_v_pos_list = []
-        # valid_gtv_pos_list = []
-        # valid_faces_list = []
-        # valid_v_faces_list = []
-        # valid_gtf_normals_list = []
-
-        # f_normals_list_temp = []
-        # f_adj_list_temp = []
-        # v_pos_list_temp = []
-        # gtv_pos_list_temp = []
-        # faces_list_temp = []
-        # v_faces_list_temp = []
-        # gtf_normals_list_temp = []
-
-        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_train/"
-        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Noisy/decim_valid/"
-
-        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/FAUST/Data/Ground_Truth/"
-
-        # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/noisy/"
-        # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/valid/"
-        # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/train/original/"
-
-        # # inputFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/noisy/"
-        # # validFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/valid/"
-        # # gtFilePath = "/morpheo-nas/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_v1/train/original/"
-
-        # # inputFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/noisy/"
-        # # validFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/valid/"
-        # # gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Kinect_Fusion/train/original/"
-
-        # gtnameoffset = 7 #10
-
-        # Training
-        pickleNum=0
-        while os.path.isfile(binDumpPath+'f_normals_list'+str(pickleNum)):
-            with open(binDumpPath+'f_normals_list'+str(pickleNum), 'rb') as fp:
-                # f_normals_list_temp = pickle.load(fp, encoding='latin1')
-                f_normals_list_temp = pickle.load(fp)
-            with open(binDumpPath+'f_adj_list'+str(pickleNum), 'rb') as fp:
-                # f_adj_list_temp = pickle.load(fp, encoding='latin1')
-                f_adj_list_temp = pickle.load(fp)
-            with open(binDumpPath+'v_pos_list'+str(pickleNum), 'rb') as fp:
-                # v_pos_list_temp = pickle.load(fp, encoding='latin1')
-                v_pos_list_temp = pickle.load(fp)
-            with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'rb') as fp:
-                # gtv_pos_list_temp = pickle.load(fp, encoding='latin1')
-                gtv_pos_list_temp = pickle.load(fp)
-            with open(binDumpPath+'faces_list'+str(pickleNum), 'rb') as fp:
-                # faces_list_temp = pickle.load(fp, encoding='latin1')
-                faces_list_temp = pickle.load(fp)
-            with open(binDumpPath+'v_faces_list'+str(pickleNum), 'rb') as fp:
-                # v_faces_list_temp = pickle.load(fp, encoding='latin1')
-                v_faces_list_temp = pickle.load(fp)
-            with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'rb') as fp:
-                # f_normals_list_temp = pickle.load(fp, encoding='latin1')
-                gtf_normals_list_temp = pickle.load(fp)
-
-            if pickleNum==0:
-                f_normals_list = f_normals_list_temp
-                f_adj_list = f_adj_list_temp
-                v_pos_list = v_pos_list_temp
-                gtv_pos_list = gtv_pos_list_temp
-                faces_list = faces_list_temp
-                v_faces_list = v_faces_list_temp
-                gtf_normals_list = gtf_normals_list_temp
-            else:
-
-                f_normals_list+=f_normals_list_temp
-                f_adj_list+=f_adj_list_temp
-                v_pos_list+=v_pos_list_temp
-                gtv_pos_list+=gtv_pos_list_temp
-                faces_list+=faces_list_temp
-                v_faces_list+=v_faces_list_temp
-                gtf_normals_list+=gtf_normals_list_temp
+        #         f_normals_list+=f_normals_list_temp
+        #         f_adj_list+=f_adj_list_temp
+        #         v_pos_list+=v_pos_list_temp
+        #         gtv_pos_list+=gtv_pos_list_temp
+        #         faces_list+=faces_list_temp
+        #         v_faces_list+=v_faces_list_temp
+        #         gtf_normals_list+=gtf_normals_list_temp
 
 
-            print("loaded training pickle "+str(pickleNum))
-            pickleNum+=1
+        #     print("loaded training pickle "+str(pickleNum))
+        #     pickleNum+=1
 
 
-        # Validation
-        with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
-            # valid_f_normals_list = pickle.load(fp, encoding='latin1')
-            valid_f_normals_list = pickle.load(fp)
-        with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
-            # valid_f_adj_list = pickle.load(fp, encoding='latin1')
-            valid_f_adj_list = pickle.load(fp)
-        with open(binDumpPath+'valid_v_pos_list', 'rb') as fp:
-            # valid_v_pos_list = pickle.load(fp, encoding='latin1')
-            valid_v_pos_list = pickle.load(fp)
-        with open(binDumpPath+'valid_gtv_pos_list', 'rb') as fp:
-            # valid_gtv_pos_list = pickle.load(fp, encoding='latin1')
-            valid_gtv_pos_list = pickle.load(fp)
-        with open(binDumpPath+'valid_faces_list', 'rb') as fp:
-            # valid_faces_list = pickle.load(fp, encoding='latin1')
-            valid_faces_list = pickle.load(fp)
-        with open(binDumpPath+'valid_v_faces_list', 'rb') as fp:
-            # valid_v_faces_list = pickle.load(fp, encoding='latin1')
-            valid_v_faces_list = pickle.load(fp)
-        with open(binDumpPath+'valid_gtf_normals_list', 'rb') as fp:
-            # valid_f_normals_list = pickle.load(fp, encoding='latin1')
-            valid_gtf_normals_list = pickle.load(fp)
+        # # Validation
+        # with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
+        #     # valid_f_normals_list = pickle.load(fp, encoding='latin1')
+        #     valid_f_normals_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
+        #     # valid_f_adj_list = pickle.load(fp, encoding='latin1')
+        #     valid_f_adj_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_v_pos_list', 'rb') as fp:
+        #     # valid_v_pos_list = pickle.load(fp, encoding='latin1')
+        #     valid_v_pos_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_gtv_pos_list', 'rb') as fp:
+        #     # valid_gtv_pos_list = pickle.load(fp, encoding='latin1')
+        #     valid_gtv_pos_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_faces_list', 'rb') as fp:
+        #     # valid_faces_list = pickle.load(fp, encoding='latin1')
+        #     valid_faces_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_v_faces_list', 'rb') as fp:
+        #     # valid_v_faces_list = pickle.load(fp, encoding='latin1')
+        #     valid_v_faces_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_gtf_normals_list', 'rb') as fp:
+        #     # valid_f_normals_list = pickle.load(fp, encoding='latin1')
+        #     valid_gtf_normals_list = pickle.load(fp)
 
-        print("f_normals_list length = ",len(f_normals_list))
-        print("gtf_normals_list length = ",len(gtf_normals_list))
-        print("valid_f_normals_list length = ",len(valid_f_normals_list))
-        print("valid_gtf_normals_list length = ",len(valid_gtf_normals_list))
+        # print("f_normals_list length = ",len(f_normals_list))
+        # print("gtf_normals_list length = ",len(gtf_normals_list))
+        # print("valid_f_normals_list length = ",len(valid_f_normals_list))
+        # print("valid_gtf_normals_list length = ",len(valid_gtf_normals_list))
 
-        print(" f_normals_list shape = ",f_normals_list[0].shape)
-        print(" gtf_normals_list shape = ",gtf_normals_list[0].shape)
-        print(" valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
-        print(" valid_gtf_normals_list shape = ",valid_gtf_normals_list[0].shape)
+        # print(" f_normals_list shape = ",f_normals_list[0].shape)
+        # print(" gtf_normals_list shape = ",gtf_normals_list[0].shape)
+        # print(" valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
+        # print(" valid_gtf_normals_list shape = ",valid_gtf_normals_list[0].shape)
 
 
         # examplesNum = len(f_normals_list)
@@ -3180,14 +3135,15 @@ def mainFunction():
         #     filteredN = filterFlippedFaces(myN, myAdj)
         #     valid_gtf_normals_list[p] = filteredN[np.newaxis,:,:]
 
-        for myI in range(len(f_normals_list)):
-            nrmls = f_normals_list[myI]
-            print("nrmls shape = ",nrmls.shape)
-            adj = f_adj_list[myI]
-            print("adj[0] shape = ",adj[0].shape)
+        with open(binDumpPath+'trainingSetWithVertices.pkl', 'rb') as fp:
+                myTS = pickle.load(fp)
+        with open(binDumpPath+'validSetWithVertices.pkl', 'rb') as fp:
+                myVS = pickle.load(fp)
 
+        trainDoubleLossNet(myTS.v_list, myTS.gtv_list, myTS.faces_list, myTS.in_list, myTS.gt_list, myTS.adj_list, myTS.v_faces_list,
+                            myVS.v_list, myVS.gtv_list, myVS.faces_list, myVS.in_list, myVS.gt_list, myVS.adj_list, myVS.v_faces_list)
         # trainAccuracyNet(v_pos_list, gtv_pos_list, faces_list, f_normals_list, f_adj_list, v_faces_list, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list)
-        trainDoubleLossNet(v_pos_list, gtv_pos_list, faces_list, f_normals_list, gtf_normals_list, f_adj_list, v_faces_list, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_gtf_normals_list, valid_f_adj_list, valid_v_faces_list)
+        # trainDoubleLossNet(v_pos_list, gtv_pos_list, faces_list, f_normals_list, gtf_normals_list, f_adj_list, v_faces_list, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_gtf_normals_list, valid_f_adj_list, valid_v_faces_list)
         # trainAccuracyNet(valid_v_pos_list, valid_gtv_pos_list, valid_f_normals_list, valid_f_adj_list, valid_e_map_list, valid_v_emap_list, valid_v_pos_list, valid_gtv_pos_list, valid_f_normals_list, valid_f_adj_list, valid_e_map_list, valid_v_emap_list)
 
         # --- Validate data ---
@@ -3820,7 +3776,7 @@ def mainFunction():
                 #     gtf_normals_list_temp = []
                 #     training_meshes_num[0] = 0
 
-        with open(binDumpPath+'trainingSetWithVertices.pkl'+str(pickleNum), 'wb') as fp:
+        with open(binDumpPath+'trainingSetWithVertices.pkl', 'wb') as fp:
                 pickle.dump(myTS, fp)
 
 
@@ -3853,7 +3809,7 @@ def mainFunction():
                 # addMeshWithVertices(VALID_DATA_PATH, filename, GT_DATA_PATH, gtfilename, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_gtf_normals_list, valid_f_adj_list, valid_v_faces_list, valid_meshes_num)
         
         # Validation
-        with open(binDumpPath+'validSetWithVertices.pkl'+str(pickleNum), 'wb') as fp:
+        with open(binDumpPath+'validSetWithVertices.pkl', 'wb') as fp:
             pickle.dump(myValidSet, fp)
 
         # with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:

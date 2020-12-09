@@ -486,7 +486,7 @@ class PreprocessedData(object):
                     gtv_pos = np.expand_dims(patchGTV,axis=0)
                     self.gtv_list.append(gtv_pos)
                     gtf_normals = np.expand_dims(patchGTFNormals, axis=0)
-                    gtn_list.append(gtf_normals)
+                    self.gt_list.append(gtf_normals)
 
                 # print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
                 self.mesh_count+=1
