@@ -2438,6 +2438,9 @@ def mainFunction():
                 for it in range(TRAINING_DATA_REDUNDANCY):
                     myTS.addMeshWithGT(TRAINING_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
 
+        with open(binDumpPath+'trainingSet.pkl','wb') as fp:
+            pickle.dump(myTS,fp)
+
         with open(binDumpPath+'f_normals_list', 'wb') as fp:
             pickle.dump(myTS.in_list, fp)
         with open(binDumpPath+'GTfn_list', 'wb') as fp:
@@ -2481,6 +2484,9 @@ def mainFunction():
             valid_f_adj_list = pickle.load(fp)
 
 
+        with open(binDumpPath+'trainingSet.pkl', 'rb') as fp:
+            myTS = pickle.load(fp)
+
         examplesNum = len(f_normals_list)
         valid_examplesNum = len(valid_f_normals_list)
         print("training examples num = ",examplesNum)
@@ -2490,43 +2496,44 @@ def mainFunction():
         print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
 
 
-        for p in range(examplesNum):
+        # for p in range(examplesNum):
 
-            # First, filter flipped faces for GT normals:
-            myN = GTfn_list[p][0]
-            myN = normalize(myN)
-            myAdj = f_adj_list[p][0][0]
+        #     # First, filter flipped faces for GT normals:
+        #     myN = GTfn_list[p][0]
+        #     myN = normalize(myN)
+        #     myAdj = f_adj_list[p][0][0]
 
-            filteredN = filterFlippedFaces(myN, myAdj, printAdjShape=(p==0))
-            GTfn_list[p] = filteredN[np.newaxis,:,:]
+        #     filteredN = filterFlippedFaces(myN, myAdj, printAdjShape=(p==0))
+        #     GTfn_list[p] = filteredN[np.newaxis,:,:]
 
-            # # Optional: remove border channel for noisy input
-            # myN = f_normals_list[p][0]
-            # myNhead = myN[:,:3]
-            # myNtail = myN[:,4:]
-            # newN = np.concatenate((myNhead,myNtail),axis=1)
-            # f_normals_list[p] = newN[np.newaxis,:,:]
+        #     # # Optional: remove border channel for noisy input
+        #     # myN = f_normals_list[p][0]
+        #     # myNhead = myN[:,:3]
+        #     # myNtail = myN[:,4:]
+        #     # newN = np.concatenate((myNhead,myNtail),axis=1)
+        #     # f_normals_list[p] = newN[np.newaxis,:,:]
 
         
         
-        for p in range(valid_examplesNum):
+        # for p in range(valid_examplesNum):
 
-            # First, filter flipped faces for GT normals:
-            myN = valid_GTfn_list[p][0]
-            myN = normalize(myN)
-            myAdj = valid_f_adj_list[p][0][0]
+        #     # First, filter flipped faces for GT normals:
+        #     myN = valid_GTfn_list[p][0]
+        #     myN = normalize(myN)
+        #     myAdj = valid_f_adj_list[p][0][0]
             
-            filteredN = filterFlippedFaces(myN, myAdj)
-            valid_GTfn_list[p] = filteredN[np.newaxis,:,:]
+        #     filteredN = filterFlippedFaces(myN, myAdj)
+        #     valid_GTfn_list[p] = filteredN[np.newaxis,:,:]
 
-            # # Optional: remove border channel for noisy input
-            # myN = valid_f_normals_list[p][0]
-            # myNhead = myN[:,:3]
-            # myNtail = myN[:,4:]
-            # newN = np.concatenate((myNhead,myNtail),axis=1)
-            # valid_f_normals_list[p] = newN[np.newaxis,:,:]
+        #     # # Optional: remove border channel for noisy input
+        #     # myN = valid_f_normals_list[p][0]
+        #     # myNhead = myN[:,:3]
+        #     # myNtail = myN[:,4:]
+        #     # newN = np.concatenate((myNhead,myNtail),axis=1)
+        #     # valid_f_normals_list[p] = newN[np.newaxis,:,:]
 
-        trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+        trainNet(myTS.in_list, myTS.gt_list, myTS.adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+        # trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
     # Simple inference, no GT mesh involved
     elif running_mode == 1:
@@ -2751,7 +2758,7 @@ def mainFunction():
         maxSize = MAX_PATCH_SIZE
         patchSize = MAX_PATCH_SIZE
 
-        # noisyFolder = VALID_DATA_PATH
+        noisyFolder = VALID_DATA_PATH
         # Get GT mesh
         for noisyFile in os.listdir(noisyFolder):
 
@@ -2810,7 +2817,6 @@ def mainFunction():
                 # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
                 write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
                 write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
-                return
 
     # Inference: Denoise set, save meshes (colored with heatmap), compute metrics
     elif running_mode == 2:
@@ -3232,6 +3238,12 @@ def mainFunction():
         #     myAdj = valid_f_adj_list[p][0][0]
         #     filteredN = filterFlippedFaces(myN, myAdj)
         #     valid_gtf_normals_list[p] = filteredN[np.newaxis,:,:]
+
+        for myI in range(len(f_normals_list)):
+            nrmls = f_normals_list[myI]
+            print("nrmls shape = ",nrmls.shape)
+            adj = f_adj_list[myI]
+            print("adj[0] shape = ",adj[0].shape)
 
         # trainAccuracyNet(v_pos_list, gtv_pos_list, faces_list, f_normals_list, f_adj_list, v_faces_list, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list)
         trainDoubleLossNet(v_pos_list, gtv_pos_list, faces_list, f_normals_list, gtf_normals_list, f_adj_list, v_faces_list, valid_v_pos_list, valid_gtv_pos_list, valid_faces_list, valid_f_normals_list, valid_gtf_normals_list, valid_f_adj_list, valid_v_faces_list)
