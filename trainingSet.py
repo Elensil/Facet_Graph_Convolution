@@ -598,6 +598,18 @@ class TrainingSet(PreprocessedData):
         self.addMesh_TimeEfficient(V,faces, GTV=GTV)
     
 
+    def addMeshWithVerticesAndGT(self, inputFilePath, filename, gtFilePath, gtfilename):
+        V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
+        # # Load GT
+        GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
+        self.fNum = faces.shape[0]
+        self.vNum = V.shape[0]
+        super(InferenceMesh,self).addMeshWithVertices(V, faces, GTV=GT0)
+        self.vertices = V[np.newaxis,:,:]
+        self.faces = faces
+        self.normals = computeFacesNormals(V, faces)
+
+
 # This class is meant to load one mesh only (though it can separate it in different patches)
 class InferenceMesh(PreprocessedData):
 
