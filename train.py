@@ -26,15 +26,15 @@ if TF_VERSION==2:
 else:
     import tensorflow as tf
 
-def inferNetOld(myTS):
-    in_points = myTS.vertices
-    f_normals = myTS.in_list
-    f_adj = myTS.adj_list
-    edge_map = myTS.edge_map
-    v_e_map = myTS.v_e_map
-    num_wofake_nodes = myTS.num_faces
-    patch_indices = myTS.patch_indices
-    old_to_new_permutations = myTS.permutations
+def inferNetOld(inputMesh):
+    in_points = inputMesh.vertices
+    f_normals = inputMesh.in_list
+    f_adj = inputMesh.adj_list
+    edge_map = inputMesh.edge_map
+    v_e_map = inputMesh.v_e_map
+    num_wofake_nodes = inputMesh.num_faces
+    patch_indices = inputMesh.patch_indices
+    old_to_new_permutations = inputMesh.permutations
     with tf.Graph().as_default():
         # random_seed = 0
         # np.random.seed(random_seed)
@@ -177,8 +177,18 @@ def inferNetOld(myTS):
 
 
 
-def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new_to_old_f_list, num_points, num_faces, adjPerm_list, real_nodes_num_list):
-
+def inferNet(inputMesh):
+    in_points = inputMesh.v_list
+    faces = inputMesh.faces_list
+    f_normals = inputMesh.in_list
+    f_adj = inputMesh.adj_list
+    v_faces = inputMesh.v_faces_list
+    new_to_old_v_list = inputMesh.vOldInd_list
+    new_to_old_f_list = inputMesh.fOldInd_list
+    num_points = inputMesh.vNum
+    num_faces = inputMesh.fNum
+    adjPerm_list = inputMesh.permutations
+    real_nodes_num_list = inputMesh.num_faces
     with tf.Graph().as_default():
         random_seed = 0
         np.random.seed(random_seed)
@@ -2636,18 +2646,18 @@ def mainFunction():
                         continue
 
 
-                f_normals_list = []
-                gt_f_normals_list = []
-                GTfn_list = []
-                f_adj_list = []
-                faces_list = []
-                v_faces_list = []
-                v_list = []
-                gtv_list = []
+                # f_normals_list = []
+                # gt_f_normals_list = []
+                # GTfn_list = []
+                # f_adj_list = []
+                # faces_list = []
+                # v_faces_list = []
+                # v_list = []
+                # gtv_list = []
 
 
-                V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
-                f_normals0 = computeFacesNormals(V0, faces_noisy)
+                # V0,_,_, faces_noisy, _ = load_mesh(noisyFolder, noisyFile, 0, False)
+                # f_normals0 = computeFacesNormals(V0, faces_noisy)
 
                 print("Adding mesh "+noisyFile+"...")
                 t0 = time.time()
@@ -2657,8 +2667,8 @@ def mainFunction():
                 print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
                 # Now recover vertices positions and create Edge maps
 
-                myTS = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
-                myTS.addMeshWithVertices(noisyFolder, noisyFile)
+                inputMesh = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
+                inputMesh.addMeshWithVertices(noisyFolder, noisyFile)
 
 
 
@@ -2682,15 +2692,15 @@ def mainFunction():
                 #     pickle.dump(inv_perm(adjPerm_list[0]), fp) 
 
                 # return
-                V0 = np.expand_dims(V0, axis=0)
+                # V0 = np.expand_dims(V0, axis=0)
 
                 # print("WARNING!!!!! Hardcoded a change in faces adjacency")
                 # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
                 
 
-                faces_noisy = np.array(faces_noisy).astype(np.int32)
-                faces = np.expand_dims(faces_noisy,axis=0)
-
+                # faces_noisy = np.array(faces_noisy).astype(np.int32)
+                # faces = np.expand_dims(faces_noisy,axis=0)
+                faces = inputMesh.faces
                 # v_faces = getVerticesFaces(np.squeeze(faces_list[0]), 15, V0.shape[1])
                 # v_faces = np.expand_dims(v_faces,axis=0)
 
@@ -2701,7 +2711,7 @@ def mainFunction():
                 # upV0, upN0, upN1, upN2, upN3, upN4, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
                 
                 # upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(myTS.v_list, myTS.faces_list, myTS.in_list, myTS.adj_list, myTS.v_faces_list, myTS.vOldInd_list, myTS.fOldInd_list, myTS.vNum, myTS.fNum, myTS.permutations, myTS.num_faces)
+                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(inputMesh)
                 
 
 
@@ -2710,9 +2720,9 @@ def mainFunction():
                 print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
                 # write_mesh(np.concatenate((upV0,np.zeros_like(upV0)),axis=-1), faces[0,:,:], RESULTS_PATH+denoizedFile)
-                write_mesh(upV0, faces[0,:,:], RESULTS_PATH+denoizedFile)
-                write_mesh(upV0mid, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_d_mid.obj")
-                write_mesh(upV0coarse, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_d_coarse.obj")
+                write_mesh(upV0, faces, RESULTS_PATH+denoizedFile)
+                write_mesh(upV0mid, faces, RESULTS_PATH+noisyFile[:-4]+"_d_mid.obj")
+                write_mesh(upV0coarse, faces, RESULTS_PATH+noisyFile[:-4]+"_d_coarse.obj")
                 # write_mesh(V0, faces[0,:,:], RESULTS_PATH+noisyFile[:-4]+"_test.obj")
 
                 # testP = upP0
@@ -2746,7 +2756,9 @@ def mainFunction():
                 # continue
 
 
-
+                V0 = inputMesh.vertices
+                faces.noisy = inputMesh.faces
+                f_normals0 = inputMesh.normals
                 angColor0 = (upN0+1)/2
                 angColor1 = (upN1+1)/2
                 angColor2 = (upN2+1)/2
