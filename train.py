@@ -471,7 +471,16 @@ def inferNet(in_points, faces, f_normals, f_adj, v_faces, new_to_old_v_list, new
 
 
 
-def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list):
+def trainNet(trainSet, validSet):
+    
+    f_normals_list = trainSet.in_list
+    GTfn_list = trainSet.gt_list
+    f_adj_list = trainSet.adj_list
+    valid_f_normals_list = validSet.in_list
+    valid_GTfn_list = validSet.gt_list
+    valid_f_adj_list = validSet.adj_list
+
+
     if TF_VERSION==2:
         tf.disable_eager_execution()
     # random_seed = 0
@@ -662,6 +671,11 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
         last_loss = 0
         for iter in range(NUM_ITERATIONS):
 
+            if (iter%SAVEITER == 0) and (iter>0):
+                saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+iter)
+                print("Ongoing training: architecture "+str(ARCHITECTURE)+", net path = "+NETWORK_PATH)
+                if sess.run(isFullNanNConv, feed_dict=train_fd):
+                    break
 
             # Get random sample from training dictionary
             batch_num = random.randint(0,len(f_normals_list)-1)
@@ -764,11 +778,7 @@ def trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_
                 hasNan = True
                 print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
                 print("patch size: "+str(f_normals_list[batch_num].shape))
-            if (iter%SAVEITER == 0) and (iter>0):
-                saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+iter)
-                print("Ongoing training: architecture "+str(ARCHITECTURE)+", net path = "+NETWORK_PATH)
-                if sess.run(isFullNanNConv, feed_dict=train_fd):
-                    break
+            
     
     saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
 
@@ -1308,6 +1318,17 @@ def trainDoubleLossNet(in_points_list, GT_points_list, faces_list, f_normals_lis
     lossArrayIter = 0
     for iter in range(NUM_ITERATIONS):
 
+        if (iter%SAVEITER == 0) and (iter>0):
+            saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+iter)
+            print("Ongoing training: architecture "+str(ARCHITECTURE)+", net path = "+NETWORK_PATH)
+            if sess.run(isFullNanNConv, feed_dict=train_fd):
+                break
+            csv_filename = NETWORK_PATH+NET_NAME+".csv"
+            f = open(csv_filename,'ab')
+            np.savetxt(f,lossArray, delimiter=",")
+            f.close()
+            lossArray = np.zeros([int(50),2]) 
+            lossArrayIter=0
 
         # Get random sample from training dictionary
         batch_num = random.randint(0,len(f_normals_list)-1)
@@ -2429,8 +2450,8 @@ def mainFunction():
         myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
         # Training set
         for filename in os.listdir(TRAINING_DATA_PATH):
-            # if myTS.mesh_count>10:
-            #     break
+            if myTS.mesh_count>10:
+                break
 
             if (filename.endswith(".obj")):
                 print("Adding " + filename + " (" + str(myTS.mesh_count) + ")")
@@ -2441,12 +2462,12 @@ def mainFunction():
         with open(binDumpPath+'trainingSet.pkl','wb') as fp:
             pickle.dump(myTS,fp)
 
-        with open(binDumpPath+'f_normals_list', 'wb') as fp:
-            pickle.dump(myTS.in_list, fp)
-        with open(binDumpPath+'GTfn_list', 'wb') as fp:
-            pickle.dump(myTS.gt_list, fp)
-        with open(binDumpPath+'f_adj_list', 'wb') as fp:
-            pickle.dump(myTS.adj_list, fp)
+        # with open(binDumpPath+'f_normals_list', 'wb') as fp:
+        #     pickle.dump(myTS.in_list, fp)
+        # with open(binDumpPath+'GTfn_list', 'wb') as fp:
+        #     pickle.dump(myTS.gt_list, fp)
+        # with open(binDumpPath+'f_adj_list', 'wb') as fp:
+        #     pickle.dump(myTS.adj_list, fp)
 
 
         myValidTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
@@ -2456,46 +2477,50 @@ def mainFunction():
                 gtfilename = getGTFilename(filename)
                 myValidTS.addMeshWithGT(VALID_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
 
-        # Validation
-        with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
-            pickle.dump(myValidTS.in_list, fp)
-        with open(binDumpPath+'valid_GTfn_list', 'wb') as fp:
-            pickle.dump(myValidTS.gt_list, fp)
-        with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
-            pickle.dump(myValidTS.adj_list, fp)
+        with open(binDumpPath+'validSet.pkl','wb') as fp:
+            pickle.dump(myValidTS,fp)
+
+        # # Validation
+        # with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
+        #     pickle.dump(myValidTS.in_list, fp)
+        # with open(binDumpPath+'valid_GTfn_list', 'wb') as fp:
+        #     pickle.dump(myValidTS.gt_list, fp)
+        # with open(binDumpPath+'valid_f_adj_list', 'wb') as fp:
+        #     pickle.dump(myValidTS.adj_list, fp)
 
     # Train network
     if running_mode == 0:
 
         
-        # Training
-        with open(binDumpPath+'f_normals_list', 'rb') as fp:
-            f_normals_list = pickle.load(fp)
-        with open(binDumpPath+'GTfn_list', 'rb') as fp:
-            GTfn_list = pickle.load(fp)
-        with open(binDumpPath+'f_adj_list', 'rb') as fp:
-            f_adj_list = pickle.load(fp)
-        # Validation
-        with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
-            valid_f_normals_list = pickle.load(fp)
-        with open(binDumpPath+'valid_GTfn_list', 'rb') as fp:
-            valid_GTfn_list = pickle.load(fp)
-        with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
-            valid_f_adj_list = pickle.load(fp)
+        # # Training
+        # with open(binDumpPath+'f_normals_list', 'rb') as fp:
+        #     f_normals_list = pickle.load(fp)
+        # with open(binDumpPath+'GTfn_list', 'rb') as fp:
+        #     GTfn_list = pickle.load(fp)
+        # with open(binDumpPath+'f_adj_list', 'rb') as fp:
+        #     f_adj_list = pickle.load(fp)
+        # # Validation
+        # with open(binDumpPath+'valid_f_normals_list', 'rb') as fp:
+        #     valid_f_normals_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_GTfn_list', 'rb') as fp:
+        #     valid_GTfn_list = pickle.load(fp)
+        # with open(binDumpPath+'valid_f_adj_list', 'rb') as fp:
+        #     valid_f_adj_list = pickle.load(fp)
 
 
         with open(binDumpPath+'trainingSet.pkl', 'rb') as fp:
             myTS = pickle.load(fp)
 
-        examplesNum = len(f_normals_list)
-        valid_examplesNum = len(valid_f_normals_list)
-        print("training examples num = ",examplesNum)
-        print("f_normals_list shape = ",f_normals_list[0].shape)
-        print("GTfn_list shape = ",GTfn_list[0].shape)
-        print("valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
-        print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
+        # examplesNum = len(f_normals_list)
+        # valid_examplesNum = len(valid_f_normals_list)
+        # print("training examples num = ",examplesNum)
+        # print("f_normals_list shape = ",f_normals_list[0].shape)
+        # print("GTfn_list shape = ",GTfn_list[0].shape)
+        # print("valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
+        # print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
 
-
+        with open(binDumpPath+'validSet.pkl', 'rb') as fp:
+            myVS = pickle.load(fp)
         # for p in range(examplesNum):
 
         #     # First, filter flipped faces for GT normals:
@@ -2531,8 +2556,8 @@ def mainFunction():
         #     # myNtail = myN[:,4:]
         #     # newN = np.concatenate((myNhead,myNtail),axis=1)
         #     # valid_f_normals_list[p] = newN[np.newaxis,:,:]
-
-        trainNet(myTS.in_list, myTS.gt_list, myTS.adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
+        trainNet(myTS,myVS)
+        # trainNet(myTS.in_list, myTS.gt_list, myTS.adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
         # trainNet(f_normals_list, GTfn_list, f_adj_list, valid_f_normals_list, valid_GTfn_list, valid_f_adj_list)
 
     # Simple inference, no GT mesh involved
