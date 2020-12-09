@@ -3782,7 +3782,7 @@ def mainFunction():
                 break
 
             if (filename.endswith(".obj")):
-                print("Adding %s (%i)"%(filename, training_meshes_num[0]))
+                print("Adding %s (%i)"%(filename, myTS.mesh_count))
                 gtfilename = getGTFilename(filename)
                 
                 myTS.addMeshWithVerticesAndGT(TRAINING_DATA_PATH, filename, GT_DATA_PATH, gtfilename)
@@ -3854,7 +3854,7 @@ def mainFunction():
         
         # Validation
         with open(binDumpPath+'validSetWithVertices.pkl'+str(pickleNum), 'wb') as fp:
-            pickle.dump(myTS, fp)
+            pickle.dump(myValidSet, fp)
 
         # with open(binDumpPath+'valid_f_normals_list', 'wb') as fp:
         #     pickle.dump(valid_f_normals_list, fp)

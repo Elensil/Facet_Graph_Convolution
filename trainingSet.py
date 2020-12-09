@@ -604,7 +604,7 @@ class TrainingSet(PreprocessedData):
         GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
         self.fNum = faces.shape[0]
         self.vNum = V.shape[0]
-        super(InferenceMesh,self).addMeshWithVertices(V, faces, GTV=GT0)
+        super(TrainingSet,self).addMeshWithVertices(V, faces, GTV=GT0)
         self.vertices = V[np.newaxis,:,:]
         self.faces = faces
         self.normals = computeFacesNormals(V, faces)
