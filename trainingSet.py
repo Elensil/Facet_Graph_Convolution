@@ -351,6 +351,9 @@ class PreprocessedData(object):
 
 
     def addMeshWithVertices(self, V0, faces0, GTV=None):
+        addGT = False
+        if GTV is not None:
+            addGT = True
 
         vNum = V0.shape[0]
         # Compute normals
@@ -372,13 +375,13 @@ class PreprocessedData(object):
         # f_normals_pos = np.concatenate((f_normals0, f_borderCh0, f_pos0), axis=1)
         f_normals_pos = np.concatenate((f_normals0, f_pos0), axis=1)
 
-        # Load GT
-        GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
-
-        gtf_normals0 = computeFacesNormals(GT0, faces0)
-
-        # Normalize vertices
-        V0, GT0 = normalizePointSets(V0,GT0)
+        
+        if addGT:
+            gtf_normals0 = computeFacesNormals(GTV, faces0)
+            # Normalize vertices
+            V0, GTV = normalizePointSets(V0,GTV)
+        else:
+            V0,_ = normalizePointSets(V0,V0)
 
 
         # Get patches if mesh is too big
@@ -397,7 +400,8 @@ class PreprocessedData(object):
                 faceCheck[fOldInd]+=1
 
                 patchFNormals = f_normals_pos[fOldInd]
-                patchGTFNormals = gtf_normals0[fOldInd]
+                if addGT:
+                    patchGTFNormals = gtf_normals0[fOldInd]
 
                 old_N = patchFNormals.shape[0]
 
@@ -410,11 +414,11 @@ class PreprocessedData(object):
 
                 # For DTU: take slice of GT points
                 patchBB = getBoundingBox(testPatchV)
-                patchGTV = takePointSetSlice(GT0,patchBB)
-                
-                # If no GT in the window, skip this patch (fake surface)
-                if patchGTV.shape[0]<testPatchV.shape[0]:
-                    continue
+                if addGT:
+                    patchGTV = takePointSetSlice(GTV,patchBB)
+                    # If no GT in the window, skip this patch (fake surface)
+                    if patchGTV.shape[0]<testPatchV.shape[0]:
+                        continue
 
 
                 self.vOldInd_list.append(vOldInd)
@@ -433,11 +437,13 @@ class PreprocessedData(object):
                 minusPadding3 = padding3-1
                 patchFNormals = np.concatenate((patchFNormals,padding6),axis=0)
                 testPatchF = np.concatenate((testPatchF,minusPadding3),axis=0)
-                patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+                
                 # Reorder nodes
                 patchFNormals = patchFNormals[newToOld]
                 testPatchF = testPatchF[newToOld]
-                patchGTFNormals = patchGTFNormals[newToOld]
+                if addGT:
+                    patchGTFNormals = np.concatenate((patchGTFNormals, padding3),axis=0)
+                    patchGTFNormals = patchGTFNormals[newToOld]
 
                 oldToNew = inv_perm(newToOld)
 
@@ -465,17 +471,22 @@ class PreprocessedData(object):
                 f_normals = np.expand_dims(patchFNormals, axis=0)
                 v_pos = np.expand_dims(testPatchV,axis=0)
                 faces = np.expand_dims(testPatchF, axis=0)
-                gtv_pos = np.expand_dims(patchGTV,axis=0)
+
                 v_faces = np.expand_dims(v_faces,axis=0)
-                gtf_normals = np.expand_dims(patchGTFNormals, axis=0)
+                
 
                 self.v_list.append(v_pos)
-                self.gtv_list.append(gtv_pos)
+                
                 n_list.append(f_normals)
                 adj_list.append(fAdjs)
                 self.faces_list.append(faces)
                 self.v_faces_list.append(v_faces)
-                gtn_list.append(gtf_normals)
+                
+                if addGT:
+                    gtv_pos = np.expand_dims(patchGTV,axis=0)
+                    self.gtv_list.append(gtv_pos)
+                    gtf_normals = np.expand_dims(patchGTFNormals, axis=0)
+                    gtn_list.append(gtf_normals)
 
                 print("Added training patch: mesh " + filename + ", patch " + str(patchNum) + " (" + str(self.mesh_count) + ")")
                 self.mesh_count+=1
@@ -497,7 +508,6 @@ class PreprocessedData(object):
             faces0 = np.concatenate((faces0,minusPadding3),axis=0)
 
             f_normals_pos = np.concatenate((f_normals_pos,padding6),axis=0)
-            gtf_normals = np.concatenate((gtf_normals0, padding3),axis=0)
 
             oldToNew = inv_perm(newToOld)
 
@@ -512,8 +522,10 @@ class PreprocessedData(object):
             # Reorder nodes
             f_normals_pos = f_normals_pos[newToOld]
             faces0 = faces0[newToOld]
-            gtf_normals = gtf_normals[newToOld]
             
+            if addGT:
+                gtf_normals = np.concatenate((gtf_normals0, padding3),axis=0)
+                gtf_normals = gtf_normals[newToOld]
 
             # Change adj format
             fAdjs = []
@@ -535,18 +547,24 @@ class PreprocessedData(object):
             # Expand dimensions
             f_normals = np.expand_dims(f_normals_pos, axis=0)
             v_pos = np.expand_dims(V0,axis=0)
-            gtv_pos = np.expand_dims(GT0,axis=0)
+
             faces = np.expand_dims(faces0, axis=0)
             v_faces = np.expand_dims(v_faces,axis=0)
-            gtf_normals = np.expand_dims(gtf_normals,axis=0)
+            
 
             self.v_list.append(v_pos)
-            self.gtv_list.append(gtv_pos)
+            
             self.in_list.append(f_normals)
             self.adj_list.append(fAdjs)
             self.faces_list.append(faces)
             self.v_faces_list.append(v_faces)
-            self.gt_list.append(gtf_normals)
+            
+
+            if addGT:
+                gtv_pos = np.expand_dims(GTV,axis=0)
+                self.gtv_list.append(gtv_pos)
+                gtf_normals = np.expand_dims(gtf_normals,axis=0)
+                self.gt_list.append(gtf_normals)
         
             print("Added training mesh " + filename + " (" + str(self.mesh_count) + ")")
 
@@ -593,8 +611,10 @@ class InferenceMesh(PreprocessedData):
         self.normals = computeFacesNormals(V, faces)
 
     # Override parent method in order to set whole mesh data (vertices, faces, normals)
-    def addMeshWithVertices(self, inputFilePath, filename):
+    def addMeshWithVertices(self, inputFilePath, filename, gtFilePath, gtfilename):
         V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
+        # # Load GT
+        # GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
         self.fNum = faces.shape[0]
         self.vNum = V.shape[0]
         super(InferenceMesh,self).addMeshWithVertices(V, faces)
