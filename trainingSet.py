@@ -388,7 +388,7 @@ class PreprocessedData(object):
         facesNum = faces0.shape[0]
         faceCheck = np.zeros(facesNum)
         faceRange = np.arange(facesNum)
-        if facesNum>maxSize:
+        if facesNum>self.maxSize:
             patchNum = 0
             # while((np.any(faceCheck==0))and(patchNum<3)):
             while(np.any(faceCheck==0)):
@@ -396,7 +396,7 @@ class PreprocessedData(object):
                 faceSeed = np.random.randint(toBeProcessed.shape[0])
                 faceSeed = toBeProcessed[faceSeed]
 
-                testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, patchSize, faceSeed)
+                testPatchV, testPatchF, testPatchAdj, vOldInd, fOldInd = getMeshPatch(V0, faces0, f_adj0, self.patchSize, faceSeed)
                 faceCheck[fOldInd]+=1
 
                 patchFNormals = f_normals_pos[fOldInd]
@@ -426,7 +426,7 @@ class PreprocessedData(object):
 
                 # Convert to sparse matrix and coarsen graph
                 coo_adj = listToSparseWNormals(testPatchAdj, patchFNormals[:,-3:], patchFNormals[:,:3])
-                adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+                adjs, newToOld = coarsen(coo_adj,(self.coarseningLvlNum-1)*self.coarseningStepNum)
 
                 # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
                 new_N = len(newToOld)
@@ -457,8 +457,8 @@ class PreprocessedData(object):
 
                 # Change adj format
                 fAdjs = []
-                for lvl in range(coarseningLvlNum):
-                    fadj, _ = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+                for lvl in range(self.coarseningLvlNum):
+                    fadj, _ = sparseToList(adjs[self.coarseningStepNum*lvl],K_faces)
                     fadj = np.expand_dims(fadj, axis=0)
                     fAdjs.append(fadj)
                         # fAdjs = []
@@ -495,7 +495,7 @@ class PreprocessedData(object):
 
             # Convert to sparse matrix and coarsen graph
             coo_adj = listToSparseWNormals(f_adj0, f_pos0, f_normals0)
-            adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
+            adjs, newToOld = coarsen(coo_adj,(self.coarseningLvlNum-1)*self.coarseningStepNum)
             # There will be fake nodes in the new graph: set all signals (normals, position) to 0 on these nodes
             new_N = len(newToOld)
             old_N = facesNum
@@ -529,8 +529,8 @@ class PreprocessedData(object):
 
             # Change adj format
             fAdjs = []
-            for lvl in range(coarseningLvlNum):
-                fadj, _ = sparseToList(adjs[coarseningStepNum*lvl],K_faces)
+            for lvl in range(self.coarseningLvlNum):
+                fadj, _ = sparseToList(adjs[self.coarseningStepNum*lvl],K_faces)
                 fadj = np.expand_dims(fadj, axis=0)
                 fAdjs.append(fadj)
 
@@ -611,7 +611,7 @@ class InferenceMesh(PreprocessedData):
         self.normals = computeFacesNormals(V, faces)
 
     # Override parent method in order to set whole mesh data (vertices, faces, normals)
-    def addMeshWithVertices(self, inputFilePath, filename, gtFilePath, gtfilename):
+    def addMeshWithVertices(self, inputFilePath, filename):
         V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
         # # Load GT
         # GT0,_,_,_,_ = load_mesh(gtFilePath, gtfilename, 0, False)
