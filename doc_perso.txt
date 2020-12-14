@@ -1,8 +1,8 @@
 Running_mode:
+	-5:
+		Pickle data (no vertices)
 	0:
 		Load pickled data.
-		OR
-		Loop through folder, load meshes, pickle data 	(w/ "addMesh")
 		Call "TrainNet"
 	1:
 		Loop through folder, load meshes (w/ "addMeshWithVertices")
@@ -17,8 +17,6 @@ Running_mode:
 
 	4:
 		Load pickled data
-		OR
-		Loop through folder, load meshes, pickle data (w/ "AddMeshWithVertices")
 		Call "TrainDoubleLossNet"
 
 	7:
@@ -28,7 +26,7 @@ Running_mode:
 	9:
 		Very similar to 2: different stuff saved
 	11:
-		addMeshWithVertices -> pickle data
+		pickle data (w/ vertices)
 	17:
 
 
