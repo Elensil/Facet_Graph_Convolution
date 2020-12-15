@@ -23,7 +23,7 @@ RESULTS_PATH = BASE_PATH + "TEMP_Cleaning/ResultsVerts/"
 
 # --- Data Parameters ---
 
-MAX_PATCH_SIZE = 100000              # When loading a mesh (for training or inference), il is split up into smaller patches if the number of faces is greater than MAX_PATCH_SIZE. Lower this in case of memory issues.
+MAX_PATCH_SIZE = 20000              # When loading a mesh (for training or inference), il is split up into smaller patches if the number of faces is greater than MAX_PATCH_SIZE. Lower this in case of memory issues.
 MIN_PATCH_SIZE = 2000               # Patches are grown to be at least this size, in order to guarantee a minimum receptive field for inference.
 K_faces = 23                        # Maximum number of neighbours that can be taken into account in face graphs. A higher value will used up more memory. With a smaller K, some edges might be ignored.
 TRAINING_DATA_REDUNDANCY = 1        # When preprocessing training data, add each mesh TRAINING_DATA_REDUNDANCY times. Increasing this number enables some form of data augmentation (there is randomness in the patch cut and the coarsening).
@@ -31,7 +31,7 @@ TRAINING_DATA_REDUNDANCY = 1        # When preprocessing training data, add each
 
 # --- Network Parameters ---
 
-SAVEITER = 5000                     # During training, a checkpoint is saved every SAVEITER iterations.
+SAVEITER = 500                     # During training, a checkpoint is saved every SAVEITER iterations.
 
 COARSENING_STEPS = 2                # Number of coarsening iterations performed in each pooling layer. Default value (used in the paper) is 2
 COARSENING_LVLS = 3                 # Number of "resolution" levels of graph used in the network. Default is 3. WARNING: This will only automate the data preprocessing (graph coarsening is precomputed). The network architecture is hard-coded!

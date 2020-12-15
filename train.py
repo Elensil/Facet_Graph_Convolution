@@ -36,8 +36,6 @@ def inferNetOld(inputMesh):
     patch_indices = inputMesh.patch_indices
     old_to_new_permutations = inputMesh.permutations
     with tf.Graph().as_default():
-        # random_seed = 0
-        # np.random.seed(random_seed)
 
         sess = tf.InteractiveSession()
         if(FLAGS.debug):    #launches debugger at every sess.run() call
@@ -47,12 +45,6 @@ def inferNetOld(inputMesh):
         if not os.path.exists(RESULTS_PATH):
                 os.makedirs(RESULTS_PATH)
 
-        """
-        Load dataset
-        x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
-        adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices of neigbors of each vertex. (Index starting with 1)
-                                                  K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
-        """
 
         BATCH_SIZE=f_normals[0].shape[0]
         NUM_POINTS=in_points.shape[1]
@@ -116,20 +108,12 @@ def inferNetOld(inputMesh):
         for i in range(patchNumber):
             print("Patch "+str(i+1)+" / "+str(len(f_normals)))
             random_R = rand_rotation_matrix()
-            # print("Random R = "+str(random_R))
-            # random_R = np.identity(3)
+
             num_p = f_normals[i].shape[1]
             tens_random_R = np.reshape(random_R,(1,1,3,3))
             tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
 
-            # my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0], fadj1: f_adj[i][1], fadj2: f_adj[i][2], rot_mat:tens_random_R2,
-            #                 keep_prob:1.0}
             my_feed_dict = {fn_: f_normals[i], fadj0: f_adj[i][0]}
-
-            # writer = tf.summary.FileWriter("/morpheo-nas2/marmando/DeepMeshRefinement/TensorboardTest/", sess.graph)
-            # print(sess.run(n_conv,feed_dict=my_feed_dict))
-            # writer.close()
-            # return
 
             if len(f_adj[0])>1:
                 my_feed_dict[fadj1]=f_adj[i][1]
@@ -137,28 +121,23 @@ def inferNetOld(inputMesh):
             if len(f_adj[0])>3:
                 my_feed_dict[fadj3]=f_adj[i][3]
             outN = sess.run(squeezed_n_conv,feed_dict=my_feed_dict)
-            #outN = f_normals[i][0]
 
             if len(f_adj[0])>1:
-                # Permute back patch
-                # temp_perm = inv_perm(old_to_new_permutations[i])
+
                 temp_perm = old_to_new_permutations[i]
                 outN = outN[temp_perm]
                 outN = outN[0:num_wofake_nodes[i]]
 
             if patchNumber==1:
-            # if len(patch_indices[i]) == 0:
                 predicted_normals = outN
             else:
                 predicted_normals[patch_indices[i]] = predicted_normals[patch_indices[i]] + outN
                 
         #Update vertices position
         new_normals = tf.placeholder('float32', shape=[BATCH_SIZE, None, 3], name='fn_')
-        #refined_x = update_position(xp_,fadj, n_conv)
         refined_x = update_position2(xp_, new_normals, e_map_, ve_map_, iter_num=60, max_edges = MAX_EDGES)
         # refined_x, x_update = update_position_with_depth(xp_, new_normals, e_map_, ve_map_, depth_dir, iter_num=200)
         points = tf.squeeze(refined_x)
-        # points_update = tf.squeeze(x_update)
         points_update = points
 
 
@@ -169,8 +148,6 @@ def inferNetOld(inputMesh):
         sess.close()
 
         x_disp = normalize(x_disp)
-
-        # print("x_disp sample: "+str(x_disp[:10,:]))
 
         return outPoints, predicted_normals
 
@@ -197,14 +174,6 @@ def inferNet(inputMesh):
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
 
-        
-
-        """
-        Load dataset
-        x (train_data) of size [batch_size, num_points, in_channels] : in_channels can be x,y,z coordinates or any other descriptor
-        adj (adj_input) of size [batch_size, num_points, K] : This is a list of indices of neigbors of each vertex. (Index starting with 1)
-                                                  K is the maximum neighborhood size. If a vertex has less than K neighbors, the remaining list is filled with 0.
-        """
 
         BATCH_SIZE=f_normals[0].shape[0]
         K_faces = f_adj[0][0].shape[2]
@@ -233,14 +202,10 @@ def inferNet(inputMesh):
             # n_conv1 = custom_binary_tree_pooling(n_conv0, steps=COARSENING_STEPS, pooltype='avg_ignore_zeros')
             # n_conv2 = custom_binary_tree_pooling(n_conv1, steps=COARSENING_STEPS, pooltype='avg_ignore_zeros')
 
-        # n_conv0 = fn_
         n_conv0 = normalizeTensor(n_conv0)
         n_conv1 = normalizeTensor(n_conv1)
         n_conv2 = normalizeTensor(n_conv2)
         n_conv_list = [n_conv0, n_conv1, n_conv2]
-
-        # refined_x = update_position_MS(xp_, new_normals, faces_, v_faces_, coarsening_steps=3)
-
 
         saver = tf.train.Saver()
 
@@ -302,7 +267,6 @@ def inferNet(inputMesh):
         points = tf.reshape(refined_x,[-1,3])
         points_mid = tf.reshape(refined_x_mid,[-1,3])
         points_coarse = tf.reshape(refined_x_coarse,[-1,3])
-        # points = tf.squeeze(refined_x)
 
         finalOutPoints = np.zeros((num_points,3),dtype=np.float32)
         finalOutPointsMid = np.zeros((num_points,3),dtype=np.float32)
@@ -336,30 +300,15 @@ def inferNet(inputMesh):
 
             # outN0 = f_normals[0][:,:,:3]
             outP0 = f_normals[0][:,:,3:]
-            # outN0 = np.tile(np.array([[[0,0,1]]]),[1,f_normals[0].shape[1],1])
-
-            
-            
 
             update_feed_dict = {xp_:in_points[i], new_normals0: outN0, pos0: outP0,
                                 faces_: faces[i], v_faces_: v_faces[i]}
-            # update_feed_dict = {xp_:in_points[i], new_normals0: outN0,
-            #                     faces_: faces[i], v_faces_: v_faces[i]}
-            # testNorm = f_normals[i][:,:,:3]/100
+
             update_feed_dict = {xp_:in_points[i], new_normals0: outN0, new_normals1: outN1, new_normals2: outN2, pos0: outP0,
                                 faces_: faces[i], v_faces_: v_faces[i]}
-            # update_feed_dict = {xp_:in_points[i], new_normals0: outN0,
-            #                     faces_: faces[i], v_faces_: v_faces[i]}
 
             print("Running points...")
 
-            
-
-            # outPoints, fineNormals, midNormals, coarseNormals = sess.run([points, new_normals0, upN1, upN2],feed_dict=update_feed_dict)
-            # outPoints, fineNormals, midNormals, coarseNormals, coarseNormals2, coarseNormals3 = sess.run([points, normalised_disp_fine, normalised_disp_mid, normalised_disp_coarse, normalised_disp_coarse2, normalised_disp_coarse3],feed_dict=update_feed_dict)
-            # outPoints, fineNormals, midNormals, coarseNormals = sess.run([points, normalised_disp_fine, normalised_disp_mid, normalised_disp_coarse],feed_dict=update_feed_dict)
-
-            # outPoints, fineNormals, midNormals, coarseNormals, finePos, midPos, coarsePos = sess.run([points, normalised_disp_fine, normalised_disp_mid, normalised_disp_coarse, pos0, pos1, pos2],feed_dict=update_feed_dict)
             outPoints, outPointsMid, outPointsCoarse, fineNormals, midNormals, coarseNormals, finePos, midPos, coarsePos = sess.run([points, points_mid, points_coarse, normalised_disp_fine, normalised_disp_mid, normalised_disp_coarse, pos0, pos1, pos2],feed_dict=update_feed_dict)
 
             midPos = finePos
@@ -375,21 +324,11 @@ def inferNet(inputMesh):
 
                 pointsWeights[new_to_old_v_list[i]]+=1
 
-                # fineNormalsP = np.squeeze(fineNormals)
-                # midNormalsP = np.squeeze(midNormals)
-                # coarseNormalsP = np.squeeze(coarseNormals)
 
                 finePosP = np.squeeze(finePos)
                 midPosP = np.squeeze(midPos)
                 coarsePosP = np.squeeze(coarsePos)
 
-                # finePosP = np.squeeze(finePos)[adjPerm_list[i]]
-                # midPosP = np.squeeze(midPos)[adjPerm_list[i]]
-                # coarsePosP = np.squeeze(coarsePos)[adjPerm_list[i]]
-
-                # finePosP = finePosP[:real_nodes_num_list[i],:]
-                # midPosP = midPosP[:real_nodes_num_list[i],:]
-                # coarsePosP = coarsePosP[:real_nodes_num_list[i],:]
 
                 fineNormalsP = np.squeeze(fineNormals)[adjPerm_list[i]]
                 fineNormalsP = fineNormalsP[:real_nodes_num_list[i],:]
@@ -399,26 +338,15 @@ def inferNet(inputMesh):
                 coarseNormalsP = coarseNormalsP[:real_nodes_num_list[i],:]
 
 
-                # coarseNormalsP2 = np.squeeze(coarseNormals2)[adjPerm_list[i]]
-                # coarseNormalsP2 = coarseNormalsP2[:real_nodes_num_list[i],:]
-                # coarseNormalsP3 = np.squeeze(coarseNormals3)[adjPerm_list[i]]
-                # coarseNormalsP3 = coarseNormalsP3[:real_nodes_num_list[i],:]
-
                 finalFineNormals[new_to_old_f_list[i]] = fineNormalsP
                 finalMidNormals[new_to_old_f_list[i]] = midNormalsP
                 finalCoarseNormals[new_to_old_f_list[i]] = coarseNormalsP
 
-                # finalFineNormals = fineNormalsP
-                # finalMidNormals = midNormalsP
-                # finalCoarseNormals = coarseNormalsP
 
                 finalFinePos = finePosP
                 finalMidPos = midPosP
                 finalCoarsePos = coarsePosP
 
-                # finalFinePos[new_to_old_f_list[i]] = finePosP
-                # finalMidPos[new_to_old_f_list[i]] = midPosP
-                # finalCoarsePos[new_to_old_f_list[i]] = coarsePosP
 
             else:
                 finalOutPoints = outPoints
@@ -426,9 +354,6 @@ def inferNet(inputMesh):
                 finalOutPointsCoarse = outPointsCoarse
                 pointsWeights +=1
 
-                # fineNormalsP = np.squeeze(fineNormals)
-                # midNormalsP = np.squeeze(midNormals)
-                # coarseNormalsP = np.squeeze(coarseNormals)
 
                 fineNormalsP = np.squeeze(fineNormals)[adjPerm_list[i]]
                 fineNormalsP = fineNormalsP[:real_nodes_num_list[i],:]
@@ -436,15 +361,6 @@ def inferNet(inputMesh):
                 midNormalsP = midNormalsP[:real_nodes_num_list[i],:]
                 coarseNormalsP = np.squeeze(coarseNormals)[adjPerm_list[i]]
                 coarseNormalsP = coarseNormalsP[:real_nodes_num_list[i],:]
-
-                # coarseNormalsP2 = np.squeeze(coarseNormals2)[adjPerm_list[i]]
-                # coarseNormalsP2 = coarseNormalsP2[:real_nodes_num_list[i],:]
-                # coarseNormalsP3 = np.squeeze(coarseNormals3)[adjPerm_list[i]]
-                # coarseNormalsP3 = coarseNormalsP3[:real_nodes_num_list[i],:]
-
-                # finePosP = np.squeeze(finePos)
-                # midPosP = np.squeeze(midPos)
-                # coarsePosP = np.squeeze(coarsePos)
 
                 finePosP = np.squeeze(finePos)[adjPerm_list[i]]
                 finePosP = finePosP[:real_nodes_num_list[i],:]
@@ -462,8 +378,6 @@ def inferNet(inputMesh):
                 finalFineNormals = fineNormalsP
                 finalMidNormals = midNormalsP
                 finalCoarseNormals = coarseNormalsP
-                # finalCoarseNormals2 = coarseNormalsP2
-                # finalCoarseNormals3 = coarseNormalsP3
             print("Mesh update: check")
         sess.close()
 
@@ -471,7 +385,6 @@ def inferNet(inputMesh):
         finalOutPointsMid = np.true_divide(finalOutPointsMid,np.maximum(pointsWeights,1))
         finalOutPointsCoarse = np.true_divide(finalOutPointsCoarse,np.maximum(pointsWeights,1))
 
-        # return finalOutPoints, finalFineNormals, finalMidNormals, finalCoarseNormals, finalCoarseNormals, finalCoarseNormals, finalFinePos, finalMidPos, finalCoarsePos
         return finalOutPoints, finalOutPointsMid, finalOutPointsCoarse, finalFineNormals, finalMidNormals, finalCoarseNormals, finalFinePos, finalMidPos, finalCoarsePos
 
 
@@ -488,9 +401,6 @@ def trainNet(trainSet, validSet):
 
     if TF_VERSION==2:
         tf.disable_eager_execution()
-    # random_seed = 0
-    # np.random.seed(random_seed)
-
     # sess = tf.InteractiveSession(config=tf.ConfigProto( allow_soft_placement=True, log_device_placement=False))
     # sess = tf.InteractiveSession()
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
@@ -539,8 +449,6 @@ def trainNet(trainSet, validSet):
 
     #rotTens = getRotationToAxis(fn_)
     print("NUM_IN_CHANNELS = "+str(NUM_IN_CHANNELS))
-    # print("NUM_IN_CHANNELS/3 = "+str(NUM_IN_CHANNELS/3))
-    # print("int(NUM_IN_CHANNELS/3) = "+str(int(NUM_IN_CHANNELS/3)))
     bAddRot=True
     if bAddRot:
 
@@ -601,6 +509,7 @@ def trainNet(trainSet, validSet):
         n_conv = get_model_reg_multi_scale(fn_rot, fadjs, keep_prob, multiScale=False)
 
 
+
     # n_conv = normalizeTensor(n_conv)
     # n_conv = tf.expand_dims(n_conv,axis=-1)
     # n_conv = tf.matmul(tf.transpose(rotTens,[0,1,3,2]),n_conv)
@@ -627,25 +536,6 @@ def trainNet(trainSet, validSet):
         train_step = tf.train.AdamOptimizer().minimize(customLoss, global_step=batch)
 
     saver = tf.train.Saver()
-
-    # # get variables to restore...
-    # dictVar = {}
-    # listVar = []
-    # for opname in ["weight", "weight_1", "weight_2", "bias", "bias_1", "bias_2", "assignment", "assignment_1", "assignment_2",
-    #               "assignment_3", "assignment_4", "assignment_5", "assignment_6", "assignment_7", "assignment_8"]:
-    #   print("opname = "+ opname)
-    #   varname = "model/"+opname
-    #   myvar = [var for var in tf.global_variables() if var.op.name==varname][0]
-    #   dictVar[varname] = myvar
-    #   listVar.append(myvar)
-
-    # #extras:
-    # # dictVar["model/weight_3"] = [var for var in tf.global_variables() if var.op.name=="model/weight_5"][0]
-    # # dictVar["model/bias_3"] = [var for var in tf.global_variables() if var.op.name=="model/bias_5"][0]
-    # dictVar["model/weight_4"] = [var for var in tf.global_variables() if var.op.name=="model/weight_6"][0]
-    # dictVar["model/bias_4"] = [var for var in tf.global_variables() if var.op.name=="model/bias_6"][0]
-
-    # saver = tf.train.Saver(dictVar)
 
     sess.run(tf.global_variables_initializer())
 
@@ -684,22 +574,11 @@ def trainNet(trainSet, validSet):
             batch_num = random.randint(0,len(f_normals_list)-1)
 
             num_p = f_normals_list[batch_num].shape[1]
-            # print("num_p = ",num_p)
             random_ind = np.random.randint(num_p,size=costSamplesNum)
-            # random_ind = np.random.randint(1,size=10000)
 
             random_R = rand_rotation_matrix()
             tens_random_R = np.reshape(random_R,(1,1,3,3))
             tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
-
-            # train_fd = {fn_: f_normals_list[batch_num], fadj: f_adj_list[batch_num], tfn_: GTfn_list[batch_num],
-            #               sample_ind: random_ind, keep_prob:1}
-
-            # train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], tfn_: GTfn_list[batch_num],
-            #               sample_ind: random_ind, keep_prob:1}
-
-            
-            
 
 
             train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], tfn_: GTfn_list[batch_num], rot_mat:tens_random_R2,
@@ -708,30 +587,15 @@ def trainNet(trainSet, validSet):
             if len(f_adj_list[0])>1:
                 train_fd[fadj1]=f_adj_list[batch_num][1]
                 train_fd[fadj2]=f_adj_list[batch_num][2]
-            # print("OK?")
             if len(f_adj_list[0])>3:
                 train_fd[fadj3]=f_adj_list[batch_num][3]
-            #i = train_shuffle[iter%(len(train_data))]
-            #in_points = train_data[i]
-
-            #sess.run(customLoss,feed_dict=train_fd)
-
-            # print("OK")
-            # train_loss += customLoss.eval(feed_dict=train_fd)
+            
             train_loss += sess.run(customLoss,feed_dict=train_fd)
             train_samp+=1
-            # print("Still OK!")
             # Show smoothed training loss
             if (iter%evalStepNum == 0):
                 train_loss = train_loss/train_samp
-                # sess.run(customLoss2,feed_dict=my_feed_dict)
-                # train_loss2 = customLoss2.eval(feed_dict=my_feed_dict)
-                # sess.run(customLoss3,feed_dict=my_feed_dict)
-                # train_loss3 = customLoss3.eval(feed_dict=my_feed_dict)
-
                 print("Iteration %d, training loss %g"%(iter, train_loss))
-                # print("Iteration %d, training loss2 %g"%(iter, train_loss2))
-                # print("Iteration %d, training loss3 %g"%(iter, train_loss3))
 
                 lossArray[int(iter/evalStepNum),0]=train_loss
                 train_loss=0
@@ -741,18 +605,11 @@ def trainNet(trainSet, validSet):
             if (iter%(evalStepNum*2) ==0):
                 valid_loss = 0
                 valid_samp = len(valid_f_normals_list)
-                # print("valid num_p = ",num_p)
                 valid_random_ind = np.arange(costSamplesNum)
-                # valid_random_ind = np.random.randint(1,size=10000)
                 for vbm in range(valid_samp):
-                    # valid_fd = {fn_: valid_f_normals_list[vbm], fadj: valid_f_adj_list[vbm], tfn_: valid_GTfn_list[vbm],
-                    #       sample_ind: valid_random_ind, keep_prob:1}
-
-                    # valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm],
-                    #       sample_ind: valid_random_ind, keep_prob:1}
+                    
                     num_p = valid_f_normals_list[vbm].shape[1]
-                    # valid_random_ind = np.random.randint(num_p,size=10000)
-
+                    
                     tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
 
                     valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
@@ -765,7 +622,6 @@ def trainNet(trainSet, validSet):
                     if len(f_adj_list[0])>3:
                         valid_fd[fadj3]=valid_f_adj_list[vbm][3]
 
-                    # valid_loss += customLoss.eval(feed_dict=valid_fd)
                     valid_loss += sess.run(customLoss,feed_dict=valid_fd)
                 valid_loss/=valid_samp
                 print("Iteration %d, validation loss %g"%(iter, valid_loss))
@@ -775,8 +631,6 @@ def trainNet(trainSet, validSet):
                     last_loss=valid_loss
 
             sess.run(train_step,feed_dict=train_fd)
-            # sess.run(train_step2,feed_dict=my_feed_dict)
-            # sess.run(train_step3,feed_dict=my_feed_dict)
             if sess.run(isNanNConv,feed_dict=train_fd):
                 hasNan = True
                 print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
@@ -792,10 +646,24 @@ def trainNet(trainSet, validSet):
     f.close()
 
 
-def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list, f_adj_list, v_faces_list, valid_in_points_list, valid_GT_points_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list):
-    
-    # random_seed = 0
-    # np.random.seed(random_seed)
+# def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list, f_adj_list, v_faces_list, valid_in_points_list, valid_GT_points_list, valid_faces_list, valid_f_normals_list, valid_f_adj_list, valid_v_faces_list):
+def trainAccuracyNet(trainSet, validSet):
+     
+    in_points_list = trainSet.v_list
+    GT_points_list = trainSet.gtv_list
+    faces_list = trainSet.faces_list
+    f_normals_list = trainSet.in_list
+    # GTf_normals_list = trainSet.gt_list
+    f_adj_list = trainSet.adj_list
+    v_faces_list = trainSet.v_faces_list
+    valid_in_points_list = validSet.v_list
+    valid_GT_points_list = validSet.gtv_list
+    valid_faces_list = validSet.faces_list
+    valid_f_normals_list = validSet.in_list
+    # valid_GTf_normals_list = validSet.gt_list
+    valid_f_adj_list = validSet.adj_list
+    valid_v_faces_list = validSet.v_faces_list
+
     SAMP_NUM = 500
     # keep_rot_inv=True
 
@@ -825,8 +693,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     NUM_POINTS=in_points_list[0].shape[1]
     # training data
     fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
-    #fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj')
-
+    
     vp_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE, None, 3], name='vp_')
     gtvp_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE, None, 3], name='gtvp_')
 
@@ -854,27 +721,6 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     batch = tf.Variable(0, trainable=False)
 
     # --- Starting iterative process ---
-
-
-    # #Add random rotation
-    # fn_rot = tf.reshape(fn_,[BATCH_SIZE,-1,2,3])    # 2 because of normal + position
-    # fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # switch dimensions
-    
-    # vp_rot = tf.reshape(vp_,[BATCH_SIZE,-1,3,1])
-    # gtvp_rot = tf.reshape(gtvp_,[BATCH_SIZE,-1,3,1])
-    
-    # if keep_rot_inv:
-    #     fn_rot = tf.matmul(rot_mat,fn_rot)
-    #     vp_rot = tf.matmul(rot_mat_vert,vp_rot)
-    #     gtvp_rot = tf.matmul(rot_mat_gt,gtvp_rot)
-    # else:
-    #     print("WARNING: hard-coded rot inv removal")
-
-    # fn_rot = tf.transpose(fn_rot,[0,1,3,2])         # Put it back
-    # fn_rot = tf.reshape(fn_rot,[BATCH_SIZE,-1,6])
-
-    # vp_rot = tf.reshape(vp_rot,[BATCH_SIZE,-1,3])
-    # gtvp_rot = tf.reshape(gtvp_rot,[BATCH_SIZE,-1,3])
 
 
     bAddRot=True
@@ -938,17 +784,13 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
     with tf.variable_scope("model"):
         n_conv0, n_conv1, n_conv2 = get_model_reg_multi_scale(fn_rot, fadjs, keep_prob, multiScale=True)
-        # n_conv = get_model_reg_multi_scale(fn_, fadjs, ARCHITECTURE, keep_prob)
-
 
     n_conv0 = normalizeTensor(n_conv0)
     # n_conv1 = normalizeTensor(n_conv1)
     # n_conv2 = normalizeTensor(n_conv2)
 
     n_conv_list = [n_conv0, n_conv1, n_conv2]
-    # isNanNConv = tf.reduce_any(tf.is_nan(n_conv), name="isNanNConv")
-    # isFullNanNConv = tf.reduce_all(tf.is_nan(n_conv), name="isNanNConv")
-
+    
     refined_x, _ = update_position_MS(vp_rot, n_conv_list, faces_, v_faces_, coarsening_steps=COARSENING_STEPS, iter_num_list=[80,20,20])
 
     
@@ -984,8 +826,7 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
     hasNan = False
 
     # with tf.device(DEVICE):
-    # lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
-    lossArray = np.zeros([int(50),2])                  # 200 = 2000/10: save csv file every 2000 iter
+    lossArray = np.zeros([int(NUM_ITERATIONS/10),2])
     last_loss = 0
     lossArrayIter = 0
     for iter in range(NUM_ITERATIONS):
@@ -993,7 +834,6 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
 
         # Get random sample from training dictionary
         batch_num = random.randint(0,len(f_normals_list)-1)
-        # print("Selecting patch "+str(batch_num)+" on "+str(len(f_normals_list)))
         num_vgt = GT_points_list[batch_num].shape[1]
         num_vnoisy = in_points_list[batch_num].shape[1]
 
@@ -1016,21 +856,11 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
         tens_random_Rv = np.tile(tens_random_R,(BATCH_SIZE,num_v,1,1))
         tens_random_Rgt = np.tile(tens_random_R,(BATCH_SIZE,num_vgt,1,1))
 
-        # batch_in_points = np.transpose(in_points_list[batch_num],[1,0,2])
-        # batch_in_points = batch_in_points[random_ind]
-        # batch_in_points = np.transpose(batch_in_points,[1,0,2])
-
         train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
                         fadj2: f_adj_list[batch_num][2], vp_: in_points_list[batch_num], gtvp_: GT_points_list[batch_num],
                         faces_: faces_list[batch_num], v_faces_: v_faces_list[batch_num], 
                         rot_mat:tens_random_R2, rot_mat_vert:tens_random_Rv, rot_mat_gt: tens_random_Rgt,
                         sample_ind0: random_ind0, sample_ind1: random_ind1, keep_prob:dropout_prob}
-        # train_fd = {fn_: f_normals_list[batch_num], fadj0: f_adj_list[batch_num][0], fadj1: f_adj_list[batch_num][1],
-        #                 fadj2: f_adj_list[batch_num][2], vp_: batch_in_points, gtvp_: GT_points_list[batch_num],
-        #                 faces_: faces_list[batch_num], v_faces_: v_faces_list[batch_num], 
-        #                 rot_mat:tens_random_R2, rot_mat_vert:tens_random_Rv, rot_mat_gt: tens_random_Rgt,
-        #                 sample_ind: random_ind, keep_prob:dropout_prob}
-
 
         train_loss_cur = customLoss.eval(feed_dict=train_fd)
 
@@ -1070,7 +900,6 @@ def trainAccuracyNet(in_points_list, GT_points_list, faces_list, f_normals_list,
                         sample_ind0: valid_random_ind0, sample_ind1: valid_random_ind1, keep_prob:1.0}
 
                 valid_loss_cur = customLoss.eval(feed_dict=valid_fd)
-                # print("valid sample "+str(vbm)+": loss = "+str(valid_loss_cur))
                 valid_loss += valid_loss_cur
             valid_loss/=valid_samp
             print("Iteration %d, validation loss %g"%(iter, valid_loss))
@@ -1115,7 +944,7 @@ def trainDoubleLossNet(trainSet, validSet):
     f_normals_list = trainSet.in_list
     GTf_normals_list = trainSet.gt_list
     f_adj_list = trainSet.adj_list
-    v_faces_list = trainSet.v_faces_list,
+    v_faces_list = trainSet.v_faces_list
     valid_in_points_list = validSet.v_list
     valid_GT_points_list = validSet.gtv_list
     valid_faces_list = validSet.faces_list
@@ -1123,8 +952,7 @@ def trainDoubleLossNet(trainSet, validSet):
     valid_GTf_normals_list = validSet.gt_list
     valid_f_adj_list = validSet.adj_list
     valid_v_faces_list = validSet.v_faces_list
-    # random_seed = 0
-    # np.random.seed(random_seed)
+
     SAMP_NUM = 500
     # keep_rot_inv=True
 
@@ -1155,8 +983,7 @@ def trainDoubleLossNet(trainSet, validSet):
     # training data
     fn_ = tf.placeholder('float32', shape=[BATCH_SIZE, None, NUM_IN_CHANNELS], name='fn_')
     gtfn_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE, None, 3], name='gtfn_')
-    #fadj = tf.placeholder(tf.int32, shape=[BATCH_SIZE, None, K_faces], name='fadj')
-
+    
     vp_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE, None, 3], name='vp_')
     gtvp_ = tf.placeholder(tf.float32, shape=[BATCH_SIZE, None, 3], name='gtvp_')
 
@@ -1337,6 +1164,7 @@ def trainDoubleLossNet(trainSet, validSet):
         if (iter%SAVEITER == 0) and (iter>0):
             saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+iter)
             print("Ongoing training, net path = "+NETWORK_PATH)
+
             csv_filename = NETWORK_PATH+NET_NAME+".csv"
             f = open(csv_filename,'ab')
             np.savetxt(f,lossArray, delimiter=",")
@@ -3011,9 +2839,9 @@ def mainFunction():
         with open(binDumpPath+'validSetWithVertices.pkl', 'rb') as fp:
                 myVS = pickle.load(fp)
 
-        trainDoubleLossNet(myTS.v_list, myTS.gtv_list, myTS.faces_list, myTS.in_list, myTS.gt_list, myTS.adj_list, myTS.v_faces_list,
-                            myVS.v_list, myVS.gtv_list, myVS.faces_list, myVS.in_list, myVS.gt_list, myVS.adj_list, myVS.v_faces_list)
-
+        # trainDoubleLossNet(myTS, myVS)
+        trainAccuracyNet(myTS, myVS)
+        
         # --- Validate data ---
 
 
@@ -3142,9 +2970,7 @@ def mainFunction():
 
             _, edge_map, v_e_map = getFacesAdj(faces_gt)
             f_adj = getFacesLargeAdj(faces_gt,K_faces)
-            # print("WARNING!!!!! Hardcoded a change in faces adjacency")
-            # f_adj, edge_map, v_e_map = getFacesAdj(faces_gt)
-            
+
 
             faces_gt = np.array(faces_gt).astype(np.int32)
             faces = np.expand_dims(faces_gt,axis=0)
@@ -3672,12 +3498,9 @@ if __name__ == "__main__":
     parser.add_argument('--net_name', type=str, default='net')
     parser.add_argument('--running_mode', type=int, default=0)
     parser.add_argument('--coarsening_steps', type=int, default=2)
-    
-
-    #parser.add_argument('--num_classes', type=int)
 
     FLAGS = parser.parse_args()
-    
+
     # Override default results path if specified as command parameter
     if not FLAGS.results_path is None:
         RESULTS_PATH = FLAGS.results_path
@@ -3688,16 +3511,15 @@ if __name__ == "__main__":
         if not NETWORK_PATH[-1]=='/':
             NETWORK_PATH = NETWORK_PATH + "/"
 
+
     NUM_ITERATIONS = FLAGS.num_iterations
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode
-    # COARSENING_STEPS = FLAGS.coarsening_steps
-
+    
     # Experimental value on synthetic dataset:
     AVG_EDGE_LENGTH = 0.005959746586165783
 
-    #NUM_CLASSES = FLAGS.num_classes
 
     mainFunction()
 
