@@ -16,10 +16,20 @@ VALID_DATA_PATH = DATA_PATH + "Synthetic/train/valid/"             # Folder wher
 GT_DATA_PATH = DATA_PATH + "Synthetic/train/original/"             # Folder where ground truth meshes are stored. Used when preprocessing and pickling data
 
 
+
 BINARY_DUMP_PATH = BASE_PATH + "TEMP_Cleaning/bindump/"
 BINARY_DUMP_PATH = BASE_PATH + "TEMP_Cleaning/binDumpVertices/"
+
 NETWORK_PATH = BASE_PATH + "TEMP_Cleaning/netVerts/"
 RESULTS_PATH = BASE_PATH + "TEMP_Cleaning/ResultsVerts/"
+
+
+BASE_PATH = "/morpheo-nas/marmando/Pierre_Mesh_Denoising/"
+DATA_PATH = BASE_PATH + "Data/"
+TRAINING_DATA_PATH = DATA_PATH + "reconstructions/training/"
+VALID_DATA_PATH = DATA_PATH + "reconstructions/validation/"
+GT_DATA_PATH = DATA_PATH + "gt/"
+BINARY_DUMP_PATH = BASE_PATH + "BinDump/"
 
 # --- Data Parameters ---
 
@@ -54,6 +64,11 @@ def getGTFilename(filename):
     
     gtnameoffset = 7
     gtfilename = filename[:-gtnameoffset]+".obj"
+
+    gtnameoffset = 13
+    nameRoot = filename[:-gtnameoffset]
+    nameSuffix = filename[-gtnameoffset:]
+    gtfilename = "rp_"+nameRoot+"_posed"+nameSuffix
 
 
     return gtfilename

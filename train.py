@@ -3403,24 +3403,6 @@ def mainFunction():
         myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
         myValidSet = TrainingSet(maxSize,coarseningStepNum, coarseningLvlNum)
 
-        valid_f_normals_list = []
-        valid_f_adj_list = []
-        valid_v_pos_list = []
-        valid_gtv_pos_list = []
-        valid_faces_list = []
-        valid_v_faces_list = []
-        valid_gtf_normals_list = []
-
-        f_normals_list_temp = []
-        f_adj_list_temp = []
-        v_pos_list_temp = []
-        gtv_pos_list_temp = []
-        faces_list_temp = []
-        v_faces_list_temp = []
-        gtf_normals_list_temp = []
-        
-        gtFilePath = "/morpheo-nas2/marmando/DeepMeshRefinement/DTU/Data/gt/"
-
         pickleNum=0
 
         # Training set
@@ -3436,35 +3418,6 @@ def mainFunction():
                 gtfilename = getGTFilename(filename)
                 
                 myTS.addMeshWithVerticesAndGT(TRAINING_DATA_PATH, filename, GT_DATA_PATH, gtfilename)
-
-
-                # # Save batches of meshes/patches (for training only)
-                # if training_meshes_num[0]>30:
-                #     # Training
-                #     with open(binDumpPath+'f_normals_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(f_normals_list_temp, fp)
-                #     with open(binDumpPath+'f_adj_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(f_adj_list_temp, fp)
-                #     with open(binDumpPath+'v_pos_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(v_pos_list_temp, fp)
-                #     with open(binDumpPath+'gtv_pos_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(gtv_pos_list_temp, fp)
-                #     with open(binDumpPath+'faces_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(faces_list_temp, fp)
-                #     with open(binDumpPath+'v_faces_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(v_faces_list_temp, fp)
-                #     with open(binDumpPath+'gtf_normals_list'+str(pickleNum), 'wb') as fp:
-                #         pickle.dump(gtf_normals_list_temp, fp)
-                #     pickleNum+=1
-
-                #     f_normals_list_temp = []
-                #     f_adj_list_temp = []
-                #     v_pos_list_temp = []
-                #     gtv_pos_list_temp = []
-                #     faces_list_temp = []
-                #     v_faces_list_temp = []
-                #     gtf_normals_list_temp = []
-                #     training_meshes_num[0] = 0
 
         with open(binDumpPath+'trainingSetWithVertices.pkl', 'wb') as fp:
                 pickle.dump(myTS, fp)
