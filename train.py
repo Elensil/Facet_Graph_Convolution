@@ -1826,97 +1826,121 @@ def updateFacesCenter(vertices, faces, coarsening_steps):
     return [fpos0, fpos1, fpos2]
 
 
+# This is a piece of legacy code copied here to be stored for the time being.
+# Not read/controlled/tested yet
+def validateData():
+        # --- Validate data ---
 
+        # # input "raw" training data
+        # examplesNum = len(f_normals_list)
 
+        # for p in range(examplesNum):
+        #     myN = gtf_normals_list[p][0]
+        #     myN = normalize(myN)
+        #     gtf_normals_list[p] = myN[np.newaxis,:,:]
 
+        # for p in range(examplesNum):
+        #     myN = gtf_normals_list[p][0]
+        #     angColorGT = (myN+1)/2
+        #     angColorNoisy = (f_normals_list[p][0,:,:3]+1)/2
+        #     myV = v_pos_list[p][0]
+        #     myF = faces_list[p][0]
+        #     print("myV shape = ",myV.shape)
+        #     print("myF shape = ",myF.shape)
+        #     print("angColorGT shape = ",angColorGT.shape)
+        #     print("myF sample: ",myF[:4])
+        #     myF = myF.astype(np.int32)
+        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
+        #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
+        #     denoizedFile = "gtnormals_%i.obj"%p
+        #     noisyFile = "noisynormals_%i.obj"%p
+        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+        #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
 
-
-def mainFunction():
-
-    if not os.path.exists(RESULTS_PATH):
-        os.makedirs(RESULTS_PATH)
-
-    maxSize = MAX_PATCH_SIZE
-    patchSize = MAX_PATCH_SIZE
-
-    training_meshes_num = [0]
-    valid_meshes_num = [0]
-
-    # Coarsening parameters
-    # coarseningLvlNum = 3
-    coarseningStepNum = COARSENING_STEPS
-    coarseningLvlNum = COARSENING_LVLS
-
-
-    binDumpPath = BINARY_DUMP_PATH
-
-
-    running_mode = RUNNING_MODE
-    ###################################################################################################
-    #   0 - Training on all meshes in a given folder
-    #   1 - Run checkpoint on a given mesh as input
-    #   2 - Run checkpoint on all meshes in a folder. Compute angular diff and Haus dist
-    #   3 - Test mode
-    ###################################################################################################
-
-
-    
-    # Train network
-    if running_mode == 0:
-
-
-        with open(binDumpPath+'trainingSet.pkl', 'rb') as fp:
-            myTS = pickle.load(fp)
+        # Corrected GT data
 
         # examplesNum = len(f_normals_list)
-        # valid_examplesNum = len(valid_f_normals_list)
-        # print("training examples num = ",examplesNum)
-        # print("f_normals_list shape = ",f_normals_list[0].shape)
-        # print("GTfn_list shape = ",GTfn_list[0].shape)
-        # print("valid_f_normals_list shape = ",valid_f_normals_list[0].shape)
-        # print("valid_GTfn_list shape = ",valid_GTfn_list[0].shape)
-
-        with open(binDumpPath+'validSet.pkl', 'rb') as fp:
-            myVS = pickle.load(fp)
         # for p in range(examplesNum):
 
-        #     # First, filter flipped faces for GT normals:
-        #     myN = GTfn_list[p][0]
-        #     myN = normalize(myN)
+        #     # p = 6
+        #     samp = 1641
+        #     myN = gtf_normals_list[p][0]
+        #     # print("wut length = ",len(f_adj_list[p]))
         #     myAdj = f_adj_list[p][0][0]
-
-        #     filteredN = filterFlippedFaces(myN, myAdj, printAdjShape=(p==0))
-        #     GTfn_list[p] = filteredN[np.newaxis,:,:]
-
-        #     # # Optional: remove border channel for noisy input
-        #     # myN = f_normals_list[p][0]
-        #     # myNhead = myN[:,:3]
-        #     # myNtail = myN[:,4:]
-        #     # newN = np.concatenate((myNhead,myNtail),axis=1)
-        #     # f_normals_list[p] = newN[np.newaxis,:,:]
-
-        
-        
-        # for p in range(valid_examplesNum):
-
-        #     # First, filter flipped faces for GT normals:
-        #     myN = valid_GTfn_list[p][0]
-        #     myN = normalize(myN)
-        #     myAdj = valid_f_adj_list[p][0][0]
-            
+        #     # print("myAdj shape = ",myAdj.shape)
+        #     # print("myN shape = ",myN.shape)
         #     filteredN = filterFlippedFaces(myN, myAdj)
-        #     valid_GTfn_list[p] = filteredN[np.newaxis,:,:]
 
-        #     # # Optional: remove border channel for noisy input
-        #     # myN = valid_f_normals_list[p][0]
-        #     # myNhead = myN[:,:3]
-        #     # myNtail = myN[:,4:]
-        #     # newN = np.concatenate((myNhead,myNtail),axis=1)
-        #     # valid_f_normals_list[p] = newN[np.newaxis,:,:]
+        #     print("wtf samp = ",filteredN[samp])
+        #     adjN = colorFacesByAdjacency(myN, myAdj)
+        #     angColorGT = (filteredN+1)/2
+        #     adjColor = (adjN+1)/2
+
+        #     print("wtf2 samp = ",angColorGT[samp])
+
+        #     myV = v_pos_list[p][0]
+        #     myF = faces_list[p][0]
+        #     # print("myV shape = ",myV.shape)
+        #     # print("myF shape = ",myF.shape)
+        #     # print("angColorGT shape = ",angColorGT.shape)
+        #     # print("myF sample: ",myF[:4])
+        #     myF = myF.astype(np.int32)
+        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
+        #     newVAdj, newFAdj = getColoredMesh(myV, myF, adjColor)
+            
+        #     denoizedFile = "filtered_gtnormals_%i.obj"%p
+        #     adjFile = "adjnormals_%i.obj"%p
+        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+        #     write_mesh(newVAdj, newFAdj, RESULTS_PATH+adjFile)
+            
+        # Valid data
+        # examplesNum = len(valid_f_normals_list)
+        # for p in range(examplesNum):
+        #     angColorGT = (valid_gtf_normals_list[p][0]+1)/2
+        #     angColorNoisy = (valid_f_normals_list[p][0,:,:3]+1)/2
+        #     myV = valid_v_pos_list[p][0]
+        #     myF = valid_faces_list[p][0]
+        #     print("myV shape = ",myV.shape)
+        #     print("myF shape = ",myF.shape)
+        #     print("angColorGT shape = ",angColorGT.shape)
+        #     print("myF sample: ",myF[:4])
+        #     myF = myF.astype(np.int32)
+        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
+        #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
+        #     denoizedFile = "valid_gtnormals_%i.obj"%p
+        #     noisyFile = "valid_noisynormals_%i.obj"%p
+        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+        #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
+
+def train(withVerts=False):
+
+    if withVerts:
+        tsPickleName = 'trainingSetWithVertices.pkl'
+        vsPickelName = 'validSetWithVertices.pkl'
+    else:
+        tsPickleName = 'trainingSet.pkl'
+        vsPickleName = 'validSet.pkl'
+
+    # Load data
+    with open(binDumpPath+tsPickleName, 'rb') as fp:
+        myTS = pickle.load(fp)
+    with open(binDumpPath+vsPickleName, 'rb') as fp:
+        myVS = pickle.load(fp)
+    
+    if withVerts:
+        # Train network with accuracy loss on point sets (rather than normals angular loss)
+        # trainDoubleLossNet(myTS, myVS)
+        trainAccuracyNet(myTS, myVS)
+    else:
+
+        myTS.correctGTFlippedFaces()
+        myVS.correctGTFlippedFaces()
         trainNet(myTS,myVS)
 
+def infer(withVerts=False):
+
     # Simple inference, no GT mesh involved
-    elif running_mode == 1:
+    if running_mode == 1:
         noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
         noisyFolder = VALID_DATA_PATH
         # Get GT mesh
@@ -2105,103 +2129,40 @@ def mainFunction():
                 write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
 
     
-    # Train network with accuracy loss on point sets (rather than normals angular loss)
-    elif running_mode == 4:
+    
 
-        with open(binDumpPath+'trainingSetWithVertices.pkl', 'rb') as fp:
-                myTS = pickle.load(fp)
-        with open(binDumpPath+'validSetWithVertices.pkl', 'rb') as fp:
-                myVS = pickle.load(fp)
+def mainFunction():
 
-        # trainDoubleLossNet(myTS, myVS)
-        trainAccuracyNet(myTS, myVS)
-        
-        # --- Validate data ---
+    if not os.path.exists(RESULTS_PATH):
+        os.makedirs(RESULTS_PATH)
 
+    maxSize = MAX_PATCH_SIZE
+    patchSize = MAX_PATCH_SIZE
 
+    training_meshes_num = [0]
+    valid_meshes_num = [0]
 
-        # # input "raw" training data
-        # examplesNum = len(f_normals_list)
-
-        # for p in range(examplesNum):
-        #     myN = gtf_normals_list[p][0]
-        #     myN = normalize(myN)
-        #     gtf_normals_list[p] = myN[np.newaxis,:,:]
-
-        # for p in range(examplesNum):
-        #     myN = gtf_normals_list[p][0]
-        #     angColorGT = (myN+1)/2
-        #     angColorNoisy = (f_normals_list[p][0,:,:3]+1)/2
-        #     myV = v_pos_list[p][0]
-        #     myF = faces_list[p][0]
-        #     print("myV shape = ",myV.shape)
-        #     print("myF shape = ",myF.shape)
-        #     print("angColorGT shape = ",angColorGT.shape)
-        #     print("myF sample: ",myF[:4])
-        #     myF = myF.astype(np.int32)
-        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
-        #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
-        #     denoizedFile = "gtnormals_%i.obj"%p
-        #     noisyFile = "noisynormals_%i.obj"%p
-        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-        #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
-
-        # Corrected GT data
-
-        # examplesNum = len(f_normals_list)
-        # for p in range(examplesNum):
-
-        #     # p = 6
-        #     samp = 1641
-        #     myN = gtf_normals_list[p][0]
-        #     # print("wut length = ",len(f_adj_list[p]))
-        #     myAdj = f_adj_list[p][0][0]
-        #     # print("myAdj shape = ",myAdj.shape)
-        #     # print("myN shape = ",myN.shape)
-        #     filteredN = filterFlippedFaces(myN, myAdj)
-
-        #     print("wtf samp = ",filteredN[samp])
-        #     adjN = colorFacesByAdjacency(myN, myAdj)
-        #     angColorGT = (filteredN+1)/2
-        #     adjColor = (adjN+1)/2
-
-        #     print("wtf2 samp = ",angColorGT[samp])
-
-        #     myV = v_pos_list[p][0]
-        #     myF = faces_list[p][0]
-        #     # print("myV shape = ",myV.shape)
-        #     # print("myF shape = ",myF.shape)
-        #     # print("angColorGT shape = ",angColorGT.shape)
-        #     # print("myF sample: ",myF[:4])
-        #     myF = myF.astype(np.int32)
-        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
-        #     newVAdj, newFAdj = getColoredMesh(myV, myF, adjColor)
-            
-        #     denoizedFile = "filtered_gtnormals_%i.obj"%p
-        #     adjFile = "adjnormals_%i.obj"%p
-        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-        #     write_mesh(newVAdj, newFAdj, RESULTS_PATH+adjFile)
-            
-        # Valid data
-        # examplesNum = len(valid_f_normals_list)
-        # for p in range(examplesNum):
-        #     angColorGT = (valid_gtf_normals_list[p][0]+1)/2
-        #     angColorNoisy = (valid_f_normals_list[p][0,:,:3]+1)/2
-        #     myV = valid_v_pos_list[p][0]
-        #     myF = valid_faces_list[p][0]
-        #     print("myV shape = ",myV.shape)
-        #     print("myF shape = ",myF.shape)
-        #     print("angColorGT shape = ",angColorGT.shape)
-        #     print("myF sample: ",myF[:4])
-        #     myF = myF.astype(np.int32)
-        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
-        #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
-        #     denoizedFile = "valid_gtnormals_%i.obj"%p
-        #     noisyFile = "valid_noisynormals_%i.obj"%p
-        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-        #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
+    # Coarsening parameters
+    # coarseningLvlNum = 3
+    coarseningStepNum = COARSENING_STEPS
+    coarseningLvlNum = COARSENING_LVLS
 
 
+    binDumpPath = BINARY_DUMP_PATH
+
+
+    running_mode = RUNNING_MODE
+    ###################################################################################################
+    #   0 - Training on all meshes in a given folder
+    #   1 - Run checkpoint on a given mesh as input
+    #   2 - Run checkpoint on all meshes in a folder. Compute angular diff and Haus dist
+    #   3 - Test mode
+    ###################################################################################################
+
+
+    
+    train()
+    
    
     print("Complete: mode = "+str(RUNNING_MODE)+", net path = "+NETWORK_PATH)
     #

@@ -1,13 +1,16 @@
 from settings import *
 from trainingSet import *
-from __future__ import division
 import pickle
 import os
 
 
-
 def pickleData(withVerts=False):
-    
+
+    coarseningStepNum = COARSENING_STEPS
+    coarseningLvlNum = COARSENING_LVLS
+    maxSize = MAX_PATCH_SIZE
+    binDumpPath = BINARY_DUMP_PATH
+
     myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
     myValidSet = TrainingSet(maxSize,coarseningStepNum, coarseningLvlNum)
     if withVerts:
@@ -18,10 +21,8 @@ def pickleData(withVerts=False):
         vsPickleName = 'validSet.pkl'
     # Training set
     for filename in os.listdir(TRAINING_DATA_PATH):
-        if training_meshes_num[0]>30:
-                break
-            if myTS.mesh_count>10:
-                break
+        if myTS.mesh_count>10:
+            break
         if (filename.endswith(".obj")):
             print("Adding %s (%i)"%(filename, myTS.mesh_count))
             gtfilename = getGTFilename(filename)
@@ -48,7 +49,9 @@ def pickleData(withVerts=False):
 
 if __name__ == "__main__":
 
-	if not os.path.exists(BINARY_DUMP_PATH):
+    if not os.path.exists(BINARY_DUMP_PATH):
         os.makedirs(BINARY_DUMP_PATH)
         
-	pickleData(INCLUDE_VERTICES)
+    pickleData(INCLUDE_VERTICES)
+
+    print("Preprocessing complete. Dump files saved to "+ BINARY_DUMP_PATH)

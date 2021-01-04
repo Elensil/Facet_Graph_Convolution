@@ -455,6 +455,19 @@ class PreprocessedData(object):
 
         return vNum, facesNum
 
+    # Filter flipped faces for GT normals
+    def correctGTFlippedFaces(self):
+        curGtList = self.gt_list
+        
+        for p in range(len(curGtList)):
+            myN = curGtList[p][0]
+            myN = normalize(myN)
+            myAdj = self.adj_list[p][0][0]
+
+            filteredN = filterFlippedFaces(myN, myAdj, printAdjShape=(p==0))
+            self.gt_list[p] = filteredN[np.newaxis,:,:]
+
+
 
 
 
