@@ -3,90 +3,6 @@ from utils import *
 from settings import *
 from lib.coarsening import *
 
-class MeshPair():
-
-    K_faces = 23
-
-    def __init__(self, inputFilePath, filename, gtFilePath, gtFileName):
-
-        self.V,_,_, self.F, _ = load_mesh(inputFilePath, filename, 0, False)
-        self.N = computeFacesNormals(self.V, self.F)
-
-        self.gtV,_,_,_,_ = load_mesh(gtFilePath, gtFileName, 0, False)
-        self.gtN = computeFacesNormals(self.gtV, self.F)
-
-        self.P = getTrianglesBarycenter(self.V, self.F)
-
-        self.adj = getFacesLargeAdj(self.F, K_faces)
-
-        
-# class Patch():
-
-#     def __init__(self, mesh, patchSize, faceSeed, mask):
-
-#         self.adj, self.faceInd, slef.nextSeed = getGraphPatch_wMask(mesh.adj, patchSize, faceSeed, mask)   
-
-#         self.N = mesh.N[self.faceInd]
-#         self.P = mesh.P[self.faceInd]
-#         self.gtN = mesh.gtN[self.faceInd]
-#         self.size = self.faceInd.shape[0]
-#         self.K = mesh.adj.shape[1]
-
-#     def coarsen(self, coarseningLvlNum, coarseningStepNum):
-#         # Convert to sparse matrix and coarsen graph
-#         coo_adj = listToSparseWNormals(self.adj, self.P, self.N)
-#         has_sat = True
-
-#         while has_sat:
-#             print("Coarsening...")
-#             tc0 = time.clock()
-#             adjs, newToOld = coarsen(coo_adj,(coarseningLvlNum-1)*coarseningStepNum)
-#             tc1 = time.clock()
-#             print("Coarsening complete ("+str(1000*(tc1-tc0))+"ms)")
-#             has_sat = False
-#             # Change adj format
-#             fAdjs = []
-#             for lvl in range(coarseningLvlNum):
-#                 tsl0 = time.clock()
-#                 fadj, has_sat_temp = sparseToList(adjs[coarseningStepNum*lvl],self.K)
-#                 print("sparse to list conversion ("+str(1000*(time.clock()-tsl0))+"ms)")
-#                 fadj = np.expand_dims(fadj, axis=0)
-#                 fAdjs.append(fadj)
-#                 has_sat = has_sat or has_sat_temp
-#         self.adjPyramid = fAdjs[]
-#         self.perm = newToOld
-
-#         self.numFakeNodes = len(newToOld) - self.size
-                    
-#                     padding6 =np.zeros((self.numFakeNodes,patchFNormals.shape[1]))
-#         padding3 =np.zeros((self.numFakeNodes,3))
-#         self.N = np.concatenate((self.N, padding3),axis=0)
-#         self.P = np.concatenate((self.P, padding3),axis=0)
-#         self.gtN = np.concatenate((self.gtN, padding3),axis=0)
-#         # Reorder nodes
-#         self.N = self.N[newToOld]
-#         self.P = self.P[newToOld]
-#         self.gtN = self.gtN[newToOld]
-
-                    
-
-# class InferenceMesh(PreprocessedData):
-
-
-class myGenData():
-    def __init__(self, maxSize, coarseningStepNum, coarseningLvlNum):
-        self.in_list = []
-        self.gt_list = []
-        self.adj_list = []
-        self.mesh_count = 0
-        self.num_faces = []
-        self.patch_indices = []
-        self.permutations = []
-        self.maxSize = maxSize
-        self.patchSize = maxSize
-        self.coarseningStepNum = coarseningStepNum
-        self.coarseningLvlNum = coarseningLvlNum
-
 class PreprocessedData(object):
     def __init__(self, maxSize, coarseningStepNum, coarseningLvlNum):
         self.in_list = []
@@ -109,39 +25,6 @@ class PreprocessedData(object):
         self.gtv_list = []
         self.faces_list = []
         self.v_faces_list = []
-
-
-    # def addMeshNew(inputFilePath, filename, gtFilePath, gtFileName):
-
-    #     myMesh = MeshPair(inputFilePath, filename, gtFilePath, gtFileName)
-
-    #     faceCheck = np.zeros(facesNum)
-    #     faceRange = np.arange(facesNum)
-    #     if facesNum>self.maxSize:
-    #         print("Dividing mesh into patches: %i faces (%i max allowed)"%(facesNum,maxSize))
-    #         patchNum = 0
-    #         nextSeed = -1
-    #         while(np.any(faceCheck==0)):
-    #             toBeProcessed = faceRange[faceCheck==0]
-    #             if nextSeed==-1:
-    #                 faceSeed = np.random.randint(toBeProcessed.shape[0])
-    #                 faceSeed = toBeProcessed[faceSeed]
-    #             else:
-    #                 faceSeed = nextSeed
-    #                 if faceCheck[faceSeed]==1:
-    #                     print("ERROR: Bad seed returned!!")
-    #                     return
-
-    #             curPatch = Patch(myMesh, patchSize, faceSeed, faceCheck)
-
-    #             faceCheck[curPatch.faceInd] = 1
-
-    #             if curPatch.size<100:
-    #                 continue
-
-    #             if coarseningLvlNum>1:
-    #                 curPatch.coarsen(self.coarseningLvlNum, self.coarseningStepNum)
-
 
     def addMesh(self, inputFilePath, filename):
         V,_,_, faces, _ = load_mesh(inputFilePath, filename, 0, False)
