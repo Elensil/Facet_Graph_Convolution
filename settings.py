@@ -26,8 +26,8 @@ RESULTS_PATH = BASE_PATH + "TEMP_Cleaning/ResultsVerts/"
 
 BASE_PATH = "/morpheo-nas/marmando/Pierre_Mesh_Denoising/"
 DATA_PATH = BASE_PATH + "Data/"
-TRAINING_DATA_PATH = DATA_PATH + "reconstructions/training/"
-VALID_DATA_PATH = DATA_PATH + "reconstructions/validation/"
+TRAINING_DATA_PATH = DATA_PATH + "training/"
+VALID_DATA_PATH = DATA_PATH + "validation/"
 GT_DATA_PATH = DATA_PATH + "gt/"
 BINARY_DUMP_PATH = BASE_PATH + "BinDump/"
 
@@ -40,6 +40,8 @@ TRAINING_DATA_REDUNDANCY = 1        # When preprocessing training data, add each
 
 
 # --- Network Parameters ---
+
+INCLUDE_VERTICES = False            # False by default. Set to True to use both extensions presented in the paper. See main README.md for more details
 
 SAVEITER = 500                     # During training, a checkpoint is saved every SAVEITER iterations.
 

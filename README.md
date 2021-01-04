@@ -24,8 +24,8 @@ Please, bear in mind this is a research project, and we are currently working on
 ## Usage
 
 - Before you start, have a look have the settings.py file and set the path parameters. Make sure the specified folders exist. You can have a look at all the parameters, and you can tweak some of them once you are familiar with the whole program. You may have to if you have some memory issues.
-- Raw mesh data need to be preprocessed before training. Run ... to preprocess your training dataset. This might take some time depending on your amount of data. By default, data will be saved to /this/path/
-- Once you have binary dump files of your preprocessed training set, run ... to train a model.
+- Raw mesh data need to be preprocessed before training. Run preprocess.py to preprocess your training dataset. This might take some time depending on your amount of data. By default, data will be saved to BINARY_DUMP_PATH parameter in settings.
+- Once you have generated binary dump files of your preprocessed training set, run ... to train a model.
 
 - For inference, run infer.py --model --input_path --output_path ??
 
@@ -33,6 +33,11 @@ Please, bear in mind this is a research project, and we are currently working on
 ## Tips
 
 - If you run out of memory at runtime, try to lower the value for MAX_PATCH_SIZE in settings.py. For training, you will have to re-generate training binaries with the new parameter, for it to take effect.
+- By default, the program will run without the two extensions presented at the end of the paper, i.e. with a loss on face normals only, and without multi-scale normal estimation. You can change this setting with the [...] parameter. If so, please be aware that:
+	- You will need to run the preprocessing step with this setting. (Data generated in this manner can be used for both modes, but they will take longer to generate and take up more space, which is why a lighter version is computed by default).
+	- Training will be longer, and you might need more data to get good results
+	- Results might look less smooth, and it might be tricky to get a better accuracy, depending on your data. Some potential leeway is still hard-coded. Do not hesitate to contact us for more in-depth tests.
+	
 
 ## Citation
 If you use this code, please cite the following:

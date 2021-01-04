@@ -1828,12 +1828,13 @@ def updateFacesCenter(vertices, faces, coarsening_steps):
 
 
 
+
+
+
 def mainFunction():
 
     if not os.path.exists(RESULTS_PATH):
         os.makedirs(RESULTS_PATH)
-    if not os.path.exists(BINARY_DUMP_PATH):
-        os.makedirs(BINARY_DUMP_PATH)
 
     maxSize = MAX_PATCH_SIZE
     patchSize = MAX_PATCH_SIZE
@@ -1859,33 +1860,7 @@ def mainFunction():
     ###################################################################################################
 
 
-    if RUNNING_MODE == -5: # PICKLEEEEEEEEEEE
-        
-        myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
-        # Training set
-        for filename in os.listdir(TRAINING_DATA_PATH):
-            if myTS.mesh_count>10:
-                break
-
-            if (filename.endswith(".obj")):
-                print("Adding " + filename + " (" + str(myTS.mesh_count) + ")")
-                gtfilename = getGTFilename(filename)
-                for it in range(TRAINING_DATA_REDUNDANCY):
-                    myTS.addMeshWithGT(TRAINING_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
-
-        with open(binDumpPath+'trainingSet.pkl','wb') as fp:
-            pickle.dump(myTS,fp)
-
-        myValidTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
-        # Validation set
-        for filename in os.listdir(VALID_DATA_PATH):
-            if (filename.endswith(".obj")):
-                gtfilename = getGTFilename(filename)
-                myValidTS.addMeshWithGT(VALID_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
-
-        with open(binDumpPath+'validSet.pkl','wb') as fp:
-            pickle.dump(myValidTS,fp)
-
+    
     # Train network
     if running_mode == 0:
 
@@ -2227,44 +2202,7 @@ def mainFunction():
         #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
 
 
-    # Load and pickle training data.
-    elif running_mode == 11:
-
-        myTS = TrainingSet(maxSize, coarseningStepNum, coarseningLvlNum)
-        myValidSet = TrainingSet(maxSize,coarseningStepNum, coarseningLvlNum)
-
-        pickleNum=0
-
-        # Training set
-        for filename in os.listdir(TRAINING_DATA_PATH):
-            #print("training_meshes_num start_iter " + str(training_meshes_num))
-            if training_meshes_num[0]>30:
-                break
-            if myTS.mesh_count>10:
-                break
-
-            if (filename.endswith(".obj")):
-                print("Adding %s (%i)"%(filename, myTS.mesh_count))
-                gtfilename = getGTFilename(filename)
-                
-                myTS.addMeshWithVerticesAndGT(TRAINING_DATA_PATH, filename, GT_DATA_PATH, gtfilename)
-
-        with open(binDumpPath+'trainingSetWithVertices.pkl', 'wb') as fp:
-                pickle.dump(myTS, fp)
-
-
-        
-        # Validation set
-        for filename in os.listdir(VALID_DATA_PATH):
-            if (filename.endswith(".obj")):
-                gtfilename = getGTFilename(filename)
-                
-                myValidSet.addMeshWithVerticesAndGT(VALID_DATA_PATH, filename, GT_DATA_PATH, gtfilename)
-                
-        # Validation
-        with open(binDumpPath+'validSetWithVertices.pkl', 'wb') as fp:
-            pickle.dump(myValidSet, fp)
-
+   
     print("Complete: mode = "+str(RUNNING_MODE)+", net path = "+NETWORK_PATH)
     #
 
