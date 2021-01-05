@@ -7,7 +7,7 @@ This repository provides all necessary code and information to reproduce the wor
 [Matthieu Armando](http://morpheo.inrialpes.fr/people/armando/), [Jean-Sébastien Franco](http://morpheo.inrialpes.fr/~franco/), [Edmond Boyer](http://morpheo.inrialpes.fr/people/Boyer/),
 [[HAL]](https://hal.inria.fr/hal-02284101)
 
-Please, bear in mind this is a research project, and we are currently working on making its installation and usage as user-friendly as possible. If you have issues, questions, or suggestions, do not hesitate to [contact us](https://gitlab.inria.fr/marmando/deep-mesh-denoising#contact).
+Please, bear in mind this is a research project, and we are currently working on making its installation and usage as user-friendly as possible. If you have issues, questions, or suggestions, do not hesitate to [contact us](#contact).
  
 ### Abstract
 
