@@ -38,6 +38,9 @@ def infer(withVerts=False):
 
     noisyFolder = VALID_DATA_PATH
 
+    coarseningStepNum = COARSENING_STEPS
+    coarseningLvlNum = COARSENING_LVLS
+
     # Get GT mesh
     for noisyFile in os.listdir(noisyFolder):
 
@@ -93,7 +96,7 @@ def infer(withVerts=False):
             if withVerts:
                 upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(inputMesh)
             else:
-                upV0, upN0 = inferNetOld(myTS)
+                upV0, upN0 = inferNetOld(inputMesh)
 
             print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
@@ -124,6 +127,38 @@ def infer(withVerts=False):
     
 
 if __name__ == "__main__":
+
+	print("Tensorflow version = ", tf.__version__)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--results_path', type=str, default=None)
+    parser.add_argument('--network_path', type=str)
+    parser.add_argument('--num_iterations', type=int, default=20000)
+    parser.add_argument('--debug', type=bool, default=False)
+    parser.add_argument('--device', type=str, default='/gpu:0')
+    parser.add_argument('--net_name', type=str, default='net')
+    parser.add_argument('--running_mode', type=int, default=0)
+    parser.add_argument('--coarsening_steps', type=int, default=2)
+
+    FLAGS = parser.parse_args()
+
+    # Override default results path if specified as command parameter
+    if not FLAGS.results_path is None:
+        RESULTS_PATH = FLAGS.results_path
+        if not RESULTS_PATH[-1]=='/':
+            RESULTS_PATH = RESULTS_PATH + "/"
+    if not FLAGS.network_path is None:
+        NETWORK_PATH = FLAGS.network_path
+        if not NETWORK_PATH[-1]=='/':
+            NETWORK_PATH = NETWORK_PATH + "/"
+
+
+    NUM_ITERATIONS = FLAGS.num_iterations
+    DEVICE = FLAGS.device
+    NET_NAME = FLAGS.net_name
+    RUNNING_MODE = FLAGS.running_mode
+    DEBUG = FLAGS.debug
+
 
 	infer(withVerts=INCLUDE_VERTICES)
 	print("Inference complete. Results saved to "+ RESULTS_PATH)

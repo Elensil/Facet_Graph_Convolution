@@ -38,7 +38,7 @@ def inferNetOld(inputMesh):
     with tf.Graph().as_default():
 
         sess = tf.InteractiveSession()
-        if(FLAGS.debug):    #launches debugger at every sess.run() call
+        if(DEBUG):    #launches debugger at every sess.run() call
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
 
@@ -170,7 +170,7 @@ def inferNet(inputMesh):
         np.random.seed(random_seed)
 
         sess = tf.InteractiveSession()
-        if(FLAGS.debug):    #launches debugger at every sess.run() call
+        if(DEBUG):    #launches debugger at every sess.run() call
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
 
@@ -404,7 +404,7 @@ def trainNet(trainSet, validSet):
     # sess = tf.InteractiveSession(config=tf.ConfigProto( allow_soft_placement=True, log_device_placement=False))
     # sess = tf.InteractiveSession()
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
-    if(FLAGS.debug):    #launches debugger at every sess.run() call
+    if(DEBUG):    #launches debugger at every sess.run() call
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
 
@@ -669,7 +669,7 @@ def trainAccuracyNet(trainSet, validSet):
 
     # sess = tf.InteractiveSession()
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    if(FLAGS.debug):    #launches debugger at every sess.run() call
+    if(DEBUG):    #launches debugger at every sess.run() call
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
 
@@ -958,7 +958,7 @@ def trainDoubleLossNet(trainSet, validSet):
 
     # sess = tf.InteractiveSession()
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    if(FLAGS.debug):    #launches debugger at every sess.run() call
+    if(DEBUG):    #launches debugger at every sess.run() call
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
 
@@ -1990,6 +1990,7 @@ if __name__ == "__main__":
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode
+    DEBUG = FLAGS.debug
     
     # Experimental value on synthetic dataset:
     AVG_EDGE_LENGTH = 0.005959746586165783
