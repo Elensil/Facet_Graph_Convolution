@@ -29,14 +29,12 @@ else:
 
 
 
-def infer(withVerts=False):
+def infer(noisyFolder, withVerts=False):
     if not os.path.exists(RESULTS_PATH):
         os.makedirs(RESULTS_PATH)
 
     maxSize = MAX_PATCH_SIZE
     patchSize = MAX_PATCH_SIZE
-
-    noisyFolder = VALID_DATA_PATH
 
     coarseningStepNum = COARSENING_STEPS
     coarseningLvlNum = COARSENING_LVLS
@@ -138,7 +136,8 @@ if __name__ == "__main__":
     parser.add_argument('--net_name', type=str, default='net')
     parser.add_argument('--running_mode', type=int, default=0)
     parser.add_argument('--coarsening_steps', type=int, default=2)
-
+    parser.add_argument('--input_dir', type=str, default=None)
+    
     FLAGS = parser.parse_args()
 
     # Override default results path if specified as command parameter
@@ -151,11 +150,16 @@ if __name__ == "__main__":
         if not NETWORK_PATH[-1]=='/':
             NETWORK_PATH = NETWORK_PATH + "/"
 
+    if FLAGS.input_dir is None:
+        INPUT_DIR = VALID_DATA_PATH
+    else:
+        INPUT_DIR = FLAGS.input_dir
 
     NUM_ITERATIONS = FLAGS.num_iterations
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode
 
-    infer(withVerts=INCLUDE_VERTICES)
+
+    infer(INPUT_DIR, withVerts=INCLUDE_VERTICES)
     print("Inference complete. Results saved to "+ RESULTS_PATH)
