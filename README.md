@@ -65,3 +65,6 @@ Please check the [license terms](https://gitlab.inria.fr/marmando/deep-mesh-deno
 ## Acknowledgements
 
 The GCN code was originally built on top of the [FeaStNet](https://github.com/nitika-verma/FeaStNet) project. As such, some bits were written by [Nitika Verma](https://nitika-verma.github.io/).
+
+## Misc
+- Some visualization tools used in the paper (heatmaps of angular error, coloring faces by predicted normals, etc.) have not been included. They might be added in the future.

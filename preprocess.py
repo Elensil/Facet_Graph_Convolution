@@ -21,8 +21,6 @@ def pickleData(withVerts=False):
         vsPickleName = 'validSet.pkl'
     # Training set
     for filename in os.listdir(TRAINING_DATA_PATH):
-        if myTS.mesh_count>10:
-            break
         if (filename.endswith(".obj")):
             print("Adding %s (%i)"%(filename, myTS.mesh_count))
             gtfilename = getGTFilename(filename)
