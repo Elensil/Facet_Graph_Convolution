@@ -65,6 +65,7 @@ Please check the [license terms](https://gitlab.inria.fr/marmando/deep-mesh-deno
 ## Acknowledgements
 
 The GCN code was originally built on top of the [FeaStNet](https://github.com/nitika-verma/FeaStNet) project. As such, some bits were written by [Nitika Verma](https://nitika-verma.github.io/).
+The graph coarsening method we used is the one presented in "Convolutional Neural Networks on Graphs with Fast Localized Spectral Filtering", and we make use of [their code](https://github.com/mdeff/cnn_graph) (with minor corrections).
 
 ## Misc
 - Some visualization tools used in the paper (heatmaps of angular error, coloring faces by predicted normals, etc.) have not been included. They might be added in the future.

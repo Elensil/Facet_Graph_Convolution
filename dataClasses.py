@@ -248,7 +248,7 @@ class PreprocessedData(object):
         f_pos0 = getTrianglesBarycenter(V0, faces0, normalize=True)
         # f_pos0 = np.reshape(f_pos0,(-1,3))
 
-        f_area0 = np.expand_dims(getTrianglesArea(V0,faces0, normalize=True), axis=1)
+        # f_area0 = np.expand_dims(getTrianglesArea(V0,faces0, normalize=True), axis=1)
 
         f_borderCh0 = np.expand_dims(getBorderFaces(faces0),axis=1)
 

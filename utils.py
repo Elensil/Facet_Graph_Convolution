@@ -11,33 +11,12 @@ except ImportError:
 import scipy.sparse
 import itertools
 
-from halfedge_mesh_Matt import *
 from settings import *
-#import h5py
 TF_VERSION = int(tf.__version__[0])
 if TF_VERSION==2:
     import tensorflow.compat.v1 as tf
 else:
     import tensorflow as tf
-
-
-def one_hot_encoding_batch_per_point(y, num_classes):
-	y_one_hot = np.zeros((y.shape[0], y.shape[1], num_classes))
-	for i in xrange(y.shape[0]):
-		for j in xrange(y.shape[1]):
-				y_one_hot[i, j, y[i][j]] = 1
-	return y_one_hot
-
-def one_hot_encoding_batch(y, num_classes):
-	y_one_hot = np.zeros((y.shape[0], num_classes))
-	for i in xrange(y.shape[0]):
-		y_one_hot[i, y[i]] = 1
-	return y_one_hot
-
-def one_hot_encoding(y, num_classes):
-	y_one_hot = np.zeros((num_classes))
-	y_one_hot[y] = 1
-	return y_one_hot
 
 
 # -------------------------------------------------------------
@@ -310,122 +289,6 @@ def getFacesLargeAdj(faces, K):     # First try: don't filter duplicate for edge
 
     return fadj
 
-# HALFEDGES!!
-def getFacesOrderedAdj(faces,K):
-
-    vnum = np.max(faces)+1
-    fakeV = np.zeros([vnum,3])
-
-    meshHE = HalfedgeMesh(fakeV,faces)
-
-    fnum = faces.shape[0]
-    fadj = np.zeros([fnum,K-1], dtype=np.int32)-1     # triangular faces only
-    # find = np.zeros([fnum], dtype=np.int8)           # Keep track of current writing index for each face (in fadj)
-
-
-    def getNextEdge(curHE):
-
-        nominalNE = curHE.next.opposite
-        if nominalNE is not None:
-            return nominalNE
-        elif curHE.opposite is None:
-            return None
-        else:
-            prevEdge = curHE.opposite.prev
-            while prevEdge.opposite is not None:
-                prevEdge = prevEdge.opposite.prev
-            return prevEdge
-
-    for f in range(fnum):
-        # print("face %i"%f)
-        v0 = faces[f,0]
-        v1 = faces[f,1]
-        neighCount = 0
-
-        # There are three loops, one for each neighbouring vertex.
-        # The last face of each loop is skipped, since it is also the first face of the next loop
-        # If we reach the last face, or a border edge, we break from the loop and go to the next one
-        
-        endHE = meshHE.facets[f].halfedge.prev
-        endHE2 = meshHE.facets[f].halfedge.next
-        endHE3 = meshHE.facets[f].halfedge
-
-        # startHE = meshHE.facets[f].halfedge.opposite
-        # startHE2 = meshHE.facets[f].halfedge.prev.opposite
-        # startHE3 = meshHE.facets[f].halfedge.next.opposite
-        startHE = getNextEdge(endHE)
-        startHE2 = getNextEdge(endHE2)
-        startHE3 = getNextEdge(endHE3)
-
-        curHE = startHE
-        # print("1st loop")
-        while (neighCount<(K-1)) and (curHE is not None):
-            # We have looped around first vertex, and reached the current face: check and move to the next 
-            if (curHE.next.opposite is not None) and (curHE.next.opposite == endHE):
-                break
-
-            fadj[f,neighCount] = curHE.facet.index
-            # print("Adding neighbour %i [%i,%i,%i]"%(curHE.facet.index, curHE.facet.halfedge.vertex.index,curHE.facet.halfedge.next.vertex.index,curHE.facet.halfedge.prev.vertex.index))
-            curHE = getNextEdge(curHE)
-            neighCount += 1
-
-            if curHE is None:
-                # print("border edge")
-                break
-            if curHE == endHE:
-                break
-            
-
-        # second vertex
-        # curHE = curHE.opposite.next.opposite
-        curHE = startHE2
-        # print("2nd loop")
-        while (neighCount<(K-1)) and (curHE is not None):
-            # We have looped around second vertex, and reached the current face: check and move to the next
-            if (curHE.next.opposite is not None) and (curHE.next.opposite == endHE2):
-                break
-
-            fadj[f,neighCount] = curHE.facet.index
-            # print("Adding neighbour %i [%i,%i,%i]"%(curHE.facet.index, curHE.facet.halfedge.vertex.index,curHE.facet.halfedge.next.vertex.index,curHE.facet.halfedge.prev.vertex.index))
-            curHE = getNextEdge(curHE)
-            neighCount += 1
-            if curHE is None:
-                # print("border edge")
-                break
-            if curHE == endHE2:
-                break
-
-            
-            
-
-        # third vertex
-        # curHE = curHE.opposite.next.opposite
-        curHE = startHE3
-        # print("3rd loop")
-        while (neighCount<(K-1)) and (curHE is not None):
-
-            # We have looped around third vertex, and reached the current face: check and move to the next
-            if (curHE.next.opposite is not None) and (curHE.next.opposite == endHE3):
-                break
-
-            fadj[f,neighCount] = curHE.facet.index
-            # print("Adding neighbour %i [%i,%i,%i]"%(curHE.facet.index, curHE.facet.halfedge.vertex.index,curHE.facet.halfedge.next.vertex.index,curHE.facet.halfedge.prev.vertex.index))
-            curHE = getNextEdge(curHE)
-            neighCount += 1
-            if curHE is None:
-                # print("border edge")
-                break
-            if curHE == endHE3:
-                break
-
-            
-            
-
-    fadj = fadj+1
-    fadj = np.concatenate([np.expand_dims(np.arange(fnum)+1,axis=-1),fadj],axis=-1)
-
-    return fadj
-
 
 def getVerticesAdj(points, faces, K):
 
@@ -645,7 +508,6 @@ def load_mesh(path,filename,K,bGetAdj):
 
     
     vertices = np.array(vertices).astype(np.float32)
-    # print("vertices shape: "+str(vertices.shape))
     nb_vert = vertices.shape[0]
 
     # If 16 bits are not enough to write vertex indices, use 32 bits 
@@ -678,6 +540,8 @@ def load_mesh(path,filename,K,bGetAdj):
             #   for v in range(faces.shape[1]):     # = 3
             #       faces[f,v] = new_vert_ind[faces[f,v]]
 
+            #print("Duplicated vertices removed")
+
 
     # This line replaces the above block that cleans duplicated vertices
     # Better not to use it when input data is already fine: risks of merging vertices (creating non-manifold points)
@@ -685,8 +549,6 @@ def load_mesh(path,filename,K,bGetAdj):
     new_vertices = vertices
 
     #WARNING: Faces are zero-indexed!!! (not like in obj files)
-
-    #print("Duplicated vertices removed")
 
     #adjacency graph
     # Indices start at one and vertices must index themselves!
@@ -702,21 +564,14 @@ def load_mesh(path,filename,K,bGetAdj):
         adj = np.zeros((new_nb_vert,K))                 # create adj list
         temp_adj = np.zeros((new_nb_vert,K-1,2))        # create list of edges?
         free_ind = np.zeros(new_nb_vert,np.uint8)       # Number of registered neighbours, per vertex (so as not to exceed limit K)
-        # print("adj shape: "+str(adj.shape))
-        # print("free_ind shape: "+str(free_ind.shape))
         for i in range(new_nb_vert):
             adj[i,0] = i+1              # add vertex to its own neighbourhood   (indexed from 1)
 
         for f in range(faces.shape[0]):
-            # v1 = new_vert_ind[faces[f,0]-1]
-            # v2 = new_vert_ind[faces[f,1]-1]
-            # v3 = new_vert_ind[faces[f,2]-1]
             v1 = faces[f,0]
             v2 = faces[f,1]
             v3 = faces[f,2]
 
-
-            #print("v1 = "+str(v1)+", free_ind[v1] = "+str(free_ind[v1]))
 
             # For each of the 3 vertices, add opposite edge to temp_adj
             if(free_ind[v1]==(K-1)):
@@ -781,9 +636,6 @@ def load_mesh(path,filename,K,bGetAdj):
 
 
 def write_xyz(vec, strFileName):
-
-    #outputFile = open(strFileName,"w")
-
     np.savetxt(strFileName, vec)
 
 def write_coff(vec, strFileName):
@@ -797,7 +649,6 @@ def write_coff(vec, strFileName):
     outputFile.write(str(vec.shape[0])+' 0 0\n')
     for row in range(vec.shape[0]):
         outputFile.write("%f %f %f %d %d %d\n"%(vec[row,0], vec[row,1], vec[row,2], vec[row,3], vec[row,4], vec[row,5]))
-    # np.savetxt(outputFile, vec)
     outputFile.close
 
 def write_mesh(vl,fl,strFileName):
@@ -809,16 +660,11 @@ def write_mesh(vl,fl,strFileName):
     vl = vl.flatten()
 
     vstr = ["%.6f" % number for number in vl]
-    #print("vstr shape: "+str(vstr.shape))
     vstr = np.array(vstr)
 
     vstr = np.reshape(vstr, (vnum,v_ch))
 
-    #vstr = vl.astype('|S8')
     vstr = np.concatenate((vVec,vstr),axis=1)
-
-    #writeStringArray(vstr, strFileName, fl)
-
 
     outputFile = open(strFileName,"w")
 
@@ -829,8 +675,6 @@ def write_mesh(vl,fl,strFileName):
         outputFile.write('\n')
 
     # # write vertices
-    # np.savetxt(outputFile,vstr, delimiter=",")
-
     #transform to one-indexed for obj format
     faces = fl
     faces = faces+1
@@ -2675,179 +2519,6 @@ def getAverageEdgeLength(vl, fl, normalize=False):
     lt = np.concatenate([l1,l2,l3], axis=0)
 
     return np.mean(lt), lt.shape[0]
-
-
-# Copied from tensorflow.org (Tensorboard tutorial)
-def variable_summaries(var):
-  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-  with tf.name_scope('summaries'):
-    mean = tf.reduce_mean(var)
-    tf.summary.scalar('mean', mean)
-    with tf.name_scope('stddev'):
-      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev', stddev)
-    tf.summary.scalar('max', tf.reduce_max(var))
-    tf.summary.scalar('min', tf.reduce_min(var))
-    tf.summary.histogram('histogram', var)
-
-
-# Derived from the tensorflow version in model.py (simpler. Because of numpy or not only?)
-def filterNumpyAdj(x, adj, zeroValue):
-    
-    batch_size = x.shape[0]
-    N = x.shape[1]
-    # x : [batch, N, ch]
-    K = adj.shape[2]
-
-    myRange = np.arange(N+1)
-    # [N]
-    adjb = adj[0,:,:]
-    newAdjLst = []
-    for b in range(batch_size):
-        xb = x[b,:,:]
-        # [N, ch]
-        zeroNodes = np.all((xb==zeroValue),axis=-1)
-        # [N]
-        zeroNodesPad = np.concatenate((np.array[False],zeroNodes))
-        # [N+1]
-
-        # Pad adj mat with the "all zero" row to replace other rows
-        adjbPad = np.concatenate((np.zeros([1,K]),adjb),axis=0)
-
-        # Get indices we want to update to index this "zero-row"
-        tempRange = np.copy(myRange)
-        tempRange[zeroNodesPad]=0
-        # Update adj: two steps
-        # Set given rows to all zeros
-        newAdjb = adjbPad[tempRange]
-        # Set  link to these nodes to zero in other rows
-        newAdjb = tempRange[newAdjb]
-
-        # Get rid of extra row
-        newAdjb = newAdjb[1:,:]
-        newAdjLst.append(newAdjb)
-
-
-    newAdj = np.stack(newAdjLst, axis=0)
-
-    return newAdj
-
-
-# input arg adj is considered to be 1-indexed, with no 1st line padding
-# (It's getting hard not to mix things up...)
-def getN2Adj(adj, K2):
-
-    N, K = adj.shape
-
-    adjPad = np.concatenate((np.zeros((1,K),dtype=np.int32),adj),axis=0)
-
-    adjN2 = np.zeros((N+1,K2),dtype=np.int32)
-    # curN2Ind = np.zeros((N),dtype=np.int32) # Keep track of current index for each row
-    # for row in range(1,N): # For each node n0 (excluding 1st padding row)
-
-    #     for rowInd in range(1,K): # For each of its neighbours (excluding itself)
-
-    #         if adjPad[row,rowInd]>0:    # If real neighbour n1
-    #         # Add n0's neighbours to n1
-
-
-
-    adjN2Raw = adjPad[adjPad]
-    adjN2Raw = np.reshape(adjN2Raw,[N+1,K*K])
-    for row in range(1,N):
-        curRow = adjN2Raw[row,:]
-        _, uniqueRowIdx = np.unique(curRow, return_index=True)
-        uniqueRow = curRow[np.sort(uniqueRowIdx)]
-
-        rowSize = uniqueRow.shape[0]
-        if rowSize>K2:
-            print("ERROR: saturated neighbourhood!! Missing edges!")
-            rowSize=K2
-        adjN2[row,:rowSize] = uniqueRow
-
-    # Remove padding row
-    adjN2 = adjN2[1:,:]
-
-    return adjN2
-
-
-# Adj is FeaStNet style (1-indexed, auto indexing)
-# lvlList specifies, for each node, the smallest coarsening lvl at which it should be kept (0 = coarsest (vertices only)).
-def buildAdjPyramid(adj, lvlList):
-
-    K = adj.shape[1]
-
-    # List matrices from finest to coarsest
-    adjList = []
-    parentsList = []
-    childrenList = []
-
-    maxLvl = np.amax(lvlList)   # Working only from 0 to 3 for now
-
-    adjList.append(adj)
-
-    # Initialize loop variables
-    curLvl = maxLvl-1
-    fineAdj = adj
-    curLvlList = lvlList
-    while curLvl>=0:
-
-        coarseNodesNum = np.sum(lvlList<=curLvl)
-        fineNodesNum = fineAdj.shape[0]
-        
-        newLvlList= curLvlList[curLvlList<=curLvl]
-        # First, fill children matrix: easy, just select the right rows from fine adj
-        childrenMat = fineAdj[curLvlList<=curLvl] # Should be [coarseNodesNum,K]
-
-        # WARNING!! We follow a more traditional 0-indexing for childrenMat
-        childrenMat = childrenMat-1
-
-        # Given children matrix, parent matrix can be computed easily
-        parentMat = np.zeros([fineNodesNum,2],dtype=np.int32)
-        parentMatInd = np.zeros([fineNodesNum],dtype=np.int32)
-        for p in range(coarseNodesNum):
-
-            for c in range(K):
-                child = childrenMat[p,c]
-                if child>=0:
-                    if(parentMatInd[child]>1):
-                        print("ERROR: more than 2 parents!")
-                    parentMat[child,1] = p
-                    if parentMatInd[child]==0:
-                        parentMat[child,0] = p
-                    parentMatInd[child] = parentMatInd[child]+1
-        # Similarly, parentMat is 0-indexed
-
-
-        # Finally, the parent matrix helps us compute the new adj matrix
-        coarseAdj = np.zeros((coarseNodesNum,K-1),dtype=np.int32) # Contains parent adj
-        # Already prefill the first column (auto-indexing)
-        firstColumn = np.arange(coarseNodesNum)
-        firstColumn = firstColumn[:,np.newaxis] + 1
-        coarseAdj = np.concatenate((firstColumn,coarseAdj),axis=-1)
-
-        coarseAdjInd = np.ones([coarseNodesNum],dtype=np.int32)
-        
-        for row in range(fineNodesNum):
-            p1 = parentMat[row,0]
-            p2 = parentMat[row,1]
-            if (p1!=p2):
-                coarseAdj[p1,coarseAdjInd[p1]] = p2+1
-                coarseAdjInd[p1]=coarseAdjInd[p1]+1
-                coarseAdj[p2,coarseAdjInd[p2]] = p1+1
-                coarseAdjInd[p2]=coarseAdjInd[p2]+1
-
-        # Append to lists
-        adjList.append(coarseAdj)
-        parentsList.append(parentMat)
-        childrenList.append(childrenMat)
-
-        # Update loop variables for next iteration
-        curLvl-=1
-        fineAdj = coarseAdj
-        curLvlList = newLvlList
-
-    return adjList, parentsList, childrenList
 
 
 # End of file
