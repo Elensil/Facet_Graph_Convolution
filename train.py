@@ -1829,94 +1829,95 @@ def updateFacesCenter(vertices, faces, coarsening_steps):
 # This is a piece of legacy code copied here to be stored for the time being.
 # Not read/controlled/tested yet
 def validateData():
-        # --- Validate data ---
+    pass
+    # --- Validate data ---
 
-        # # input "raw" training data
-        # examplesNum = len(f_normals_list)
+    # # input "raw" training data
+    # examplesNum = len(f_normals_list)
 
-        # for p in range(examplesNum):
-        #     myN = gtf_normals_list[p][0]
-        #     myN = normalize(myN)
-        #     gtf_normals_list[p] = myN[np.newaxis,:,:]
+    # for p in range(examplesNum):
+    #     myN = gtf_normals_list[p][0]
+    #     myN = normalize(myN)
+    #     gtf_normals_list[p] = myN[np.newaxis,:,:]
 
-        # for p in range(examplesNum):
-        #     myN = gtf_normals_list[p][0]
-        #     angColorGT = (myN+1)/2
-        #     angColorNoisy = (f_normals_list[p][0,:,:3]+1)/2
-        #     myV = v_pos_list[p][0]
-        #     myF = faces_list[p][0]
-        #     print("myV shape = ",myV.shape)
-        #     print("myF shape = ",myF.shape)
-        #     print("angColorGT shape = ",angColorGT.shape)
-        #     print("myF sample: ",myF[:4])
-        #     myF = myF.astype(np.int32)
-        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
-        #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
-        #     denoizedFile = "gtnormals_%i.obj"%p
-        #     noisyFile = "noisynormals_%i.obj"%p
-        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-        #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
+    # for p in range(examplesNum):
+    #     myN = gtf_normals_list[p][0]
+    #     angColorGT = (myN+1)/2
+    #     angColorNoisy = (f_normals_list[p][0,:,:3]+1)/2
+    #     myV = v_pos_list[p][0]
+    #     myF = faces_list[p][0]
+    #     print("myV shape = ",myV.shape)
+    #     print("myF shape = ",myF.shape)
+    #     print("angColorGT shape = ",angColorGT.shape)
+    #     print("myF sample: ",myF[:4])
+    #     myF = myF.astype(np.int32)
+    #     newV, newF = getColoredMesh(myV, myF, angColorGT)
+    #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
+    #     denoizedFile = "gtnormals_%i.obj"%p
+    #     noisyFile = "noisynormals_%i.obj"%p
+    #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+    #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
 
-        # Corrected GT data
+    # Corrected GT data
 
-        # examplesNum = len(f_normals_list)
-        # for p in range(examplesNum):
+    # examplesNum = len(f_normals_list)
+    # for p in range(examplesNum):
 
-        #     # p = 6
-        #     samp = 1641
-        #     myN = gtf_normals_list[p][0]
-        #     # print("wut length = ",len(f_adj_list[p]))
-        #     myAdj = f_adj_list[p][0][0]
-        #     # print("myAdj shape = ",myAdj.shape)
-        #     # print("myN shape = ",myN.shape)
-        #     filteredN = filterFlippedFaces(myN, myAdj)
+    #     # p = 6
+    #     samp = 1641
+    #     myN = gtf_normals_list[p][0]
+    #     # print("wut length = ",len(f_adj_list[p]))
+    #     myAdj = f_adj_list[p][0][0]
+    #     # print("myAdj shape = ",myAdj.shape)
+    #     # print("myN shape = ",myN.shape)
+    #     filteredN = filterFlippedFaces(myN, myAdj)
 
-        #     print("wtf samp = ",filteredN[samp])
-        #     adjN = colorFacesByAdjacency(myN, myAdj)
-        #     angColorGT = (filteredN+1)/2
-        #     adjColor = (adjN+1)/2
+    #     print("wtf samp = ",filteredN[samp])
+    #     adjN = colorFacesByAdjacency(myN, myAdj)
+    #     angColorGT = (filteredN+1)/2
+    #     adjColor = (adjN+1)/2
 
-        #     print("wtf2 samp = ",angColorGT[samp])
+    #     print("wtf2 samp = ",angColorGT[samp])
 
-        #     myV = v_pos_list[p][0]
-        #     myF = faces_list[p][0]
-        #     # print("myV shape = ",myV.shape)
-        #     # print("myF shape = ",myF.shape)
-        #     # print("angColorGT shape = ",angColorGT.shape)
-        #     # print("myF sample: ",myF[:4])
-        #     myF = myF.astype(np.int32)
-        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
-        #     newVAdj, newFAdj = getColoredMesh(myV, myF, adjColor)
-            
-        #     denoizedFile = "filtered_gtnormals_%i.obj"%p
-        #     adjFile = "adjnormals_%i.obj"%p
-        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-        #     write_mesh(newVAdj, newFAdj, RESULTS_PATH+adjFile)
-            
-        # Valid data
-        # examplesNum = len(valid_f_normals_list)
-        # for p in range(examplesNum):
-        #     angColorGT = (valid_gtf_normals_list[p][0]+1)/2
-        #     angColorNoisy = (valid_f_normals_list[p][0,:,:3]+1)/2
-        #     myV = valid_v_pos_list[p][0]
-        #     myF = valid_faces_list[p][0]
-        #     print("myV shape = ",myV.shape)
-        #     print("myF shape = ",myF.shape)
-        #     print("angColorGT shape = ",angColorGT.shape)
-        #     print("myF sample: ",myF[:4])
-        #     myF = myF.astype(np.int32)
-        #     newV, newF = getColoredMesh(myV, myF, angColorGT)
-        #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
-        #     denoizedFile = "valid_gtnormals_%i.obj"%p
-        #     noisyFile = "valid_noisynormals_%i.obj"%p
-        #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-        #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
+    #     myV = v_pos_list[p][0]
+    #     myF = faces_list[p][0]
+    #     # print("myV shape = ",myV.shape)
+    #     # print("myF shape = ",myF.shape)
+    #     # print("angColorGT shape = ",angColorGT.shape)
+    #     # print("myF sample: ",myF[:4])
+    #     myF = myF.astype(np.int32)
+    #     newV, newF = getColoredMesh(myV, myF, angColorGT)
+    #     newVAdj, newFAdj = getColoredMesh(myV, myF, adjColor)
+        
+    #     denoizedFile = "filtered_gtnormals_%i.obj"%p
+    #     adjFile = "adjnormals_%i.obj"%p
+    #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+    #     write_mesh(newVAdj, newFAdj, RESULTS_PATH+adjFile)
+        
+    # Valid data
+    # examplesNum = len(valid_f_normals_list)
+    # for p in range(examplesNum):
+    #     angColorGT = (valid_gtf_normals_list[p][0]+1)/2
+    #     angColorNoisy = (valid_f_normals_list[p][0,:,:3]+1)/2
+    #     myV = valid_v_pos_list[p][0]
+    #     myF = valid_faces_list[p][0]
+    #     print("myV shape = ",myV.shape)
+    #     print("myF shape = ",myF.shape)
+    #     print("angColorGT shape = ",angColorGT.shape)
+    #     print("myF sample: ",myF[:4])
+    #     myF = myF.astype(np.int32)
+    #     newV, newF = getColoredMesh(myV, myF, angColorGT)
+    #     newVnoisy, newFnoisy = getColoredMesh(myV, myF, angColorNoisy)
+    #     denoizedFile = "valid_gtnormals_%i.obj"%p
+    #     noisyFile = "valid_noisynormals_%i.obj"%p
+    #     write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
+    #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
 
 def train(withVerts=False):
-
+    binDumpPath = BINARY_DUMP_PATH
     if withVerts:
         tsPickleName = 'trainingSetWithVertices.pkl'
-        vsPickelName = 'validSetWithVertices.pkl'
+        vsPickleName = 'validSetWithVertices.pkl'
     else:
         tsPickleName = 'trainingSet.pkl'
         vsPickleName = 'validSet.pkl'
@@ -1933,214 +1934,17 @@ def train(withVerts=False):
         trainAccuracyNet(myTS, myVS)
     else:
 
-        myTS.correctGTFlippedFaces()
-        myVS.correctGTFlippedFaces()
+        # myTS.correctGTFlippedFaces()
+        # myVS.correctGTFlippedFaces()
         trainNet(myTS,myVS)
 
-def infer(withVerts=False):
-
-    # Simple inference, no GT mesh involved
-    if running_mode == 1:
-        noisyFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/rescaled_noisy/"
-        noisyFolder = VALID_DATA_PATH
-        # Get GT mesh
-        for noisyFile in os.listdir(noisyFolder):
-
-            if (not noisyFile.endswith(".obj")):
-                continue
-            print("noisyFile: "+noisyFile)
-
-            denoizedFile = noisyFile[:-4]+"_denoised_gray.obj"
-
-            noisyFilesList = [noisyFile]
-            denoizedFilesList = [denoizedFile]
-
-            for fileNum in range(len(denoizedFilesList)):
-                
-                denoizedFile = denoizedFilesList[fileNum]
-                noisyFile = noisyFilesList[fileNum]
-                # noisyFileWInferredColor = noisyFile[:-4]+"_inferred_normals.obj"
-
-                noisyFileWInferredColor0 = noisyFile[:-4]+"_fine_normals_s.obj"
-                noisyFileWInferredColor1 = noisyFile[:-4]+"_mid_normals_s.obj"
-                noisyFileWInferredColor2 = noisyFile[:-4]+"_coarse_normals_s.obj"
-                noisyFileWInferredColor3 = noisyFile[:-4]+"_coarse_normals2_s.obj"
-                noisyFileWInferredColor4 = noisyFile[:-4]+"_coarse_normals3_s.obj"
-
-                noisyFileWColor = noisyFile[:-4]+"_original_normals.obj"
-                denoizedFileWColor = noisyFile[:-4]+"_denoised_color.obj"
-                faceMeshFile = noisyFile[:-4]+"_face_mesh.obj"
-                faceMeshFile1 = noisyFile[:-4]+"_face_mesh1.obj"
-                faceMeshFile2 = noisyFile[:-4]+"_face_mesh2.obj"
-
-
-                if os.path.isfile(RESULTS_PATH+denoizedFile):
-                    if B_OVERWRITE_RESULT:
-                        print("Warning: %s will be overwritten. (To deactivate overwriting, change parameter in settings.py)"%denoizedFile)
-                    else:
-                        print("Skipping %s. File already exists. (For automatic overwriting, change parameter in settings.py)"%denoizedFile)
-                        continue
-
-
-                print("Adding mesh "+noisyFile+"...")
-                t0 = time.time()
-                inputMesh = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
-                inputMesh.addMeshWithVertices(noisyFolder, noisyFile)
-                print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
-
-                faces = inputMesh.faces
-
-                print("Inference ...")
-                t0 = time.time()
-                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(inputMesh)
-            
-                # upV0, upN0 = inferNet6D(v_list, faces_list, f_normals_list, f_adj_list, v_faces_list, vOldInd_list, fOldInd_list, vNum, fNum, adjPerm_list, real_nodes_num_list)
-                print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
-
-                # write_mesh(np.concatenate((upV0,np.zeros_like(upV0)),axis=-1), faces[0,:,:], RESULTS_PATH+denoizedFile)
-                write_mesh(upV0, faces, RESULTS_PATH+denoizedFile)
-                write_mesh(upV0mid, faces, RESULTS_PATH+noisyFile[:-4]+"_d_mid.obj")
-                write_mesh(upV0coarse, faces, RESULTS_PATH+noisyFile[:-4]+"_d_coarse.obj")
-                
-                # testP = upP0
-                # testN = upN0
-                # # testP = f_normals_list[0][:,:,3:]
-                # # testP = np.squeeze(testP)
-                # testAdj = f_adj_list[0][0]
-                # testAdj = np.squeeze(testAdj)
-                # # testN = f_normals_list[0][:,:,:3]
-                # # testN = np.squeeze(testN)
-                # faceMeshV, faceMeshF = makeFacesMesh(testAdj,testP,testN)
-
-                # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile)
-                
-                # testP1 = upP1
-                # testN1 = upN1
-                # testAdj1 = f_adj_list[0][1]
-                # testAdj1 = np.squeeze(testAdj1)
-                # faceMeshV, faceMeshF = makeFacesMesh(testAdj1,testP1,testN1)
-
-                # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile1)
-
-                # testP2 = upP2
-                # testN2 = upN2
-                # testAdj2 = f_adj_list[0][2]
-                # testAdj2 = np.squeeze(testAdj2)
-                # faceMeshV, faceMeshF = makeFacesMesh(testAdj2,testP2,testN2)
-
-                # write_mesh(faceMeshV, faceMeshF, RESULTS_PATH+faceMeshFile2)
-
-                V0 = inputMesh.vertices
-                faces_noisy = inputMesh.faces
-                f_normals0 = inputMesh.normals
-                angColor0 = (upN0+1)/2
-                angColor1 = (upN1+1)/2
-                angColor2 = (upN2+1)/2
-
-                angColorNoisy = (f_normals0+1)/2
-                
-                print("faces_noisy shape: "+str(faces_noisy.shape))
-
-                print("angColor0 shape: "+str(angColor0.shape))
-                print("angColor1 shape: "+str(angColor1.shape))
-                print("angColor2 shape: "+str(angColor2.shape))
-                print("V0 shape: "+str(V0.shape))
-                # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
-                newVn0, newFn0 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor0)
-                newVn1, newFn1 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor1)
-                newVn2, newFn2 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor2)
-                # newVn3, newFn3 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor3)
-                # newVn4, newFn4 = getColoredMesh(np.squeeze(V0), faces_noisy, angColor4)
-                
-
-                # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                write_mesh(newVn0, newFn0, RESULTS_PATH+noisyFileWInferredColor0)
-                write_mesh(newVn1, newFn1, RESULTS_PATH+noisyFileWInferredColor1)
-                write_mesh(newVn2, newFn2, RESULTS_PATH+noisyFileWInferredColor2)
-                # write_mesh(newVn3, newFn3, RESULTS_PATH+noisyFileWInferredColor3)
-                # write_mesh(newVn4, newFn4, RESULTS_PATH+noisyFileWInferredColor4)
-
-                print("angColorNoisy shape: "+str(angColorNoisy.shape))
-                newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
-                write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
-
-    # master branch inference (old school, w/o multi-scale vertex update)
-    elif running_mode == 12:
-        
-        maxSize = MAX_PATCH_SIZE
-        patchSize = MAX_PATCH_SIZE
-
-        noisyFolder = VALID_DATA_PATH
-        # Get GT mesh
-        for noisyFile in os.listdir(noisyFolder):
-
-            denoizedFile = noisyFile[:-4]+"_denoised_gray.obj"
-
-            noisyFilesList = [noisyFile]
-            denoizedFilesList = [denoizedFile]
-
-            for fileNum in range(len(denoizedFilesList)):
-                
-                denoizedFile = denoizedFilesList[fileNum]
-                noisyFile = noisyFilesList[fileNum]
-                noisyFileWInferredColor = noisyFile[:-4]+"_inferred_normals.obj"
-                noisyFileWColor = noisyFile[:-4]+"_original_normals.obj"
-                denoizedFileWColor = noisyFile[:-4]+"_denoised_color.obj"
-
-                # if not denoizedFile.startswith("bunny"):
-                #     continue
-
-                if os.path.isfile(RESULTS_PATH+denoizedFile):
-                    if B_OVERWRITE_RESULT:
-                        print("Warning: %s will be overwritten. (To deactivate overwriting, change parameter in settings.py)"%denoizedFile)
-                    else:
-                        print("Skipping %s. File already exists. (For automatic overwriting, change parameter in settings.py)"%denoizedFile)
-                        continue
-
-                
-                print("Adding mesh "+noisyFile+"...")
-                t0 = time.time()
-                myTS = InferenceMesh(maxSize, coarseningStepNum, coarseningLvlNum)
-                myTS.addMesh(noisyFolder, noisyFile)
-
-                print("mesh added ("+str(1000*(time.time()-t0))+"ms)")
-                
-
-                print("Inference ...")
-                t0 = time.time()
-
-                upV0, upN0 = inferNetOld(myTS)
-                print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
-
-                write_mesh(upV0, myTS.faces, RESULTS_PATH+denoizedFile)
-
-                angColor = (upN0+1)/2
-
-                angColorNoisy = (myTS.normals+1)/2
-                
-                faces_noisy = myTS.faces
-                V0 = myTS.vertices
-                # newV, newF = getColoredMesh(upV0, faces_gt, angColor)
-                newVn, newFn = getColoredMesh(np.squeeze(V0), faces_noisy, angColor)
-                newVnoisy, newFnoisy = getColoredMesh(np.squeeze(V0), faces_noisy, angColorNoisy)
-
-                # write_mesh(newV, newF, RESULTS_PATH+denoizedFile)
-                write_mesh(newVn, newFn, RESULTS_PATH+noisyFileWInferredColor)
-                write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFileWColor)
-
-    
-    
 
 def mainFunction():
 
-    if not os.path.exists(RESULTS_PATH):
-        os.makedirs(RESULTS_PATH)
+    
 
     maxSize = MAX_PATCH_SIZE
     patchSize = MAX_PATCH_SIZE
-
-    training_meshes_num = [0]
-    valid_meshes_num = [0]
 
     # Coarsening parameters
     # coarseningLvlNum = 3
@@ -2151,21 +1955,9 @@ def mainFunction():
     binDumpPath = BINARY_DUMP_PATH
 
 
-    running_mode = RUNNING_MODE
-    ###################################################################################################
-    #   0 - Training on all meshes in a given folder
-    #   1 - Run checkpoint on a given mesh as input
-    #   2 - Run checkpoint on all meshes in a folder. Compute angular diff and Haus dist
-    #   3 - Test mode
-    ###################################################################################################
-
-
-    
-    train()
-    
+    train(withVerts=INCLUDE_VERTICES)
+    print("Training Complete: network saved to " + NETWORK_PATH)
    
-    print("Complete: mode = "+str(RUNNING_MODE)+", net path = "+NETWORK_PATH)
-    #
 
 if __name__ == "__main__":
     
