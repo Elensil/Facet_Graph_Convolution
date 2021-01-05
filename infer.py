@@ -94,9 +94,9 @@ def infer(withVerts=False):
             print("Inference ...")
             t0 = time.time()
             if withVerts:
-                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(inputMesh)
+                upV0, upV0mid, upV0coarse, upN0, upN1, upN2, upP0, upP1, upP2 = inferNet(inputMesh, NETWORK_PATH)
             else:
-                upV0, upN0 = inferNetOld(inputMesh)
+                upV0, upN0 = inferNetOld(inputMesh, NETWORK_PATH)
 
             print("Inference complete ("+str(1000*(time.time()-t0))+"ms)")
 
@@ -128,13 +128,12 @@ def infer(withVerts=False):
 
 if __name__ == "__main__":
 
-	print("Tensorflow version = ", tf.__version__)
+    print("Tensorflow version = ", tf.__version__)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--results_path', type=str, default=None)
     parser.add_argument('--network_path', type=str)
     parser.add_argument('--num_iterations', type=int, default=20000)
-    parser.add_argument('--debug', type=bool, default=False)
     parser.add_argument('--device', type=str, default='/gpu:0')
     parser.add_argument('--net_name', type=str, default='net')
     parser.add_argument('--running_mode', type=int, default=0)
@@ -157,8 +156,6 @@ if __name__ == "__main__":
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode
-    DEBUG = FLAGS.debug
 
-
-	infer(withVerts=INCLUDE_VERTICES)
-	print("Inference complete. Results saved to "+ RESULTS_PATH)
+    infer(withVerts=INCLUDE_VERTICES)
+    print("Inference complete. Results saved to "+ RESULTS_PATH)

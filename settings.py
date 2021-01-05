@@ -24,12 +24,12 @@ NETWORK_PATH = BASE_PATH + "TEMP_Cleaning/netVerts/"
 RESULTS_PATH = BASE_PATH + "TEMP_Cleaning/ResultsVerts/"
 
 
-BASE_PATH = "/morpheo-nas/marmando/Pierre_Mesh_Denoising/"
-DATA_PATH = BASE_PATH + "Data/"
-TRAINING_DATA_PATH = DATA_PATH + "training/"
-VALID_DATA_PATH = DATA_PATH + "validation/"
-GT_DATA_PATH = DATA_PATH + "gt/"
-BINARY_DUMP_PATH = BASE_PATH + "BinDump/"
+# BASE_PATH = "/morpheo-nas/marmando/Pierre_Mesh_Denoising/"
+# DATA_PATH = BASE_PATH + "Data/"
+# TRAINING_DATA_PATH = DATA_PATH + "training/"
+# VALID_DATA_PATH = DATA_PATH + "validation/"
+# GT_DATA_PATH = DATA_PATH + "gt/"
+# BINARY_DUMP_PATH = BASE_PATH + "BinDump/"
 
 # --- Data Parameters ---
 

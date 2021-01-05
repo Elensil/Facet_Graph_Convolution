@@ -26,7 +26,7 @@ if TF_VERSION==2:
 else:
     import tensorflow as tf
 
-def inferNetOld(inputMesh):
+def inferNetOld(inputMesh, network_path):
     in_points = inputMesh.vertices
     f_normals = inputMesh.in_list
     f_adj = inputMesh.adj_list
@@ -38,14 +38,6 @@ def inferNetOld(inputMesh):
     with tf.Graph().as_default():
 
         sess = tf.InteractiveSession()
-        if(DEBUG):    #launches debugger at every sess.run() call
-            sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-            sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
-
-        if not os.path.exists(RESULTS_PATH):
-                os.makedirs(RESULTS_PATH)
-
-
         BATCH_SIZE=f_normals[0].shape[0]
         NUM_POINTS=in_points.shape[1]
         print("v_e_map shape = ",v_e_map.shape)
@@ -87,7 +79,7 @@ def inferNetOld(inputMesh):
         saver = tf.train.Saver()
         sess.run(tf.global_variables_initializer())
 
-        ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
+        ckpt = tf.train.get_checkpoint_state(os.path.dirname(network_path))
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, ckpt.model_checkpoint_path)
         else:
@@ -153,7 +145,7 @@ def inferNetOld(inputMesh):
 
 
 
-def inferNet(inputMesh):
+def inferNet(inputMesh, network_path):
     in_points = inputMesh.v_list
     faces = inputMesh.faces_list
     f_normals = inputMesh.in_list
@@ -170,10 +162,6 @@ def inferNet(inputMesh):
         np.random.seed(random_seed)
 
         sess = tf.InteractiveSession()
-        if(DEBUG):    #launches debugger at every sess.run() call
-            sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-            sess.add_tensor_filter('has_inf_or_nan', tf_debug.has_inf_or_nan)
-
 
         BATCH_SIZE=f_normals[0].shape[0]
         K_faces = f_adj[0][0].shape[2]
@@ -211,7 +199,7 @@ def inferNet(inputMesh):
 
         sess.run(tf.global_variables_initializer())
 
-        ckpt = tf.train.get_checkpoint_state(os.path.dirname(NETWORK_PATH))
+        ckpt = tf.train.get_checkpoint_state(os.path.dirname(network_path))
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, ckpt.model_checkpoint_path)
         else:
@@ -404,12 +392,6 @@ def trainNet(trainSet, validSet):
     # sess = tf.InteractiveSession(config=tf.ConfigProto( allow_soft_placement=True, log_device_placement=False))
     # sess = tf.InteractiveSession()
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=True))
-    if(DEBUG):    #launches debugger at every sess.run() call
-        sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-
-
-    if not os.path.exists(NETWORK_PATH):
-            os.makedirs(NETWORK_PATH)
 
     """
     Load dataset 
@@ -669,13 +651,6 @@ def trainAccuracyNet(trainSet, validSet):
 
     # sess = tf.InteractiveSession()
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    if(DEBUG):    #launches debugger at every sess.run() call
-        sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-
-
-    if not os.path.exists(NETWORK_PATH):
-            os.makedirs(NETWORK_PATH)
-
 
     """
     Load dataset 
@@ -958,13 +933,6 @@ def trainDoubleLossNet(trainSet, validSet):
 
     # sess = tf.InteractiveSession()
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    if(DEBUG):    #launches debugger at every sess.run() call
-        sess = tf_debug.LocalCLIDebugWrapperSession(sess)
-
-
-    if not os.path.exists(NETWORK_PATH):
-            os.makedirs(NETWORK_PATH)
-
 
     """
     Load dataset 
@@ -1914,6 +1882,9 @@ def validateData():
     #     write_mesh(newVnoisy, newFnoisy, RESULTS_PATH+noisyFile)
 
 def train(withVerts=False):
+    if not os.path.exists(NETWORK_PATH):
+        os.makedirs(NETWORK_PATH)
+
     binDumpPath = BINARY_DUMP_PATH
     if withVerts:
         tsPickleName = 'trainingSetWithVertices.pkl'
@@ -1967,7 +1938,6 @@ if __name__ == "__main__":
     parser.add_argument('--results_path', type=str, default=None)
     parser.add_argument('--network_path', type=str)
     parser.add_argument('--num_iterations', type=int, default=20000)
-    parser.add_argument('--debug', type=bool, default=False)
     parser.add_argument('--device', type=str, default='/gpu:0')
     parser.add_argument('--net_name', type=str, default='net')
     parser.add_argument('--running_mode', type=int, default=0)
@@ -1990,8 +1960,7 @@ if __name__ == "__main__":
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode
-    DEBUG = FLAGS.debug
-    
+
     # Experimental value on synthetic dataset:
     AVG_EDGE_LENGTH = 0.005959746586165783
 
