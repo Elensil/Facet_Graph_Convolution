@@ -18,7 +18,7 @@ from tensorflow.python import debug as tf_debug
 import random
 from lib.coarsening import *
 from settings import *
-from trainingSet import *
+from dataClasses import *
 
 TF_VERSION = int(tf.__version__[0])
 if TF_VERSION==2:

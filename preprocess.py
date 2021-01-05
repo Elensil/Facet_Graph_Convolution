@@ -1,5 +1,5 @@
 from settings import *
-from trainingSet import *
+from dataClasses import *
 import pickle
 import os
 
