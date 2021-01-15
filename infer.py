@@ -39,7 +39,6 @@ def infer(noisyFolder, withVerts=False):
     coarseningStepNum = COARSENING_STEPS
     coarseningLvlNum = COARSENING_LVLS
 
-    # Get GT mesh
     for noisyFile in os.listdir(noisyFolder):
 
         if (not noisyFile.endswith(".obj")):

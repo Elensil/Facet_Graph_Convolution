@@ -25,18 +25,17 @@ TRAINING_DATA_REDUNDANCY = 1        # When preprocessing training data, add each
 # --- Network Parameters ---
 
 INCLUDE_VERTICES = False            # False by default. Set to True to use both extensions presented in the paper. See main README.md for more details
-SAVEITER = 500                      # During training, a checkpoint is saved every SAVEITER iterations.
+SAVEITER = 5000                     # During training, a checkpoint is saved every SAVEITER iterations.
 COARSENING_STEPS = 2                # Number of coarsening iterations performed in each pooling layer. Default value (used in the paper) is 2
 COARSENING_LVLS = 3                 # Number of "resolution" levels of graph used in the network. Default is 3. WARNING: This will only automate the data preprocessing (graph coarsening is precomputed). The network architecture is hard-coded!
-
+NUM_ITERATIONS = 300000             # Number of training iterations run by the network. can be overriden by command line argument --num_iterations
 
 # BOOLEAN PARAMETERS
-B_OVERWRITE_RESULT = True           # For inference: If False, meshes present in the output directory will not be processed again
+B_OVERWRITE_RESULT = False           # For inference: If False, meshes present in the output directory will not be processed again
 
 # --- Visualization ---
 HEATMAP_MAX_ANGLE = 30.0            # Sets the scale for heatmaps of angular error. This value is set to red (highest error). Values above are truncated.
                                     # (Unused for the moment)
-
 
 # This function returns the filename of the ground truth mesh, given the name of the corresponding noisy mesh.
 # Adapt to your data. 

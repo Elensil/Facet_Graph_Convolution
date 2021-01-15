@@ -1910,6 +1910,8 @@ def train(withVerts=False):
         trainNet(myTS,myVS)
 
 
+
+
 def mainFunction():
 
     
@@ -1955,8 +1957,9 @@ if __name__ == "__main__":
         if not NETWORK_PATH[-1]=='/':
             NETWORK_PATH = NETWORK_PATH + "/"
 
-
-    NUM_ITERATIONS = FLAGS.num_iterations
+    if FLAGS.num_iterations>0:
+        NUM_ITERATIONS = FLAGS.num_iterations
+        
     DEVICE = FLAGS.device
     NET_NAME = FLAGS.net_name
     RUNNING_MODE = FLAGS.running_mode

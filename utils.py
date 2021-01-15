@@ -83,7 +83,11 @@ def tfComputeNormals(points, faces):
     return Nn
 
 
-
+"""
+    Returns:
+        e_map: list of [v1,v2,f1,f2] for each edge
+        v_e_map: list of edge indices for each vertex
+"""
 def getEdgeMap(faces, maxEdges = 50):
 
     fnum = faces.shape[0]
@@ -179,7 +183,8 @@ def getEdgeMap(faces, maxEdges = 50):
     return e_map, v_e_map
 
 
-
+# Generates "small" adjacency matrix:
+# faces are considered adjacent iff they share an edge
 def getFacesAdj(faces):    #trying other method using edges as itnermediate representation
     fnum = faces.shape[0]
     fadj = np.zeros([fnum,4], dtype=np.int32)     # triangular faces only
