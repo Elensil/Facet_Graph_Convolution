@@ -3,7 +3,10 @@ from utils import *
 from settings import *
 from dataClasses import *
 import os
-
+try:
+    import scipy.io
+except:
+    print("scipy not found")
 
 # Compute metrics and heatmaps on denoised meshes + GT
 def computeMetrics():
@@ -30,9 +33,9 @@ def computeMetrics():
         denoizedFile1 = gtFileName[:-4]+"_n2_denoised_gray.obj"
         denoizedFile2 = gtFileName[:-4]+"_n3_denoised_gray.obj"
 
-        heatFile0 = gtFileName[:-4]+"_heatmap_1.obj"
-        heatFile1 = gtFileName[:-4]+"_heatmap_2.obj"
-        heatFile2 = gtFileName[:-4]+"_heatmap_3.obj"
+        heatFile0 = gtFileName[:-4]+"_n1_heatmap.obj"
+        heatFile1 = gtFileName[:-4]+"_n2_heatmap.obj"
+        heatFile2 = gtFileName[:-4]+"_n3_heatmap.obj"
 
         # Load GT mesh
         GT,_,_,faces_gt,_ = load_mesh(gtFolder, gtFileName, 0, False)
