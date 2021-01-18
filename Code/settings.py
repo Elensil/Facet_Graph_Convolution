@@ -7,6 +7,7 @@ TRAINING_DATA_PATH = DATA_PATH + "Synthetic/train/noisy/"          # Folder wher
 VALID_DATA_PATH = DATA_PATH + "Synthetic/train/valid/"             # Folder where noisy (validation) meshes are stored. Used when preprocessing and pickling data
 TEST_DATA_PATH = DATA_PATH + "Synthetic/test/noisy/"                # Folder where noisy (test) meshes are stored. Used by default for inference
 GT_DATA_PATH = DATA_PATH + "Synthetic/train/original/"             # Folder where ground truth meshes are stored. Used when preprocessing and pickling data
+TEST_GT_DATA_PATH = DATA_PATH + "Synthetic/test/original/"             # Folder where test ground truth meshes are stored.
 
 BINARY_DUMP_PATH = BASE_PATH + "Preprocessed_Data/"
 
@@ -42,5 +43,10 @@ HEATMAP_MAX_ANGLE = 30.0            # Sets the scale for heatmaps of angular err
 # Adapt to your data. 
 def getGTFilename(filename):
     gtnameoffset = 7
+    gtfilename = filename[:-gtnameoffset]+".obj"
+    return gtfilename
+
+def getGTFilenameFromDenoised(filename):
+    gtnameoffset = 21
     gtfilename = filename[:-gtnameoffset]+".obj"
     return gtfilename

@@ -16,7 +16,7 @@ def computeMetrics():
     resultsArray = []   # results array, following the pattern in the xlsx file given by author of Cascaded Normal Regression.
                         # [Max distance, Mean distance, Mean angle, std angle, face num]
 
-    gtFolder = "/morpheo-nas2/marmando/DeepMeshRefinement/real_paper_dataset/Synthetic/test/original/"
+    gtFolder = TEST_GT_DATA_PATH
 
     # results file name
     csv_filename = RESULTS_PATH+"results_heat.csv"
