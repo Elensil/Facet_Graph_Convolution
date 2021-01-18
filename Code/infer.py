@@ -150,7 +150,7 @@ if __name__ == "__main__":
             NETWORK_PATH = NETWORK_PATH + "/"
 
     if FLAGS.input_dir is None:
-        INPUT_DIR = VALID_DATA_PATH
+        INPUT_DIR = TEST_DATA_PATH
     else:
         INPUT_DIR = FLAGS.input_dir
 
