@@ -1776,7 +1776,7 @@ def listToSparseWNormals(Adj, nodes_pos, nodes_normals):
             col_ind[cur_ind] = nnode
             
             nnode_pos = nodes_pos[nnode,:]
-            nnode_norm = nodes_normals[n,:]
+            nnode_norm = nodes_normals[nnode,:]
             dp = np.sum(np.multiply(n_norm,nnode_norm),axis=-1)
             # values[cur_ind] = np.exp(-pow(dp-1,2)/pow(ang_sigma,2))*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)/(sigma*sigma))
             values[cur_ind] = max(dp*np.exp(-pow(np.linalg.norm(nnode_pos-n_pos),2)*sig_den),0.001)
