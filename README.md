@@ -13,6 +13,20 @@ Please, bear in mind this is a research project, and we are currently working on
 
 > We examine the problem of mesh denoising, which consists in removing noise from corrupted 3D meshes while preserving existing geometric features. Most mesh denoising methods require a lot of mesh-specific parameter fine-tuning, to account for specific features and noise types. In recent years, data-driven methods have demonstrated their robustness and effectiveness \wrt noise and feature properties on a wide variety of geometry and image problems. Most existing mesh denoising methods still use hand-crafted features, and locally denoise facets rather than examining the mesh globally. In this work, we propose the use of a fully end-to-end learning strategy based on graph convolutions, where meaningful features are learned directly by our network. Similar to most recent pipelines, given a noisy mesh, we first denoise face normals with our novel approach, then update vertices positions accordingly.  Our method performs significantly better than the current state-of-the-art learning-based methods. Additionally, we show that it can be trained on noisy data, without explicit correspondence between noisy and ground-truth facets. We also propose a multi-scale denoising strategy, better suited to correct noise with a low spatial frequency.
 
+## Requirements
+
+The following python libraries are required:
+- tensorflow
+- numpy
+- pillow
+
+You can install them with pip. Alternativelly, you can use [Singularity](https://sylabs.io/):
+- Follow the installation instructions [here](https://sylabs.io/guides/3.7/user-guide/quick_start.html)
+- Download the following [singularity image](https://singularity-hub.org/collections/260/usage):
+  - Run "singularity pull shub://marcc-hpc/tensorflow". This will download the image in the current folder.
+- Launch the container: singularity shell --nv tensorflow_latest.sif
+
+
 
 ## Usage
 
@@ -21,7 +35,7 @@ Please, bear in mind this is a research project, and we are currently working on
 - Raw mesh data need to be preprocessed before training. Run preprocess.py to preprocess your training dataset. This might take some time depending on your amount of data. By default, data will be saved to BINARY_DUMP_PATH parameter in settings. Alternatively, you can download preprocessed training data [here](https://drive.google.com/file/d/1jEMRQ9d0LTvB1HiX4XhrCHAiVX3cwmSt/view?usp=sharing) and validation data [here](https://drive.google.com/file/d/1Zu3GgvTruvwGKot8UXPeVZAuLWHpBlQs/view?usp=sharing), for the synthetic dataset. Extract them into the 'Preprocessed_Data' folder.
 - Once you have generated binary dump files of your preprocessed training set, run train.py to train a model.
 - For inference, run infer.py --input_dir /my/input/dir/
-
+- For a quick test on some data shown in the paper (fig. 15 and 16), extract [this file](https://drive.google.com/file/d/1jrOtU5TPOqt3Pd67mO4tPxHevefiR56n/view?usp=sharing) into the Data/ folder and run infer.py
 
 ## Tips
 
