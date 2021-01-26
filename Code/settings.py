@@ -3,16 +3,16 @@ BASE_PATH = "CHANGE THIS PATH/"
 
 # -- Data --
 DATA_PATH = BASE_PATH + "Data/"
-TRAINING_DATA_PATH = DATA_PATH + "Synthetic/train/noisy/"          # Folder where noisy (training) meshes are stored. Used when preprocessing and pickling data
-VALID_DATA_PATH = DATA_PATH + "Synthetic/train/valid/"             # Folder where noisy (validation) meshes are stored. Used when preprocessing and pickling data
-TEST_DATA_PATH = DATA_PATH + "DemoData/"                # Folder where noisy (test) meshes are stored. Used by default for inference
-GT_DATA_PATH = DATA_PATH + "Synthetic/train/original/"             # Folder where ground truth meshes are stored. Used when preprocessing and pickling data
-TEST_GT_DATA_PATH = DATA_PATH + "Synthetic/test/original/"             # Folder where test ground truth meshes are stored.
+TRAINING_DATA_PATH = DATA_PATH + "Synthetic/train/noisy/"           # Folder where noisy (training) meshes are stored. Used when preprocessing and pickling data
+VALID_DATA_PATH = DATA_PATH + "Synthetic/train/valid/"              # Folder where noisy (validation) meshes are stored. Used when preprocessing and pickling data
+TEST_DATA_PATH = DATA_PATH + "DemoData/"                            # Folder where noisy (test) meshes are stored. Used by default for inference
+GT_DATA_PATH = DATA_PATH + "Synthetic/train/original/"              # Folder where ground truth meshes are stored. Used when preprocessing and pickling data
+TEST_GT_DATA_PATH = DATA_PATH + "Synthetic/test/original/"          # Folder where test ground truth meshes are stored.
 
 BINARY_DUMP_PATH = BASE_PATH + "Preprocessed_Data/"
 
-NETWORK_PATH = BASE_PATH + "Networks/Default/"
-RESULTS_PATH = BASE_PATH + "Results/Default/"
+NETWORK_PATH = BASE_PATH + "Networks/Default/"                      # Model parameters are saved to/restored from this folder. Can be overriden with --network_path
+RESULTS_PATH = BASE_PATH + "Results/Default/"                       # Folder where results are saved. Can be overriden with --results_path
 
 
 # --- Data Parameters ---
