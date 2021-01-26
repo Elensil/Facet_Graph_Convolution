@@ -45,9 +45,9 @@ You can install them with pip. Alternativelly, you can use [Singularity](https:/
 ### Parameters
 Some global parameters in settigns.py can be overriden with command line arguments:
 
-    `--network_path /my/network/path/    # Directory for model parameters`
-    `--results_path /my/results/path/    # Directory for output meshes`
-    `--input_dir /my/input/dir/          # Directory for input meshes during inference`
+    --network_path /my/network/path/    # Directory for model parameters
+    --results_path /my/results/path/    # Directory for output meshes
+    --input_dir /my/input/dir/          # Directory for input meshes during inference
 
 ## Tips
 
