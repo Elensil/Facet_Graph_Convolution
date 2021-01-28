@@ -47,9 +47,9 @@ Have a look have the settings.py file and set the BASE_PATH parameter to this di
 ### Parameters
 Some global parameters in settings.py can be overriden with command line arguments:
 
-    --network_path /my/network/path/    # Directory for model parameters
-    --results_path /my/results/path/    # Directory for output meshes
-    --input_dir /my/input/dir/          # Directory for input meshes during inference
+    --network_path /my/network/path/    # Directory for model parameters (for training and inference)
+    --results_path /my/results/path/    # Directory for output meshes (for inference)
+    --input_dir /my/input/dir/          # Directory for input meshes (for inference)
 
 ## Tips
 
