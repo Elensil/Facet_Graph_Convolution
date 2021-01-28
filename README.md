@@ -24,26 +24,28 @@ You can install them with pip. Alternativelly, you can use [Singularity](https:/
 - Follow the installation instructions [here](https://sylabs.io/guides/3.7/user-guide/quick_start.html)
 - Download the following [singularity image](https://singularity-hub.org/collections/260/usage):
   - Run `singularity pull shub://marcc-hpc/tensorflow`. This will download the image in the current folder.
-- Launch the container: singularity shell --nv tensorflow_latest.sif
-
+- Launch the container: `singularity shell --nv tensorflow_latest.sif`
 
 
 ## Usage
 
+### Before you start
+Have a look have the settings.py file and set the BASE_PATH parameter to this directory. You can have a look at all the parameters, and you can tweak some of them once you are familiar with the whole program. You may have to if you have some memory issues.
+
 ### Quick setup
-- For a quick setup, download the pretrained model [here](https://drive.google.com/file/d/1mVqAnNFKQ-gdyNFGI1cj2eiYHVh2g3D6/view?usp=sharing), and extract it into the 'Networks' folder. Then, you can  change the paths in seetings.py (see Training below) and skip directly to inference. This model is trained on the synthetic dataset of [Wang et al.](https://wang-ps.github.io/denoising.html).
+- For a quick setup, download the pretrained model [here](https://drive.google.com/file/d/1mVqAnNFKQ-gdyNFGI1cj2eiYHVh2g3D6/view?usp=sharing), and extract it into the 'Networks' folder. Then, you can set the NETWORK_PATH in settings.py and skip directly to inference. This model is trained on the synthetic dataset of [Wang et al.](https://wang-ps.github.io/denoising.html).
 - For a quick test on some data shown in the paper (fig. 15 and 16), extract [this file](https://drive.google.com/file/d/1jrOtU5TPOqt3Pd67mO4tPxHevefiR56n/view?usp=sharing) into the Data/ folder and run `python infer.py`
 
 ### Training
-- Before you start, have a look have the settings.py file and set the path parameters. Make sure the specified folders exist. You can have a look at all the parameters, and you can tweak some of them once you are familiar with the whole program. You may have to if you have some memory issues.
-- Raw mesh data need to be preprocessed before training. Run preprocess.py to preprocess your training dataset. This might take some time depending on your amount of data. By default, data will be saved to BINARY_DUMP_PATH parameter in settings. Alternatively, you can download preprocessed training data [here](https://drive.google.com/file/d/1jEMRQ9d0LTvB1HiX4XhrCHAiVX3cwmSt/view?usp=sharing) and validation data [here](https://drive.google.com/file/d/1Zu3GgvTruvwGKot8UXPeVZAuLWHpBlQs/view?usp=sharing), for the synthetic dataset. Extract them into the 'Preprocessed_Data' folder.
+- You can train on your own data. Put them in the Data folder, split into training, validation and ground truth folders, and make sure the corresponding paths in settings.py are correctly set. To reproduce the results in the paper, you can train on the dataset of [Wang et al](https://wang-ps.github.io/denoising.html).
+- Raw meshes need to be preprocessed before training. Run preprocess.py to preprocess your training dataset. This might take some time depending on your amount of data. By default, it will be saved to BINARY_DUMP_PATH parameter in settings. Alternatively, you can download preprocessed training data [here](https://drive.google.com/file/d/1jEMRQ9d0LTvB1HiX4XhrCHAiVX3cwmSt/view?usp=sharing) and validation data [here](https://drive.google.com/file/d/1Zu3GgvTruvwGKot8UXPeVZAuLWHpBlQs/view?usp=sharing), for the synthetic dataset. Extract them into the 'Preprocessed_Data' folder.
 - Once you have generated binary dump files of your preprocessed training set, run `python train.py` to train a model.
 
 ### Inference
 - For inference, run `python infer.py --input_dir /my/input/dir/`
 
 ### Parameters
-Some global parameters in settigns.py can be overriden with command line arguments:
+Some global parameters in settings.py can be overriden with command line arguments:
 
     --network_path /my/network/path/    # Directory for model parameters
     --results_path /my/results/path/    # Directory for output meshes
