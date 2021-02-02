@@ -15,7 +15,7 @@ def pickleData(withVerts=False):
     myValidSet = TrainingSet(maxSize,coarseningStepNum, coarseningLvlNum)
     if withVerts:
         tsPickleName = 'trainingSetWithVertices.pkl'
-        vsPickelName = 'validSetWithVertices.pkl'
+        vsPickleName = 'validSetWithVertices.pkl'
     else:
         tsPickleName = 'trainingSet.pkl'
         vsPickleName = 'validSet.pkl'
@@ -34,16 +34,19 @@ def pickleData(withVerts=False):
         pickle.dump(myTS,fp)
     
     # Validation set
-    for filename in os.listdir(VALID_DATA_PATH):
-        if (filename.endswith(".obj")):
-            gtfilename = getGTFilename(filename)
-            if withVerts:
-                myValidSet.addMeshWithVerticesAndGT(VALID_DATA_PATH, filename, GT_DATA_PATH, gtfilename)
-            else:
-                myValidSet.addMeshWithGT(VALID_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
+    if os.path.exists(VALID_DATA_PATH):
+        validList = os.listdir(VALID_DATA_PATH)
+        if len(validList)>0:
+            for filename in validList:
+                if (filename.endswith(".obj")):
+                    gtfilename = getGTFilename(filename)
+                    if withVerts:
+                        myValidSet.addMeshWithVerticesAndGT(VALID_DATA_PATH, filename, GT_DATA_PATH, gtfilename)
+                    else:
+                        myValidSet.addMeshWithGT(VALID_DATA_PATH,filename,GT_DATA_PATH,gtfilename)
 
-    with open(binDumpPath+vsPickleName,'wb') as fp:
-        pickle.dump(myValidSet,fp)
+            with open(binDumpPath+vsPickleName,'wb') as fp:
+                pickle.dump(myValidSet,fp)
 
 if __name__ == "__main__":
 
