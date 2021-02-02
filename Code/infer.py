@@ -45,7 +45,7 @@ def infer(noisyFolder, withVerts=False):
             continue
         print("processing noisy file: "+noisyFile)
 
-        denoizedFile = noisyFile[:-4]+"_denoised_gray.obj"
+        denoizedFile = noisyFile[:-4]+"_denoised.obj"
 
         noisyFilesList = [noisyFile]
         denoizedFilesList = [denoizedFile]

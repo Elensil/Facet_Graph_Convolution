@@ -382,9 +382,11 @@ def trainNet(trainSet, validSet):
     f_normals_list = trainSet.in_list
     GTfn_list = trainSet.gt_list
     f_adj_list = trainSet.adj_list
-    valid_f_normals_list = validSet.in_list
-    valid_GTfn_list = validSet.gt_list
-    valid_f_adj_list = validSet.adj_list
+
+    if validSet is not None:
+        valid_f_normals_list = validSet.in_list
+        valid_GTfn_list = validSet.gt_list
+        valid_f_adj_list = validSet.adj_list
 
 
     if TF_VERSION==2:
@@ -583,40 +585,41 @@ def trainNet(trainSet, validSet):
                 train_loss=0
                 train_samp=0
 
-            # Compute validation loss
-            if (iter%(evalStepNum*2) ==0):
-                valid_loss = 0
-                valid_samp = len(valid_f_normals_list)
-                valid_random_ind = np.arange(costSamplesNum)
-                for vbm in range(valid_samp):
-                    
-                    num_p = valid_f_normals_list[vbm].shape[1]
-                    
-                    tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
+            if validSet is not None:
+                # Compute validation loss
+                if (iter%(evalStepNum*2) ==0):
+                    valid_loss = 0
+                    valid_samp = len(valid_f_normals_list)
+                    valid_random_ind = np.arange(costSamplesNum)
+                    for vbm in range(valid_samp):
+                        
+                        num_p = valid_f_normals_list[vbm].shape[1]
+                        
+                        tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
 
-                    valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
-                            sample_ind: valid_random_ind, keep_prob:1}
+                        valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
+                                sample_ind: valid_random_ind, keep_prob:1}
 
-                    if len(f_adj_list[0])>1:
-                        valid_fd[fadj1]=valid_f_adj_list[vbm][1]
-                        valid_fd[fadj2]=valid_f_adj_list[vbm][2]
+                        if len(f_adj_list[0])>1:
+                            valid_fd[fadj1]=valid_f_adj_list[vbm][1]
+                            valid_fd[fadj2]=valid_f_adj_list[vbm][2]
 
-                    if len(f_adj_list[0])>3:
-                        valid_fd[fadj3]=valid_f_adj_list[vbm][3]
+                        if len(f_adj_list[0])>3:
+                            valid_fd[fadj3]=valid_f_adj_list[vbm][3]
 
-                    valid_loss += sess.run(customLoss,feed_dict=valid_fd)
-                valid_loss/=valid_samp
-                print("Iteration %d, validation loss %g"%(iter, valid_loss))
-                lossArray[int(iter/evalStepNum),1]=valid_loss
-                if iter>0:
-                    lossArray[int(iter/evalStepNum)-1,1] = (valid_loss+last_loss)/2
-                    last_loss=valid_loss
+                        valid_loss += sess.run(customLoss,feed_dict=valid_fd)
+                    valid_loss/=valid_samp
+                    print("Iteration %d, validation loss %g"%(iter, valid_loss))
+                    lossArray[int(iter/evalStepNum),1]=valid_loss
+                    if iter>0:
+                        lossArray[int(iter/evalStepNum)-1,1] = (valid_loss+last_loss)/2
+                        last_loss=valid_loss
 
-            sess.run(train_step,feed_dict=train_fd)
-            if sess.run(isNanNConv,feed_dict=train_fd):
-                hasNan = True
-                print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
-                print("patch size: "+str(f_normals_list[batch_num].shape))
+                sess.run(train_step,feed_dict=train_fd)
+                if sess.run(isNanNConv,feed_dict=train_fd):
+                    hasNan = True
+                    print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
+                    print("patch size: "+str(f_normals_list[batch_num].shape))
             
     
     saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
@@ -1896,9 +1899,12 @@ def train(withVerts=False):
     # Load data
     with open(binDumpPath+tsPickleName, 'rb') as fp:
         myTS = pickle.load(fp)
-    with open(binDumpPath+vsPickleName, 'rb') as fp:
-        myVS = pickle.load(fp)
-    
+
+    if os.path.exists(binDumpPath+vsPickleName):
+        with open(binDumpPath+vsPickleName, 'rb') as fp:
+            myVS = pickle.load(fp)
+    else:
+        myVS = None
     if withVerts:
         # Train network with accuracy loss on point sets (rather than normals angular loss)
         # trainDoubleLossNet(myTS, myVS)

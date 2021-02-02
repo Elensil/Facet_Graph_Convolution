@@ -29,9 +29,9 @@ def computeMetrics():
         nameArray = []
         resultsArray = []
 
-        denoizedFile0 = gtFileName[:-4]+"_n1_denoised_gray.obj"
-        denoizedFile1 = gtFileName[:-4]+"_n2_denoised_gray.obj"
-        denoizedFile2 = gtFileName[:-4]+"_n3_denoised_gray.obj"
+        denoizedFile0 = gtFileName[:-4]+"_n1_denoised.obj"
+        denoizedFile1 = gtFileName[:-4]+"_n2_denoised.obj"
+        denoizedFile2 = gtFileName[:-4]+"_n3_denoised.obj"
 
         heatFile0 = gtFileName[:-4]+"_n1_heatmap.obj"
         heatFile1 = gtFileName[:-4]+"_n2_heatmap.obj"
