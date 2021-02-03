@@ -596,7 +596,8 @@ def trainNet(trainSet, validSet):
                         num_p = valid_f_normals_list[vbm].shape[1]
                         
                         tens_random_R2 = np.tile(tens_random_R,(BATCH_SIZE,num_p,1,1))
-
+                        valid_random_ind = np.random.randint(num_p,size=costSamplesNum)
+                        
                         valid_fd = {fn_: valid_f_normals_list[vbm], fadj0: valid_f_adj_list[vbm][0], tfn_: valid_GTfn_list[vbm], rot_mat:tens_random_R2,
                                 sample_ind: valid_random_ind, keep_prob:1}
 
