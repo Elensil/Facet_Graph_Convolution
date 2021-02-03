@@ -616,11 +616,11 @@ def trainNet(trainSet, validSet):
                         lossArray[int(iter/evalStepNum)-1,1] = (valid_loss+last_loss)/2
                         last_loss=valid_loss
 
-                sess.run(train_step,feed_dict=train_fd)
-                if sess.run(isNanNConv,feed_dict=train_fd):
-                    hasNan = True
-                    print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
-                    print("patch size: "+str(f_normals_list[batch_num].shape))
+            sess.run(train_step,feed_dict=train_fd)
+            if sess.run(isNanNConv,feed_dict=train_fd):
+                hasNan = True
+                print("WARNING! NAN FOUND AFTER TRAINING!!!! training example "+str(batch_num)+"/"+str(len(f_normals_list)))
+                print("patch size: "+str(f_normals_list[batch_num].shape))
             
     
     saver.save(sess, NETWORK_PATH+NET_NAME,global_step=globalStep+NUM_ITERATIONS)
