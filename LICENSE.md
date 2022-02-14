@@ -1,36 +1,60 @@
 # FREE SOFTWARE LICENSE AGREEMENT FOR NON-COMMERCIAL PURPOSES
 ## Preamble
-The purpose of this Free Software license agreement is to grant users the right to modify and redistribute the software governed by this license within the framework of an open source distribution model but only for non-commercial purposes. 
+The purpose of this Free Software license agreement is to grant users the right to modify and redistribute the software governed by this license within the framework of an open source distribution model but only for non-commercial purposes.
+
 The exercising of this right is conditional upon certain obligations for users so as to preserve this status for all subsequent redistributions.
 In consideration of access to the source code and the rights to copy, modify and redistribute granted by the license for non-commercial purposes, users are provided only with a limited warranty and the software's author, the holder of the economic rights, and the successive licensors only have limited liability. 
+
 In this respect, the risks associated with loading, using, modifying and/or developing or reproducing the software by the user are brought to the user's attention, given its Free Software status, which may make it complicated to use, with the result that its use is reserved for developers and experienced professionals having in-depth computer knowledge. Users are therefore encouraged to load and test the suitability of the software as regards their requirements in conditions enabling the security of their systems and/or data to be ensured and, more generally, to use and operate it in the same conditions of security. This Agreement may be freely reproduced and published, provided it is not altered, and that no provisions are either added or removed herefrom.
+
 This Agreement may apply to any or all software for which the holder of the economic rights decides to submit the use thereof to its provisions.
 To obtain a license for commercial purposes, please contact: …@inria.fr 
 ## Article 1 - DEFINITIONS
 For the purpose of this Agreement, when the following expressions commence with a capital letter, they shall have the following meaning:
+
 Agreement: means this license agreement, and its possible subsequent versions and annexes. 
+
 Software: means the software in its Object Code and/or Source Code form and, where applicable, its documentation, "as is" when the Licensee accepts the Agreement. 
+
 Initial Software: means the Software in its Source Code and possibly its Object Code form and, where applicable, its documentation, "as is" when it is first distributed under the terms and conditions of the Agreement. 
+
 Modified Software: means the Software modified by at least one Contribution. 
+
 Source Code: means all the Software's instructions and program lines to which access is required so as to modify the Software. 
+
 Object Code: means the binary files originating from the compilation of the Source Code. 
+
 Holder: means the holder(s) of the economic rights over the Initial Software. 
+
 Licensee: means the Software user(s) having accepted the Agreement. 
+
 Contributor: means a Licensee having made at least one Contribution. 
+
 Licensor: means the Holder, or any other individual or legal entity, who distributes the Software under the Agreement. 
+
 Contribution: means any or all modifications, corrections, translations, adaptations and/or new functions integrated into the Software by any or all Contributors, as well as any or all Internal Modules. 
+
 Module: means a set of sources files including their documentation that enables supplementary functions or services in addition to those offered by the Software. 
-External Module: means any or all Modules, not derived from the Software, so that this Module and the Software run in separate address spaces, with one calling the other when they are run. 
+
+External Module: means any or all Modules, not derived from the Software, so that this Module and the Software run in separate address spaces, with one calling the other when they are run.
+
 Internal Module: means any or all Module, connected to the Software so that they both execute in the same address space. 
+
 Parties: mean both the Licensee and the Licensor. 
+
 These expressions may be used both in singular and plural form.
+
 ## Article 2 - PURPOSE
 The purpose of the Agreement is the grant by the Licensor to the Licensee of a non-exclusive, for non-commercial purposes only, transferable and worldwide license for the Software as set forth in Article 5 hereinafter for the whole term of the protection granted by the rights over said Software. 
 ## Article 3 - ACCEPTANCE
 3.1 The Licensee shall be deemed as having accepted the terms and conditions of this Agreement upon the occurrence of the first of the following events:
+
 •	(i) loading the Software by any or all means, notably, by downloading from a remote server, or by loading from a physical medium;
+
 •	(ii) the first time the Licensee exercises any of the rights granted hereunder.
+
 3.2 One copy of the Agreement, containing a notice relating to the characteristics of the Software, to the use limited to non-commercial purposes, to the limited warranty, and to the fact that its use is restricted to experienced users has been provided to the Licensee prior to its acceptance as set forth in Article 3.1 hereinabove, and the Licensee hereby acknowledges that it has read and understood it.
+
 ## Article 4 - EFFECTIVE DATE AND TERM
 ### 4.1 EFFECTIVE DATE
 The Agreement shall become effective on the date when it is accepted by the Licensee as set forth in Article 3.1.
