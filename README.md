@@ -1,4 +1,3 @@
-
 # Mesh Denoising with Facet Graph Convolutions
 
 ## Introduction
@@ -94,7 +93,7 @@ If you use this code, please cite the following:
 ```
 
 ## License
-Please check the [license terms](https://gitlab.inria.fr/marmando/deep-mesh-denoising/blob/master/LICENSE.md) before downloading and/or using the code.
+Please check the [license terms](LICENSE.md) before downloading and/or using the code.
 
 
 ## Contact
@@ -102,7 +101,7 @@ Please check the [license terms](https://gitlab.inria.fr/marmando/deep-mesh-deno
  - INRIA Grenoble Rhône-Alpes
  - 655, avenue de l’Europe, Montbonnot
  - 38334 Saint Ismier, France
- - Email: [matthieu.armando@inria.fr](mailto:matthieu.armando@inria.fr)
+ - Email: [matthieu.armando@gmail.com](mailto:matthieu.armando@gmail.com)
 
 ## Acknowledgements
 
