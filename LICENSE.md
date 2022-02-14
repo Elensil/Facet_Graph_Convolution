@@ -1,30 +1,20 @@
 # FREE SOFTWARE LICENSE AGREEMENT FOR NON-COMMERCIAL PURPOSES
 ## Preamble
-The purpose of this Free Software license agreement is to grant users the right to modify and redistribute the software governed by this license within the framework of an open source distribution model but only for non-commercial purposes.
-
+The purpose of this Free Software license agreement is to grant users the right to modify and redistribute the software governed by this license within the framework of an open source distribution model but only for non-commercial purposes. \
 The exercising of this right is conditional upon certain obligations for users so as to preserve this status for all subsequent redistributions.
-In consideration of access to the source code and the rights to copy, modify and redistribute granted by the license for non-commercial purposes, users are provided only with a limited warranty and the software's author, the holder of the economic rights, and the successive licensors only have limited liability. 
-
-In this respect, the risks associated with loading, using, modifying and/or developing or reproducing the software by the user are brought to the user's attention, given its Free Software status, which may make it complicated to use, with the result that its use is reserved for developers and experienced professionals having in-depth computer knowledge. Users are therefore encouraged to load and test the suitability of the software as regards their requirements in conditions enabling the security of their systems and/or data to be ensured and, more generally, to use and operate it in the same conditions of security. This Agreement may be freely reproduced and published, provided it is not altered, and that no provisions are either added or removed herefrom.
-
+In consideration of access to the source code and the rights to copy, modify and redistribute granted by the license for non-commercial purposes, users are provided only with a limited warranty and the software's author, the holder of the economic rights, and the successive licensors only have limited liability. \
+In this respect, the risks associated with loading, using, modifying and/or developing or reproducing the software by the user are brought to the user's attention, given its Free Software status, which may make it complicated to use, with the result that its use is reserved for developers and experienced professionals having in-depth computer knowledge. Users are therefore encouraged to load and test the suitability of the software as regards their requirements in conditions enabling the security of their systems and/or data to be ensured and, more generally, to use and operate it in the same conditions of security. This Agreement may be freely reproduced and published, provided it is not altered, and that no provisions are either added or removed herefrom. \
 This Agreement may apply to any or all software for which the holder of the economic rights decides to submit the use thereof to its provisions.
 To obtain a license for commercial purposes, please contact: …@inria.fr 
 ## Article 1 - DEFINITIONS
-For the purpose of this Agreement, when the following expressions commence with a capital letter, they shall have the following meaning:
-
-Agreement: means this license agreement, and its possible subsequent versions and annexes. 
-
-Software: means the software in its Object Code and/or Source Code form and, where applicable, its documentation, "as is" when the Licensee accepts the Agreement. 
-
-Initial Software: means the Software in its Source Code and possibly its Object Code form and, where applicable, its documentation, "as is" when it is first distributed under the terms and conditions of the Agreement. 
-
-Modified Software: means the Software modified by at least one Contribution. 
-
-Source Code: means all the Software's instructions and program lines to which access is required so as to modify the Software. 
-
-Object Code: means the binary files originating from the compilation of the Source Code. 
-
-Holder: means the holder(s) of the economic rights over the Initial Software. 
+For the purpose of this Agreement, when the following expressions commence with a capital letter, they shall have the following meaning:\
+Agreement: means this license agreement, and its possible subsequent versions and annexes. \
+Software: means the software in its Object Code and/or Source Code form and, where applicable, its documentation, "as is" when the Licensee accepts the Agreement. \
+Initial Software: means the Software in its Source Code and possibly its Object Code form and, where applicable, its documentation, "as is" when it is first distributed under the terms and conditions of the Agreement. \
+Modified Software: means the Software modified by at least one Contribution. \
+Source Code: means all the Software's instructions and program lines to which access is required so as to modify the Software. \
+Object Code: means the binary files originating from the compilation of the Source Code. \
+Holder: means the holder(s) of the economic rights over the Initial Software. \
 
 Licensee: means the Software user(s) having accepted the Agreement. 
 
