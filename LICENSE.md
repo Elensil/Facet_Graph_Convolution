@@ -44,9 +44,9 @@ The Agreement shall remain in force for the entire legal term of protection of t
 The Licensor hereby grants to the Licensee, who accepts, the following rights over the Software for a non-commercial use, and for the term of the Agreement, on the basis of the terms and conditions set forth hereinafter.\
 Besides, if the Licensor owns one or more patents protecting all or part of the functions of the Software or of its components, the Licensor undertakes not to enforce the rights granted by these patents against successive Licensees using or modifying the Software. If these patents are transferred, the Licensor undertakes to have the transferees subscribe to the obligations set forth in this paragraph. 
 ### 5.1 RIGHT OF USE
-The Licensee is authorized to use the Software, only for non-commercial purposes, with it being hereinafter specified that this comprises:\
-1.	permanent or temporary reproduction of all or part of the Software by any or all means and in any or all form.\
-2.	loading, displaying, running, or storing the Software on any or all medium.\
+The Licensee is authorized to use the Software, only for non-commercial purposes, with it being hereinafter specified that this comprises:
+1.	permanent or temporary reproduction of all or part of the Software by any or all means and in any or all form.
+2.	loading, displaying, running, or storing the Software on any or all medium.
 3.	entitlement to observe, study or test its operation so as to determine the ideas and principles behind any or all constituent elements of said Software. This shall apply when the Licensee carries out any or all loading, displaying, running, transmission or storage operation as regards the Software, that it is entitled to carry out hereunder.
 ### 5.2 ENTITLEMENT TO MAKE CONTRIBUTIONS
 The right to make Contributions includes the right to translate, adapt, arrange, or make any or all modifications to the Software, and the right to reproduce the resulting software.\
@@ -55,16 +55,16 @@ The Licensee is authorized to make any or all Contributions to the Software prov
 In particular, the right of distribution includes the right to publish, transmit and communicate the Software to the general public on any or all medium, and by any or all means, free of charge.\
 The Licensee is further authorized to distribute copies of the modified or unmodified Software to third parties according to the terms and conditions set forth hereinafter.
 #### 5.3.1 DISTRIBUTION OF SOFTWARE WITHOUT MODIFICATION
-The Licensee is authorized to distribute true copies of the Software in Source Code or Object Code form, free of charge, provided that said distribution complies with all the provisions of the Agreement and is accompanied by:\
-1.	a copy of the Agreement,\
-2.	a notice relating to the limitation of both the Licensor's warranty and liability as set forth in Articles 8 and 9,\
+The Licensee is authorized to distribute true copies of the Software in Source Code or Object Code form, free of charge, provided that said distribution complies with all the provisions of the Agreement and is accompanied by:
+1.	a copy of the Agreement,
+2.	a notice relating to the limitation of both the Licensor's warranty and liability as set forth in Articles 8 and 9,
 and that, in the event that only the Object Code of the Software is redistributed, the Licensee allows effective access to the full Source Code of the Software for a period of at least three years from the distribution of the Software, free of charge. 
 #### 5.3.2 DISTRIBUTION OF MODIFIED SOFTWARE
 When the Licensee makes a Contribution to the Software, the terms and conditions for the distribution of the resulting Modified Software become subject to all the provisions of this Agreement.\
-The Licensee is authorized to distribute the Modified Software, in source code or object code form, for non-commercial purposes only, free of charge, provided that said distribution complies with all the provisions of the Agreement and is accompanied by:\
-1.	a copy of the Agreement,\
+The Licensee is authorized to distribute the Modified Software, in source code or object code form, for non-commercial purposes only, free of charge, provided that said distribution complies with all the provisions of the Agreement and is accompanied by:
+1.	a copy of the Agreement,
 2.	a notice relating to the limitation of both the Licensor's warranty and liability as set forth in Articles 8 and 9,
-and, in the event that only the object code of the Modified Software is redistributed,\
+and, in the event that only the object code of the Modified Software is redistributed,
 3.	a note stating the conditions of effective access to the full source code of the Modified Software for a period of at least three years from the distribution of the Modified Software, free of charge.
 #### 5.3.3 DISTRIBUTION OF EXTERNAL MODULES
 When the Licensee has developed an External Module, the terms and conditions of this Agreement do not apply to said External Module, that may be distributed under a separate license agreement.
@@ -77,9 +77,9 @@ The Licensee who develops a Contribution is the owner of the intellectual proper
 ### 6.3 OVER THE EXTERNAL MODULES
 The Licensee who develops an External Module is the owner of the intellectual property rights over this External Module as defined by applicable law and is free to choose the type of agreement that shall govern its distribution.
 ### 6.4 JOINT PROVISIONS
-The Licensee expressly undertakes:\
-1.	not to remove, or modify, in any manner, the intellectual property notices attached to the Software;\
-2.	to reproduce said notices, in an identical manner, in the copies of the Software modified or not.\
+The Licensee expressly undertakes:
+1.	not to remove, or modify, in any manner, the intellectual property notices attached to the Software;
+2.	to reproduce said notices, in an identical manner, in the copies of the Software modified or not.
 The Licensee undertakes not to directly or indirectly infringe the intellectual property rights on the Software of the Holder and/or Contributors, and to take, where applicable, vis-à-vis its staff, any and all measures required to ensure respect of said intellectual property rights of the Holder and/or Contributors.
 ## Article 7 - RELATED SERVICES
 7.1 Under no circumstances shall the Agreement oblige the Licensor to provide technical assistance or maintenance services for the Software.\
